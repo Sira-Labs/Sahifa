@@ -12,7 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-REPORT_VERSION = 1
+# 2: `ScanReport.checks` and `AssetReport.unevaluated` (spec 007); version 1 reports still load.
+REPORT_VERSION = 2
 
 
 class LogicalType(StrEnum):
@@ -298,6 +299,13 @@ class Score(BaseModel):
     dimensions: dict[Dimension, DimensionScore] = Field(default_factory=dict)
 
 
+class UnevaluatedCheck(BaseModel):
+    """A saved check that could not run this scan, kept so the owner sees a stale lock (spec 007)."""
+
+    spec: CheckSpec
+    reason: Literal["column_missing", "parent_missing", "unknown_type"]
+
+
 class ColumnReport(BaseModel):
     profile: ColumnProfile
     score: Score
@@ -312,6 +320,7 @@ class AssetReport(BaseModel):
     score: Score
     columns: list[ColumnReport] = Field(default_factory=list)
     checks: list[CheckResult] = Field(default_factory=list)
+    unevaluated: list[UnevaluatedCheck] = Field(default_factory=list)
     time_series_candidate: bool = False
     error: str | None = None
 
@@ -348,6 +357,8 @@ class ScanReport(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     health: list[HealthItem] = Field(default_factory=list)
     proposed: list[CheckResult] = Field(default_factory=list)
+    # Every reconciled check of the scan, as generated or saved, before evaluation (spec 007).
+    checks: list[CheckSpec] = Field(default_factory=list)
     stats: ScanStats = Field(default_factory=ScanStats)
     iso_25012: dict[Dimension, str] = Field(default_factory=lambda: dict(ISO_25012))
 
