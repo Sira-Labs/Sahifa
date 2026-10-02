@@ -76,7 +76,8 @@ handed to Tabayyun's core (ADR-0011).
 - **R2 (history and explanation):** metric history and anomaly thresholds with a chosen
   false-alarm rate, drift with effect sizes, finding lifecycle and dedup across scans,
   explanations of where bad rows cluster, sign-in (Keycloak) and workspace RBAC, alerts,
-  Snowflake and BigQuery, ODCS contract export, European rule packs, the Tabayyun hand-off.
+  Snowflake, BigQuery and SAP HANA / Datasphere (ADR-0014), ODCS contract export, the SAP
+  and European rule packs, the Tabayyun hand-off.
 - **R3 (platform, release 1.0):** LLM-proposed rules with approval, entity resolution with
   Splink, lineage-aware root cause (OpenLineage, SQLGlot), the store health report, Iceberg
   and Delta tables, scheduling, API tokens, Helm chart.

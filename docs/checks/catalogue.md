@@ -251,6 +251,20 @@ Rows per day from the timestamp column against a seasonal baseline; late or miss
 A fail predicate or a query returning failing rows, written by the owner, with the same
 result shape.
 
+## SAP pack (R2, ADR-0014)
+
+Generated when a profile looks like SAP data (a `MANDT` column, `DATS` or `NUMC` patterns, or
+an SAP connector). Same manifest, result and scoring as the generic checks.
+
+| Check | Dimension | What it catches |
+|---|---|---|
+| `sap.dats_valid` | validity | `CHAR(8)` dates that are not valid `YYYYMMDD`; `00000000` counts as missing, not invalid |
+| `sap.alpha_conversion` | consistency | keys (`MATNR`, `KUNNR`, `LIFNR`) zero-padded in some rows and not in others |
+| `sap.currency_reference` | consistency | non-zero amounts without a currency key, or with an unknown one (`TCURC`) |
+| `sap.unit_reference` | consistency | non-zero quantities without a unit of measure (`T006`) |
+| `sap.client_consistency` | consistency | rows or references crossing clients (`MANDT`) |
+| `sap.deletion_flag_share` | store health | share of rows flagged for deletion (`LOEKZ`, `LOEVM`) |
+
 ## Store health (reported, not scored)
 
 | Item | What it reports | Release |

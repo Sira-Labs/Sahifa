@@ -19,7 +19,7 @@
 > *Ṣaḥīfa* (صحيفة): a written sheet; the charter of Medina.
 
 Sahifa is a self-hostable platform that assesses the quality of whole data stores: Postgres
-databases, and CSV, Parquet and JSON files (warehouses and lakehouse tables follow). It
+databases, and CSV, Parquet and JSON files (SAP HANA and Datasphere, warehouses and lakehouse tables follow). It
 profiles every table and column, generates checks from the profile, scores six quality
 dimensions (completeness, validity, accuracy, consistency, uniqueness, currentness; mapped to
 ISO/IEC 25012) with a **95 % interval that says how sure each score is**, and explains every
@@ -69,7 +69,7 @@ make web-dev       # http://localhost:5173
 | Roadmap and sprint plan | [docs/roadmap/roadmap.md](docs/roadmap/roadmap.md), [sprints.md](docs/roadmap/sprints.md) |
 | Specs | [docs/specs/](docs/specs/) |
 | Deployment (images, compose, CapRover) | [deploy/README.md](deploy/README.md), [deploy/caprover.md](deploy/caprover.md) |
-| Decisions (ADRs 0001–0013) | [docs/adr/](docs/adr/) |
+| Decisions (ADRs 0001–0014) | [docs/adr/](docs/adr/) |
 | Product page | [site/index.html](site/index.html) |
 
 Research reports (with sources):

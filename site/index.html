@@ -422,7 +422,7 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
         <div class="feature">
           <h3>Every store in one pass</h3>
           <p>SQL databases, warehouses, lakehouse tables and plain files: checks run where the data lives, through one connector layer.</p>
-          <span class="proof">Postgres · Snowflake · BigQuery · DuckDB · Parquet · Iceberg · CSV</span>
+          <span class="proof">Postgres · SAP HANA · Snowflake · BigQuery · DuckDB · Parquet · Iceberg · CSV</span>
         </div>
         <div class="feature">
           <h3>Alerts with a promise</h3>
@@ -461,6 +461,7 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
             <tr><td>Consistency<span class="iso">consistency</span></td><td><code>foreign_key</code> · <code>column_order</code> · <code>casing_variants</code> · <code>mixed_types</code> · <code>aggregate_balance</code> · <code>schema_drift</code> · <code>functional_dependency</code></td><td><span class="pill r1">R1</span><span class="pill r2">R2</span><span class="pill r3">R3 mining</span></td></tr>
             <tr><td>Uniqueness<span class="iso">consistency (no duplicate records)</span></td><td><code>unique</code> · <code>duplicate_rows</code> · <code>near_duplicates</code></td><td><span class="pill r1">R1</span><span class="pill r3">R3 Splink</span></td></tr>
             <tr><td>Currentness<span class="iso">currentness</span></td><td><code>freshness</code> · <code>volume_trend</code></td><td><span class="pill r1">R1</span><span class="pill r2">R2 history</span></td></tr>
+            <tr><td>SAP pack<span class="iso">S/4HANA, ECC, BW/4HANA, Datasphere</span></td><td><code>dats_valid</code> · <code>alpha_conversion</code> · <code>currency_reference</code> · <code>unit_reference</code> · <code>client_consistency</code> · deletion flags</td><td><span class="pill r2">R2</span></td></tr>
             <tr><td>Store health<span class="iso">reported, not scored</span></td><td>empty tables · no primary key · numbers stored as text · unused and duplicate tables · small files · missing indexes</td><td><span class="pill r1">R1</span><span class="pill r3">R3</span></td></tr>
           </tbody>
         </table>
@@ -521,7 +522,7 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
           <text class="lbl" x="825" y="48" text-anchor="middle">Your stores · read-only</text>
           <rect class="bx" x="708" y="62" width="234" height="52" rx="10"/><text class="lbl" x="825" y="84" text-anchor="middle">Postgres</text><text class="sub" x="825" y="102" text-anchor="middle">SQL pushdown · timeouts</text>
           <rect class="bx" x="708" y="124" width="234" height="52" rx="10"/><text class="lbl" x="825" y="146" text-anchor="middle">CSV · Parquet · JSON · S3</text><text class="sub" x="825" y="164" text-anchor="middle">DuckDB in-process</text>
-          <rect class="bx" x="708" y="186" width="234" height="52" rx="10"/><text class="lbl" x="825" y="208" text-anchor="middle">Snowflake · BigQuery · Iceberg</text><text class="sub" x="825" y="226" text-anchor="middle">R2</text>
+          <rect class="bx" x="708" y="186" width="234" height="52" rx="10"/><text class="lbl" x="825" y="208" text-anchor="middle">SAP HANA · Snowflake · BigQuery</text><text class="sub" x="825" y="226" text-anchor="middle">R2</text>
           <rect class="bx" x="408" y="290" width="214" height="60" rx="10"/><text class="lbl" x="515" y="316" text-anchor="middle">tabayyun_core</text><text class="sub" x="515" y="334" text-anchor="middle">time-series columns (R2)</text>
           <path class="fl" d="M170 73 H213" marker-end="url(#ar)"/><path class="fl" d="M345 73 H406" marker-end="url(#ar)"/>
           <path class="fl" d="M170 183 H300 V100 H406" marker-end="url(#ar)" style="fill:none"/>
@@ -562,7 +563,7 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
         <li><span class="when">Now</span><span><strong>Specs and first build.</strong> Research, decision records, the check catalogue and the first working core are written in the open on GitHub.</span></li>
         <li><span class="when">October 2026</span><span><strong>First preview</strong> at sahifa-stg.siralabs.org: profiling, generated checks and ISO scores with intervals for Postgres, DuckDB, Parquet and CSV.</span></li>
         <li><span class="when">Nov – Dec 2026</span><span>Run history, anomaly thresholds with a false-alarm rate, drift with effect sizes, sign-in and teams.</span></li>
-        <li><span class="when">Q1 2027</span><span>Explanations of where bad rows cluster, rules proposed by an AI model and approved by you, contract export, Snowflake and BigQuery.</span></li>
+        <li><span class="when">Q1 2027</span><span>Explanations of where bad rows cluster, rules proposed by an AI model and approved by you, contract export, Snowflake, BigQuery and SAP HANA with an SAP rule pack.</span></li>
         <li><span class="when">Q2 2027</span><span>The store health report and root cause along lineage.</span></li>
       </ol>
       <p class="section-intro" style="margin-top: 24px">Dates are the current plan and may move. Sahifa is part of <a href="https://siralabs.org/">Sira Labs</a>.</p>

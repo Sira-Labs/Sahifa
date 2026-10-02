@@ -50,8 +50,11 @@ Exit criteria:
 - Findings lifecycle across scans (open, acknowledged, resolved, muted) with deduplication.
 - Explanations: where failing rows cluster (MacroBase DIFF, Data X-Ray) on every finding.
 - Time-series hand-off to `tabayyun_core` (ADR-0011).
-- Snowflake and BigQuery connectors; S3 and Iceberg through DuckDB.
+- Snowflake and BigQuery connectors; S3 and Iceberg through DuckDB; SAP HANA, BW/4HANA and
+  Datasphere through the optional `sahifa-connector-hana` package (ADR-0014).
 - ODCS v3 contract inference and export, import of contracts as manual checks (ADR-0013).
+- The SAP rule pack (`sap.*`: DATS dates, ALPHA keys, currency and unit references, client
+  consistency, data-dictionary foreign keys; ADR-0014).
 - European rule packs (postcodes for the EU, VAT per country, national IDs where lawful),
   code lists, custom SQL checks (11, 21, 23, 30).
 - Alerts to email and webhooks.
@@ -89,3 +92,4 @@ site/            product page for siralabs.org
 |---|---|
 | 2026-10-01 | Research 01–04 in the planning session; name and repository chosen |
 | 2026-10-02 | R0 complete: docs, ADRs, catalogue, specs 001–005, product page; sprint 1 started |
+| 2026-10-02 | SAP data added to the plan (ADR-0014): HANA connector and SAP rule pack in R2 |

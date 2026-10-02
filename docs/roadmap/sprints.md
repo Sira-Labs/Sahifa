@@ -57,8 +57,8 @@ gantt
     S4 sign-in, tenants, RBAC               :s4, 2026-10-08, 2026-10-11
     S5 metric history, anomalies, drift     :s5, 2026-10-11, 2026-10-14
     S6 explanations, Tabayyun hand-off      :s6, 2026-10-14, 2026-10-16
-    S7 Snowflake, BigQuery, S3, ODCS        :s7, 2026-10-16, 2026-10-20
-    S8 rule packs, custom checks, alerts    :s8, 2026-10-20, 2026-10-22
+    S7 Snowflake, BigQuery, SAP HANA, ODCS  :s7, 2026-10-16, 2026-10-20
+    S8 SAP and EU rule packs, alerts        :s8, 2026-10-20, 2026-10-22
     R2 history and explanation              :milestone, r2, 2026-10-22, 0d
 
     section R3 platform, release 1.0
@@ -77,8 +77,8 @@ gantt
 | 4 | sign-in, tenants, RBAC | 9–13 Oct | | |
 | 5 | metric history, anomalies, drift | 12–17 Oct | | |
 | 6 | explanations, Tabayyun hand-off | 14–20 Oct | | |
-| 7 | Snowflake, BigQuery, S3, ODCS | 17–24 Oct | | |
-| 8 | rule packs, custom checks, alerts | 20–28 Oct | | |
+| 7 | Snowflake, BigQuery, SAP HANA, ODCS | 17–24 Oct | | |
+| 8 | SAP and EU rule packs, custom checks, alerts | 20–28 Oct | | |
 | 9 | LLM-proposed rules | 23 Oct – 2 Nov | | |
 | 10 | dependencies, entity resolution | 27 Oct – 6 Nov | | |
 | 11 | lineage root cause, store health | 30 Oct – 10 Nov | | |
@@ -99,6 +99,7 @@ gantt
 | S4 (~8 Oct) | Sign-in | Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`; Google and GitHub OAuth clients |
 | S6 (~14 Oct) | Tabayyun wheel | publish `tabayyun_core` wheels (Tabayyun release job) so Sahifa can depend on it |
 | S7 (~16 Oct) | Warehouses | Snowflake and BigQuery test accounts (trial or sandbox) |
+| S7 (~16 Oct) | SAP | a HANA Cloud trial (or a HANA/Datasphere instance) with a read-only user; for the SAP pack, read access to `DD03L`, `DD08L`, `TCURC`, `T006`; ideally an anonymised S/4HANA sample (ADR-0014) |
 | S9 (~22 Oct) | LLM endpoint | an API key or a self-hosted OpenAI-compatible endpoint for rule proposals |
 | S12 (~2 Nov) | Production | production server apps, backups and the first timed restore drill |
 
