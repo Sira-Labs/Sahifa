@@ -1,8 +1,11 @@
-"""Running scans in a worker thread and persisting their reports (spec 004, ADR-0009).
+"""Running scans and persisting their reports (spec 004, spec 008, ADR-0009).
 
-Until the Procrastinate worker (spec 008) a scan runs in the API process: one thread per
-scan, at most `max_concurrent_scans` at once. A restart leaves running scans behind; the
-start-up step marks them failed.
+`execute_scan` runs one scan end to end: claim it, load the saved checks, run the core engine
+in a thread, persist the report and checks, mark it succeeded or failed. In inline mode the
+`ScanRunner` calls it in the API process, one task per scan and at most
+`max_concurrent_scans` at once; a restart leaves running scans behind and the start-up step
+marks them failed. In queue mode the worker's `run_scan` job (`sahifa.jobs`) calls the same
+function and the reaper owns interrupted scans.
 """
 
 from __future__ import annotations
@@ -49,98 +52,117 @@ class ScanRunner:
 
     async def _run(self, scan_id: uuid.UUID) -> None:
         async with self.limit:
-            try:
-                # Inside the failure boundary: a database error while loading the saved checks
-                # marks the scan failed instead of leaving it queued.
-                async with self.sessions() as db:
-                    scan = await db.get(Scan, scan_id)
-                    if scan is None:
-                        return
-                    conn = await db.get(Connection, scan.connection_id)
-                    if conn is None:
-                        return
-                    source = resolve(conn)
-                    names = conn.config.get("names") if conn.kind == "upload" else None
-                    saved = await load_saved(db, conn.id)
-                    scan.status, scan.started_at = "running", datetime.now(UTC)
-                    await db.commit()
-                log.info("scan.started", scan_id=str(scan_id), connection=conn.name)
-                if source is None:
-                    raise RuntimeError(
-                        f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}"
-                    )
-                report = await anyio.to_thread.run_sync(
-                    lambda: _execute(source, names, scan_id, scan.sample_rows, self.settings, saved.specs)
-                )
-                await self._succeed(scan_id, report, saved)
-                log.info("scan.succeeded", scan_id=str(scan_id))
-            except Exception as e:
-                message = str(e)[:1000] or e.__class__.__name__
-                log.error("scan.failed", scan_id=str(scan_id), error=message)
-                async with self.sessions() as db:
-                    await db.execute(
-                        update(Scan)
-                        .where(Scan.id == scan_id)
-                        .values(status="failed", error=message, finished_at=datetime.now(UTC))
-                    )
-                    await db.commit()
+            await execute_scan(self.sessions, self.settings, scan_id)
 
-    async def _succeed(self, scan_id: uuid.UUID, report: dict[str, Any], saved: Saved | None = None) -> None:
-        """Store the report, its findings and (spec 007) its assets, columns and checks in one
-        transaction."""
-        async with self.sessions() as db:
-            scan = await db.get(Scan, scan_id)
-            if scan is None:
+
+async def execute_scan(
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    scan_id: uuid.UUID,
+    *,
+    worker: str | None = None,
+) -> None:
+    """Run a `queued` scan and record its outcome; any other scan is left as it is, so running
+    a job twice is harmless. `worker` (the worker's commit) is added to the log lines."""
+    where = {"worker": worker} if worker else {}
+    try:
+        # Inside the failure boundary: a database error while loading the saved checks
+        # marks the scan failed instead of leaving it queued.
+        async with sessions() as db:
+            scan = await db.get(Scan, scan_id, with_for_update=True)
+            if scan is None or scan.status != "queued":
+                if scan is not None:
+                    log.info("scan.skipped", scan_id=str(scan_id), status=scan.status, **where)
                 return
-            score = report.get("score") or {}
-            scan.status = "succeeded"
-            scan.finished_at = datetime.now(UTC)
-            scan.report = report
-            scan.report_version = report.get("report_version")
-            scan.score = {k: score.get(k) for k in ("overall", "low", "high")}
-            counts = {s: 0 for s in ("critical", "high", "medium", "low")}
-            for f in report.get("findings", []):
-                counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-                db.add(
-                    Finding(
-                        scan_id=scan_id,
-                        check_type=f["check_type"],
-                        asset=f["asset"],
-                        column_name=f.get("column"),
-                        dimension=f["dimension"],
-                        severity=f["severity"],
-                        evaluated=f["evaluated"],
-                        failed=f["failed"],
-                        ratio=f["ratio"],
-                        low=f["low"],
-                        high=f["high"],
-                        summary=f["summary"],
-                        next_step=f["next_step"],
-                        evidence={
-                            "check_id": f["check_id"],
-                            "title": f.get("title"),
-                            "examples": f.get("examples", []),
-                            "sql": f.get("sql"),
-                        },
-                    )
-                )
-            scan.finding_counts = counts
-            scan.assets_count = len(report.get("assets", []))
-            persisted = await persist_checks(
-                db,
-                scan_id=scan_id,
-                connection_id=scan.connection_id,
-                report=report,
-                versions=saved.versions if saved else {},
+            conn = await db.get(Connection, scan.connection_id)
+            if conn is None:
+                return
+            source = resolve(conn)
+            names = conn.config.get("names") if conn.kind == "upload" else None
+            saved = await load_saved(db, conn.id)
+            scan.status, scan.started_at = "running", datetime.now(UTC)
+            await db.commit()
+        log.info("scan.started", scan_id=str(scan_id), connection=conn.name, **where)
+        if source is None:
+            raise RuntimeError(f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}")
+        report = await anyio.to_thread.run_sync(
+            lambda: _execute(source, names, scan_id, scan.sample_rows, settings, saved.specs)
+        )
+        await _succeed(sessions, scan_id, report, saved)
+        log.info("scan.succeeded", scan_id=str(scan_id), **where)
+    except Exception as e:
+        message = str(e)[:1000] or e.__class__.__name__
+        log.error("scan.failed", scan_id=str(scan_id), error=message, **where)
+        async with sessions() as db:
+            await db.execute(
+                update(Scan)
+                .where(Scan.id == scan_id)
+                .values(status="failed", error=message, finished_at=datetime.now(UTC))
             )
             await db.commit()
-        log.info(
-            "scan.checks_persisted",
-            scan_id=str(scan_id),
-            inserted=persisted.inserted,
-            regenerated=persisted.regenerated,
-            skipped=persisted.skipped,
+
+
+async def _succeed(
+    sessions: async_sessionmaker[AsyncSession],
+    scan_id: uuid.UUID,
+    report: dict[str, Any],
+    saved: Saved | None = None,
+) -> None:
+    """Store the report, its findings and (spec 007) its assets, columns and checks in one
+    transaction."""
+    async with sessions() as db:
+        scan = await db.get(Scan, scan_id)
+        if scan is None:
+            return
+        score = report.get("score") or {}
+        scan.status = "succeeded"
+        scan.finished_at = datetime.now(UTC)
+        scan.report = report
+        scan.report_version = report.get("report_version")
+        scan.score = {k: score.get(k) for k in ("overall", "low", "high")}
+        counts = {s: 0 for s in ("critical", "high", "medium", "low")}
+        for f in report.get("findings", []):
+            counts[f["severity"]] = counts.get(f["severity"], 0) + 1
+            db.add(
+                Finding(
+                    scan_id=scan_id,
+                    check_type=f["check_type"],
+                    asset=f["asset"],
+                    column_name=f.get("column"),
+                    dimension=f["dimension"],
+                    severity=f["severity"],
+                    evaluated=f["evaluated"],
+                    failed=f["failed"],
+                    ratio=f["ratio"],
+                    low=f["low"],
+                    high=f["high"],
+                    summary=f["summary"],
+                    next_step=f["next_step"],
+                    evidence={
+                        "check_id": f["check_id"],
+                        "title": f.get("title"),
+                        "examples": f.get("examples", []),
+                        "sql": f.get("sql"),
+                    },
+                )
+            )
+        scan.finding_counts = counts
+        scan.assets_count = len(report.get("assets", []))
+        persisted = await persist_checks(
+            db,
+            scan_id=scan_id,
+            connection_id=scan.connection_id,
+            report=report,
+            versions=saved.versions if saved else {},
         )
+        await db.commit()
+    log.info(
+        "scan.checks_persisted",
+        scan_id=str(scan_id),
+        inserted=persisted.inserted,
+        regenerated=persisted.regenerated,
+        skipped=persisted.skipped,
+    )
 
 
 def _execute(

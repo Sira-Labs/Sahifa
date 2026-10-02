@@ -1,6 +1,12 @@
-"""Alembic environment: sync psycopg connection, models as autogenerate target."""
+"""Alembic environment: sync psycopg connection, models as autogenerate target.
+
+Procrastinate's tables (migration 0004, spec 008) belong to Procrastinate's schema, not to the
+models, so autogenerate and `alembic check` skip every `procrastinate_*` name.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -17,12 +23,19 @@ target_metadata = Base.metadata
 
 # Several api replicas may start at once; the advisory lock serialises their migrations.
 MIGRATION_LOCK_KEY = 7_412_022_950_101
+PROCRASTINATE_PREFIX = "procrastinate_"
+
+
+def include_name(name: str | None, type_: str, parent_names: Any) -> bool:
+    """Leave Procrastinate's tables (and with them their indexes and constraints) alone."""
+    return not (type_ == "table" and (name or "").startswith(PROCRASTINATE_PREFIX))
 
 
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
+        include_name=include_name,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -41,7 +54,10 @@ def run_migrations_online() -> None:
         connection.exec_driver_sql("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_KEY,))
         connection.commit()
         context.configure(
-            connection=connection, target_metadata=target_metadata, transaction_per_migration=True
+            connection=connection,
+            target_metadata=target_metadata,
+            include_name=include_name,
+            transaction_per_migration=True,
         )
         with context.begin_transaction():
             context.run_migrations()

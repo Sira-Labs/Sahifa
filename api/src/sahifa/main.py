@@ -1,18 +1,19 @@
-"""FastAPI application: lifespan (schema guard, interrupted scans, env connections), the
-sign-in (spec 006) and routes."""
+"""FastAPI application: lifespan (schema guard, interrupted scans, env connections, the job
+queue or the inline upload clean-up), the sign-in (spec 006) and routes."""
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from . import __version__
+from . import __version__, jobs
 from .auth import CsrfMiddleware, NoAccessError, OidcClient, build_oidc, current_user, no_access_body
 from .db import Database
 from .db.migrate import head_revision
@@ -20,9 +21,23 @@ from .logging import configure, get_logger
 from .routers import assets, auth, checks, connections, health, scans
 from .services.connections import register_from_env
 from .services.scans import ScanRunner, mark_interrupted
+from .services.uploads import clean_uploads
 from .settings import Settings, get_settings, prod_problems
 
 log = get_logger("sahifa")
+CLEAN_FIRST_S = 60
+CLEAN_EVERY_S = 3600
+
+
+async def clean_uploads_hourly(db: Database, settings: Settings) -> None:
+    """Inline mode: the upload clean-up the worker runs hourly in queue mode (spec 008)."""
+    await asyncio.sleep(CLEAN_FIRST_S)
+    while True:
+        try:
+            await clean_uploads(db.sessions, settings)
+        except Exception as e:
+            log.error("uploads.clean_failed", error=str(e)[:300])
+        await asyncio.sleep(CLEAN_EVERY_S)
 
 
 @asynccontextmanager
@@ -39,9 +54,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if revision != head_revision():
                 log.error("db.schema_mismatch", database=revision, image=head_revision())
                 sys.exit(3)
-            interrupted = await mark_interrupted(s)
-            if interrupted:
-                log.warning("scan.interrupted", count=interrupted)
+            # In queue mode the reaper owns interrupted scans (spec 008).
+            if settings.scan_execution == "inline":
+                interrupted = await mark_interrupted(s)
+                if interrupted:
+                    log.warning("scan.interrupted", count=interrupted)
             await register_from_env(s)
     except SQLAlchemyError as e:
         # An unreachable database degrades /healthz instead of crashing the process.
@@ -52,11 +69,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         commit=settings.commit,
         schema=app.state.schema_revision,
         auth_mode=settings.resolved_auth_mode,
+        scan_execution=settings.scan_execution,
     )
     if settings.resolved_auth_mode == "proxy" and settings.oidc_issuer:
         log.warning("auth.mode", detail="SAHIFA_OIDC_ISSUER is set but SAHIFA_AUTH_MODE resolves to proxy")
-    yield
-    await app.state.runner.drain()
+    async with AsyncExitStack() as stack:
+        if settings.scan_execution == "queue":
+            await stack.enter_async_context(jobs.opened(settings, "api"))
+        else:
+            cleaner = asyncio.create_task(clean_uploads_hourly(db, settings))
+            stack.callback(cleaner.cancel)
+        yield
+        await app.state.runner.drain()
     oidc: OidcClient | None = app.state.oidc
     if oidc is not None:
         await oidc.aclose()

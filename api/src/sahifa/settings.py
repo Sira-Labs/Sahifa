@@ -25,6 +25,7 @@ CONNECTION_PREFIX = "SAHIFA_CONN_"
 ACCESS_GATES = ("basic-auth-at-proxy",)
 SIGN_IN_METHODS = ("google", "github", "passkey")
 AuthMode = Literal["oidc", "dev", "proxy"]
+ScanExecution = Literal["inline", "queue"]
 SESSION_SECRET_MIN = 32
 CLIENT_SECRET_MIN = 16
 
@@ -42,8 +43,11 @@ class Settings(BaseSettings):
     sample_rows: int = Field(default=100_000, ge=0)
     max_upload_mb: int = Field(default=200, ge=1)
     max_upload_files: int = Field(default=20, ge=1)
+    # Spec 008: `inline` runs scans in a thread of the api, `queue` defers them to the worker.
+    scan_execution: ScanExecution = "inline"
     upload_ttl_days: int = Field(default=7, ge=1)
     max_concurrent_scans: int = Field(default=2, ge=1)
+    reaper_stale_minutes: int = Field(default=10, ge=1)
     duckdb_memory: str = "1GB"
     statement_timeout_s: int = Field(default=60, ge=1)
     log_level: str = "info"

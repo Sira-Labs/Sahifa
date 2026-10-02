@@ -1,4 +1,8 @@
-"""Liveness and version (spec 004); the deploy check reads both (wait-live.sh)."""
+"""Liveness and version (spec 004); the deploy check reads both (wait-live.sh).
+
+`workers` lists the connected workers by commit (spec 008): the connections to this database
+named `sahifa-worker/<commit>` in `pg_stat_activity`.
+"""
 
 from __future__ import annotations
 
@@ -15,20 +19,33 @@ from ..settings import Settings
 
 router = APIRouter()
 
+WORKERS = text(
+    "SELECT substr(application_name, length('sahifa-worker/') + 1) AS commit, count(*) AS connections"
+    " FROM pg_stat_activity"
+    " WHERE datname = current_database() AND application_name LIKE 'sahifa-worker/%'"
+    " GROUP BY 1 ORDER BY 1"
+)
+
 
 @router.get("/healthz")
 async def healthz(db: AsyncSession = Depends(session)) -> dict[str, Any]:
+    workers: list[dict[str, Any]] = []
     try:
         await db.execute(text("SELECT 1"))
         database = "ok"
     except (SQLAlchemyError, OSError):
         database = "unavailable"
-    # `workers` lists worker commits once the worker exists (spec 008); empty until then.
+    if database == "ok":
+        try:
+            rows = (await db.execute(WORKERS)).all()
+            workers = [{"commit": commit, "connections": int(n)} for commit, n in rows]
+        except (SQLAlchemyError, OSError):
+            workers = []
     return {
         "status": "ok" if database == "ok" else "degraded",
         "database": database,
         "version": __version__,
-        "workers": [],
+        "workers": workers,
     }
 
 

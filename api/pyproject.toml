@@ -18,6 +18,8 @@ dependencies = [
     "httpx>=0.27",
     "joserfc>=1.2",
     "sahifa-core",
+    # Pinned: a new version may change its schema, which then needs a new migration (spec 008).
+    "procrastinate==3.10.0",
 ]
 
 [project.optional-dependencies]
