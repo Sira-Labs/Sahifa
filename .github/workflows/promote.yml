@@ -1,0 +1,200 @@
+name: promote
+
+# Promotes to production exactly what staging runs (ADR-0012). Actions → promote → Run
+# workflow on main, with the commit staging serves (`GET /api/version` on staging). The first
+# job checks that staging really runs that commit and pins the scanned images to their
+# digests; the second binds the `production` environment, whose required reviewer (the owner)
+# approves before any production secret reaches the job, and deploys those digests.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Full commit SHA that staging runs (from GET /api/version on staging)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One promotion at a time; a second waits instead of racing the first.
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_PREFIX: ghcr.io/sira-labs/sahifa
+
+jobs:
+  staged:
+    name: staging runs this commit
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    # For staging's public URL, its basic-auth credentials and whether staging runs a worker;
+    # no staging deploy token is used.
+    environment: staging
+    outputs:
+      commit: ${{ steps.check.outputs.commit }}
+      tag: ${{ steps.check.outputs.tag }}
+      worker: ${{ steps.check.outputs.worker }}
+      api: ${{ steps.digests.outputs.api }}
+      web: ${{ steps.digests.outputs.web }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the ancestry check below must also accept an older commit on main.
+          fetch-depth: 0
+          persist-credentials: false
+      - id: check
+        name: the commit is on main and live on staging
+        env:
+          WANT: ${{ inputs.commit }}
+          URL: ${{ vars.CAPROVER_WEB_URL }}
+          BASIC_AUTH: ${{ secrets.CAPROVER_WEB_BASIC_AUTH }}
+          # Staging runs a worker once its app exists (R1 sprint 2, spec 007); its token marks it.
+          WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+        run: |
+          if ! [[ "$WANT" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::commit must be a full 40-character SHA"; exit 1; fi
+          if [ -z "$URL" ]; then echo "::error::CAPROVER_WEB_URL is not set on environment 'staging': cannot confirm what staging runs"; exit 1; fi
+          if ! git merge-base --is-ancestor "$WANT" origin/main 2>/dev/null; then echo "::error::$WANT is not on main"; exit 1; fi
+          if [ -n "$WORKER_TOKEN" ]; then worker=true; else worker=false; fi
+          # One look, no waiting: staging must already serve this commit on web and api, and on
+          # the worker once there is one.
+          URL="$URL" WANT="$WANT" BASIC_AUTH="$BASIC_AUTH" CHECK_WORKER="$worker" TIMEOUT=0 .github/scripts/wait-live.sh
+          echo "commit=$WANT" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${WANT:0:7}" >> "$GITHUB_OUTPUT"
+          echo "worker=$worker" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: digests
+        name: pin the scanned images to their digests
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          for name in api web; do
+            digest=$(docker buildx imagetools inspect "$IMAGE_PREFIX-$name:$TAG" --format '{{json .Manifest}}' | jq -r '.digest')
+            if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "::error::no image $IMAGE_PREFIX-$name:$TAG"; exit 1; fi
+            echo "$name=$digest" >> "$GITHUB_OUTPUT"
+            echo "- \`$IMAGE_PREFIX-$name:$TAG@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  production:
+    name: deploy to production
+    needs: staged
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    # Required reviewer, deployment branch `main` and the production secrets live on this
+    # environment (deploy/caprover.md, "Staging and production").
+    environment: production
+    steps:
+      - name: configured?
+        id: gate
+        env:
+          SERVER: ${{ vars.CAPROVER_SERVER }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+          STAGED_WORKER: ${{ needs.staged.outputs.worker }}
+          TAG: ${{ needs.staged.outputs.tag }}
+          API_DIGEST: ${{ needs.staged.outputs.api }}
+          WEB_DIGEST: ${{ needs.staged.outputs.web }}
+        run: |
+          # tag@digest: readable in CapRover, and the digest pins exactly what staging runs.
+          echo "api_image=$IMAGE_PREFIX-api:$TAG@$API_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "web_image=$IMAGE_PREFIX-web:$TAG@$WEB_DIGEST" >> "$GITHUB_OUTPUT"
+          if [ -n "$SERVER" ]; then echo "caprover=true" >> "$GITHUB_OUTPUT"; else echo "caprover=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$HOST" ]; then echo "host=true" >> "$GITHUB_OUTPUT"; else echo "host=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -z "$SERVER" ] && [ -z "$HOST" ]; then
+            echo "::error::neither CAPROVER_SERVER nor DEPLOY_HOST is set on environment 'production'"
+            exit 1
+          fi
+          # When staging runs a worker (job `staged`), production on CapRover gets that worker
+          # too, so its token is then required. Before sprint 2 neither has one.
+          if [ "$STAGED_WORKER" = "true" ] && [ -n "$SERVER" ]; then
+            if [ -z "$WORKER_TOKEN" ]; then
+              echo "::error::staging runs a worker but CAPROVER_APP_TOKEN_WORKER is not set on environment 'production': the worker would keep running the old version"
+              exit 1
+            fi
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "worker=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # CapRover (the Sīra family production server)
+      - name: deploy api
+        if: steps.gate.outputs.caprover == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_API || 'sahifa-api' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_API }}
+          image: ${{ steps.gate.outputs.api_image }}
+      - name: deploy web
+        if: steps.gate.outputs.caprover == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_WEB || 'sahifa-web' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_WEB }}
+          image: ${{ steps.gate.outputs.web_image }}
+      - name: deploy worker
+        if: steps.gate.outputs.caprover == 'true' && steps.gate.outputs.worker == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_WORKER || 'sahifa-worker' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+          image: ${{ steps.gate.outputs.api_image }}
+
+      # Any Docker host with the compose bundle (self-hosted installs). The bundle gains a
+      # worker service with spec 007; until then the api runs scans in a thread (ADR-0009).
+      - name: copy compose bundle
+        if: steps.gate.outputs.host == 'true'
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "deploy/compose.yaml"
+          target: "~/sahifa"
+          strip_components: 1
+      - name: pull and restart
+        if: steps.gate.outputs.host == 'true'
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          SAHIFA_TAG: ${{ needs.staged.outputs.tag }}
+          SAHIFA_API_IMAGE: ${{ steps.gate.outputs.api_image }}
+          SAHIFA_WEB_IMAGE: ${{ steps.gate.outputs.web_image }}
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: SAHIFA_TAG,SAHIFA_API_IMAGE,SAHIFA_WEB_IMAGE
+          script: |
+            set -euo pipefail
+            cd ~/sahifa
+            # The digest-pinned images take precedence over the tag in compose.yaml.
+            export SAHIFA_TAG SAHIFA_API_IMAGE SAHIFA_WEB_IMAGE
+            echo "deploying $SAHIFA_API_IMAGE and $SAHIFA_WEB_IMAGE"
+            docker compose -f compose.yaml pull
+            docker compose -f compose.yaml up -d --remove-orphans
+            docker image prune -f
+
+      - name: wait until the new version is live
+        env:
+          URL: ${{ vars.CAPROVER_WEB_URL }}
+          WANT: ${{ needs.staged.outputs.commit }}
+          CHECK_WORKER: ${{ steps.gate.outputs.worker }}
+          # user:password of the web app's HTTP basic auth (ADR-0010), until sign-in in R2.
+          BASIC_AUTH: ${{ secrets.CAPROVER_WEB_BASIC_AUTH }}
+        run: .github/scripts/wait-live.sh

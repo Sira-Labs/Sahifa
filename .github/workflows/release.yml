@@ -1,0 +1,207 @@
+name: release
+
+# Builds the images on every push to main and on version tags, scans them with Trivy,
+# publishes them to the GitHub Container Registry and deploys them to staging. Production is
+# promoted separately (promote.yml, ADR-0012).
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs for the same commit (a push to main and a v* tag on it, or a re-run) go one at a time,
+# so the check that keeps sha-<short> tags immutable cannot race another run.
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # GHCR names must be lowercase; github.repository_owner is "Sira-Labs", so the organisation
+  # is spelled out here.
+  IMAGE_PREFIX: ghcr.io/sira-labs/sahifa
+  # Pinned by digest, run as a plain container on a saved image file: no third-party action
+  # sees the registry token, and the scanner gets no Docker socket.
+  TRIVY_IMAGE: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+
+jobs:
+  # Only main and v* tags on commits that are on main publish and deploy: what is published
+  # here is what production is later promoted from. "Run workflow" on another branch stops
+  # here with a notice, and a v* tag on a commit outside main fails here, before anything is
+  # published.
+  source:
+    name: release source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: check
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          case "$REF" in
+            refs/heads/main)
+              echo "release=true" >> "$GITHUB_OUTPUT" ;;
+            refs/tags/v*)
+              if git merge-base --is-ancestor HEAD origin/main; then
+                echo "release=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "::error::$REF points at $(git rev-parse --short HEAD), which is not on main; tag releases from main only"
+                exit 1
+              fi ;;
+            *)
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::$REF is neither main nor a v* tag: nothing is published or deployed" ;;
+          esac
+
+  images:
+    name: build and publish images
+    needs: source
+    if: needs.source.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: api/Dockerfile
+          - name: web
+            dockerfile: web/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+      - id: tag
+        run: echo "tag=sha-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      # Pushed by digest only: the image is in GHCR but has no tag yet, so no deploy can pick
+      # it up before the scan below has passed.
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Reported by /api/version and the web image's /version.json after a deploy.
+          build-args: SAHIFA_COMMIT=${{ github.sha }}
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}-${{ matrix.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          provenance: true
+          sbom: true
+      # Scans exactly the pushed image, saved to a file: the scanner gets no Docker socket.
+      - name: Trivy scan (fixable critical CVEs fail the job)
+        env:
+          IMAGE: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          docker pull -q "$IMAGE"
+          docker tag "$IMAGE" scan/image:ci
+          mkdir -p "$RUNNER_TEMP/scan"
+          docker save scan/image:ci -o "$RUNNER_TEMP/scan/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/scan:/scan:ro" -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            "$TRIVY_IMAGE" image --quiet --exit-code 1 --severity CRITICAL --ignore-unfixed \
+            --input /scan/image.tar
+      # Only a scanned image gets tags; every tag points at that digest, attestations included.
+      - name: tag the scanned image
+        env:
+          IMAGE: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
+          META: ${{ steps.meta.outputs.json }}
+        # `sha-<short>` tags are immutable: a re-run for the same commit builds a new digest but
+        # leaves the existing sha tag where staging deployed it, so promote.yml, which resolves
+        # the sha tag, always gets the digest staging ran. Branch, version and latest tags move.
+        run: |
+          args=()
+          while read -r tag; do
+            if [[ "$tag" == *:sha-* ]] && docker buildx imagetools inspect "$tag" >/dev/null 2>&1; then
+              echo "::notice::$tag already exists and is not moved (sha tags are immutable)"
+              continue
+            fi
+            args+=(-t "$tag")
+          done < <(jq -r '.tags[]' <<< "$META")
+          docker buildx imagetools create "${args[@]}" "$IMAGE"
+
+  # main and v* tags deploy to staging only (ADR-0012). Production gets the staging-tested
+  # digest through promote.yml, behind the `production` environment's required reviewer.
+  deploy-staging:
+    name: deploy to staging
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # CAPROVER_SERVER, CAPROVER_WEB_URL and the CAPROVER_APP_TOKEN_* and CAPROVER_WEB_BASIC_AUTH
+    # secrets belong to the `staging` environment. Environment values are only visible inside
+    # steps, so every step carries the gate; the job is a no-op until CAPROVER_SERVER is set.
+    environment: staging
+    steps:
+      - name: configured?
+        id: gate
+        env:
+          SERVER: ${{ vars.CAPROVER_SERVER }}
+          WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+        run: |
+          if [ -n "$SERVER" ]; then echo "on=true" >> "$GITHUB_OUTPUT"; else echo "on=false" >> "$GITHUB_OUTPUT"; echo "::notice::CAPROVER_SERVER not set on environment 'staging'; skipping the deploy"; fi
+          # The worker app arrives in R1 sprint 2 (spec 007, ADR-0009): deployed only when its token is set.
+          if [ -n "$WORKER_TOKEN" ]; then echo "worker=true" >> "$GITHUB_OUTPUT"; else echo "worker=false" >> "$GITHUB_OUTPUT"; echo "CAPROVER_APP_TOKEN_WORKER not set; skipping worker deploy"; fi
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.on == 'true'
+        with:
+          persist-credentials: false
+      - name: deploy api
+        if: steps.gate.outputs.on == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_API || 'sahifa-api' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_API }}
+          image: ${{ env.IMAGE_PREFIX }}-api:${{ needs.images.outputs.tag }}
+      - name: deploy web
+        if: steps.gate.outputs.on == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_WEB || 'sahifa-web' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_WEB }}
+          image: ${{ env.IMAGE_PREFIX }}-web:${{ needs.images.outputs.tag }}
+      - name: deploy worker
+        if: steps.gate.outputs.on == 'true' && steps.gate.outputs.worker == 'true'
+        uses: caprover/deploy-from-github@v2
+        with:
+          server: ${{ vars.CAPROVER_SERVER }}
+          app: ${{ vars.CAPROVER_APP_WORKER || 'sahifa-worker' }}
+          token: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+          image: ${{ env.IMAGE_PREFIX }}-api:${{ needs.images.outputs.tag }}
+      - name: wait until the new version is live
+        if: steps.gate.outputs.on == 'true'
+        env:
+          URL: ${{ vars.CAPROVER_WEB_URL }}
+          WANT: ${{ github.sha }}
+          CHECK_WORKER: ${{ steps.gate.outputs.worker }}
+          # user:password of the web app's HTTP basic auth (ADR-0010), until sign-in in R2.
+          BASIC_AUTH: ${{ secrets.CAPROVER_WEB_BASIC_AUTH }}
+        run: .github/scripts/wait-live.sh
