@@ -49,20 +49,22 @@ class ScanRunner:
 
     async def _run(self, scan_id: uuid.UUID) -> None:
         async with self.limit:
-            async with self.sessions() as db:
-                scan = await db.get(Scan, scan_id)
-                if scan is None:
-                    return
-                conn = await db.get(Connection, scan.connection_id)
-                if conn is None:
-                    return
-                source = resolve(conn)
-                names = conn.config.get("names") if conn.kind == "upload" else None
-                saved = await load_saved(db, conn.id)
-                scan.status, scan.started_at = "running", datetime.now(UTC)
-                await db.commit()
-            log.info("scan.started", scan_id=str(scan_id), connection=conn.name)
             try:
+                # Inside the failure boundary: a database error while loading the saved checks
+                # marks the scan failed instead of leaving it queued.
+                async with self.sessions() as db:
+                    scan = await db.get(Scan, scan_id)
+                    if scan is None:
+                        return
+                    conn = await db.get(Connection, scan.connection_id)
+                    if conn is None:
+                        return
+                    source = resolve(conn)
+                    names = conn.config.get("names") if conn.kind == "upload" else None
+                    saved = await load_saved(db, conn.id)
+                    scan.status, scan.started_at = "running", datetime.now(UTC)
+                    await db.commit()
+                log.info("scan.started", scan_id=str(scan_id), connection=conn.name)
                 if source is None:
                     raise RuntimeError(
                         f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}"
