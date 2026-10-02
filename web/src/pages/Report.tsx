@@ -23,7 +23,7 @@ import { useReport } from "../hooks/useReport";
 import { useScanPolling } from "../hooks/useScanPolling";
 import type { AssetReport, Scan, ScanReport } from "../types";
 
-const routeApi = getRouteApi("/scans/$scanId");
+const routeApi = getRouteApi("/_app/scans/$scanId");
 
 /** The sentence under the score card: what the interval covers. */
 export function intervalCaption(report: ScanReport): string {

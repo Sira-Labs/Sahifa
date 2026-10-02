@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
+import type { Me } from "../auth";
 import { makeRouter } from "../router";
 import type { AssetReport, CheckResult, ColumnReport, Finding, Scan, ScanReport } from "../types";
 
@@ -12,12 +13,29 @@ export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+/** The principal of a server without sign-in (dev mode): what most tests run as. */
+export const DEV_ME: Me = {
+  mode: "dev",
+  user: { id: null, email: null, display_name: "Developer" },
+  sign_in_method: "dev",
+  admin: true,
+};
+
+/** A signed-in administrator (oidc mode, Google). */
+export const ME: Me = {
+  mode: "oidc",
+  user: { id: "u1", email: "ana@example.org", display_name: "Ana" },
+  sign_in_method: "google",
+  admin: true,
+};
+
 /** Stub `fetch` with a router function; a returned Response is passed through, anything else is
- * JSON. `/api/version` always answers. */
-export function stubFetch(route: Route) {
+ * JSON. `/api/version` always answers; `/api/auth/me` answers `me` (dev mode unless given). */
+export function stubFetch(route: Route, { me = DEV_ME }: { me?: Me | Response } = {}) {
   const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.pathname + input.search : input.url;
-    if (url === "/api/version") return json({ version: "0.1.0", commit: "abc", schema_revision: "0001" });
+    if (url === "/api/version") return json({ version: "0.1.0", commit: "abc", schema_revision: "0002" });
+    if (url === "/api/auth/me") return me instanceof Response ? me.clone() : json(me);
     const out = await route(url, init);
     return out instanceof Response ? out : json(out);
   });
@@ -25,9 +43,9 @@ export function stubFetch(route: Route) {
   return fn;
 }
 
-/** The URLs fetched so far, without the version call. */
+/** The URLs fetched so far, without the version and session calls. */
 export function fetchedUrls(fn: ReturnType<typeof stubFetch>): string[] {
-  return fn.mock.calls.map((c) => String(c[0])).filter((u) => u !== "/api/version");
+  return fn.mock.calls.map((c) => String(c[0])).filter((u) => u !== "/api/version" && u !== "/api/auth/me");
 }
 
 /** Render the app at `path` with a fresh query client and memory history. */

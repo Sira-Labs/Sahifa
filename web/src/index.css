@@ -1174,3 +1174,51 @@ details > .health-list {
 .conn-pick li:first-child {
   border-top: 0;
 }
+
+/* ---------- Sign-in and account (spec 006) ---------- */
+.auth-card {
+  max-width: 30rem;
+  margin: clamp(16px, 8vh, 72px) auto 0;
+}
+.auth-methods {
+  display: grid;
+  gap: 10px;
+}
+.auth-methods .btn {
+  width: 100%;
+}
+.nav-user {
+  color: var(--muted);
+  font-size: 14px;
+  padding-inline: 6px;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-list {
+  display: grid;
+}
+.device-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.device-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.device-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.device-meta {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}

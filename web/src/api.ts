@@ -1,5 +1,6 @@
 // Thin fetch wrapper with one typed function per route of spec 004. Every non-2xx answer
-// becomes an ApiError carrying the API's `detail` as its message.
+// becomes an ApiError carrying the API's `detail` as its message. Every request carries the
+// CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
   Connection,
   ConnectionCreate,
@@ -15,7 +16,15 @@ import type {
   Version,
 } from "./types";
 
-const HEADERS = { Accept: "application/json" };
+const HEADERS = { Accept: "application/json", "X-Sahifa-Request": "1" };
+
+// Called on any 401: the router sends the user to /login with the current path (spec 006).
+let onUnauthorized: (() => void) | null = null;
+
+/** Register what happens when the session is missing or expired. */
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
 
 /** A failed request. `status` is 0 when the API could not be reached at all. */
 export class ApiError extends Error {
@@ -57,6 +66,8 @@ export function detailText(detail: unknown): string | null {
 // What to say when the API answered without a usable `detail`.
 const STATUS_TEXT: Record<number, string> = {
   400: "The request was not accepted",
+  401: "Your session has ended; sign in again",
+  403: "This account has no access",
   404: "Not found",
   409: "The report is not ready yet",
   413: "The upload is too large",
@@ -74,17 +85,21 @@ export function statusMessage(status: number, statusText = ""): string {
   return known ? `${known} (${status})` : `${status} ${statusText}`.trim();
 }
 
-/** Error text from a response body: JSON `detail`, else short plain text; HTML pages keep the fallback. */
+/** Error text from a response body: a JSON `message` for people (403 `no_access`), else its
+ * `detail`, else short plain text; HTML pages keep the fallback. */
 export function errorMessage(body: string, fallback: string): string {
   try {
-    return detailText((JSON.parse(body) as { detail?: unknown }).detail) ?? fallback;
+    const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown } | null;
+    if (typeof parsed?.message === "string" && parsed.message) return parsed.message;
+    return detailText(parsed?.detail) ?? fallback;
   } catch {
     const text = body.trim();
     return text && !text.startsWith("<") ? text.slice(0, 300) : fallback;
   }
 }
 
-/** Fetch JSON; throws ApiError with the server's detail. 204 resolves to undefined. */
+/** Fetch JSON; throws ApiError with the server's detail. A 401 also triggers the unauthorized
+ * handler; 204 resolves to undefined. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
@@ -94,6 +109,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 401) onUnauthorized?.();
     throw new ApiError(res.status, errorMessage(body, statusMessage(res.status, res.statusText)), parseJson(body));
   }
   if (res.status === 204) return undefined as T;

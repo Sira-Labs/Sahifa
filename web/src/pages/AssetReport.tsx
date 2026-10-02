@@ -7,7 +7,7 @@ import { assetLabel, formatCompact, formatCount } from "../format";
 import { useReport } from "../hooks/useReport";
 import type { AssetReport as Asset } from "../types";
 
-const routeApi = getRouteApi("/scans/$scanId/assets/$asset");
+const routeApi = getRouteApi("/_app/scans/$scanId/assets/$asset");
 
 /** What the asset's interval covers. */
 function caption(a: Asset): string {
