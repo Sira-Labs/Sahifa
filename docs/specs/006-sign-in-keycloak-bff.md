@@ -260,6 +260,10 @@ sequenceDiagram
 - [x] Staging: the owner signs in with Google, with GitHub and with a passkey on
       `sahifa-stg.siralabs.org`, sees the device list and signs out; an anonymous `curl` of
       `/api/scans` gives 401 (after switching staging from basic auth to `oidc`).
+      Evidence (2026-10-02): the owner confirmed all three sign-ins in the session; against
+      commit 9ac52b4, `GET /api/auth/options` answered `{"mode":"oidc","methods":["google","github","passkey"],…}`,
+      anonymous `GET /api/scans`, `GET /api/auth/me` and `GET /api/auth/passkey/add` answered 401, and
+      `GET /api/auth/login?method=github` redirected through realm `sahifa` to GitHub with the real client ID.
 
 ## Test cases
 
