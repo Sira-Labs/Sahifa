@@ -22,7 +22,7 @@ open-source licence. ADR-0008 does not allow it in the shipped images.
 Three routes, from cheapest to deepest:
 
 1. **Exports (R1, already supported).** CSV or Parquet extracts and Datasphere replication
-   flows to S3 or local storage are read through DuckDB like any other file (spec 010 adds S3).
+   flows to S3 or local storage are read through DuckDB like any other file (S3 arrives in R2, sprint 7).
 2. **SAP HANA SQL pushdown (R2, sprint 7).** A `HanaDialect` in `sql.py` (regex through
    `LIKE_REGEXPR`, sampling with `TABLESAMPLE SYSTEM`, quoting with SQLGlot's dialect where it
    fits) and a `HanaConnector` covering HANA Cloud, HANA on premises, BW/4HANA and Datasphere

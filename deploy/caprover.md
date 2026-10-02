@@ -234,7 +234,8 @@ upload a file.
 Sahifa signs people in through a Keycloak realm with Google, GitHub and passkeys, no
 passwords (ADR-0010). Staging uses realm `sahifa` on the current Keycloak
 (`miftachun.apps.data-and-ai-dude.ch`); production gets its own realm (and later its own
-Keycloak). Below, `<kc>` is the Keycloak host and `<public>` the install's address, e.g.
+Keycloak). Below, `<kc>` is the Keycloak host (staging: `miftachun.apps.data-and-ai-dude.ch`),
+`<realm>` the install's realm (staging: `sahifa`) and `<public>` the install's address, e.g.
 `https://sahifa-stg.siralabs.org`.
 
 ```mermaid
@@ -260,7 +261,7 @@ sequenceDiagram
 1. **Import the realm.** From a checkout of this repository:
 
    ```bash
-   python3 deploy/keycloak/render.py https://<public> > sahifa-realm.json
+   python3 deploy/keycloak/render.py <public> > sahifa-realm.json
    ```
 
    Keycloak admin console → realm drop-down → **Create realm** → *Resource file*: the rendered
@@ -268,17 +269,17 @@ sequenceDiagram
    (`<public>/api/auth/callback`), post-logout redirect (`<public>/`) and back-channel logout
    URL (`<public>/api/auth/backchannel-logout`). A second install renders with its own
    address.
-2. **Client secret.** Realm `sahifa` → Clients → `sahifa-api` → Credentials → Regenerate, and
+2. **Client secret.** Realm `<realm>` → Clients → `sahifa-api` → Credentials → Regenerate, and
    copy it into the api app's `SAHIFA_OIDC_CLIENT_SECRET`.
 3. **Google.** Google Cloud console → APIs & Services:
    - OAuth consent screen: External, app name "Sahifa", scopes `openid`, `email`, `profile`.
    - Credentials → Create credentials → OAuth client ID → *Web application*; authorised
-     redirect URI `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa/broker/google/endpoint`.
+     redirect URI `https://<kc>/realms/<realm>/broker/google/endpoint`.
    - Keycloak → Identity providers → `google`: paste the client ID and secret → Save.
 4. **GitHub.** GitHub → Settings (of the `Sira-Labs` organisation, or your account) →
    Developer settings → OAuth Apps → New OAuth App:
-   - Homepage URL `https://<public>`; authorization callback URL
-     `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa/broker/github/endpoint`.
+   - Homepage URL `<public>`; authorization callback URL
+     `https://<kc>/realms/<realm>/broker/github/endpoint`.
    - Generate a client secret; Keycloak → Identity providers → `github`: paste the client ID
      and secret → Save.
    - GitHub accounts whose primary email is not verified cannot sign in (Sahifa refuses
@@ -288,8 +289,8 @@ sequenceDiagram
    | Name | Value |
    |---|---|
    | `SAHIFA_AUTH_MODE` | `oidc` |
-   | `SAHIFA_PUBLIC_URL` | `https://<public>` (already set) |
-   | `SAHIFA_OIDC_ISSUER` | `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa` |
+   | `SAHIFA_PUBLIC_URL` | `<public>` (already set) |
+   | `SAHIFA_OIDC_ISSUER` | `https://<kc>/realms/<realm>` |
    | `SAHIFA_OIDC_CLIENT_SECRET` | from step 2 |
    | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32` |
    | `SAHIFA_ADMIN_EMAIL` | the administrator's address |
@@ -304,7 +305,7 @@ sequenceDiagram
    check and Caddy's security headers all see one origin.
 7. **Check.** Open `<public>`: the sign-in page shows the three buttons. Sign in with Google
    as the admin email; the header shows your name, Account lists the device.
-   `curl -s -o /dev/null -w '%{http_code}' https://<public>/api/scans` answers `401`;
+   `curl -s -o /dev/null -w '%{http_code}' <public>/api/scans` answers `401`;
    `/api/version` and `/healthz` stay public for the deploy checks.
 8. **Passkeys.** Signed in, Account → **Manage passkeys** opens Keycloak's account console →
    *Signing in* → Passkey → Set up. After that, "Sign in with a passkey" works on that device.
@@ -541,7 +542,7 @@ none of it: its data can be rebuilt.
 | API log: `refusing to start in prod: ... ['SAHIFA_DATABASE_URL']` | the password is `sahifa`, `change-me` or similar; prod rejects placeholders | Use a generated password in both the db app and the URL |
 | API log: `refusing to start in prod` naming `SAHIFA_ACCESS_GATE` | neither the sign-in nor the access gate is set up (spec 006, ADR-0010) | Set the Keycloak rows (section 4a), or turn on basic auth for the web app and set `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` (section 4a, "Interim") |
 | API log: `refusing to start in prod` naming `SAHIFA_OIDC_*`, `SAHIFA_SESSION_SECRET` or `SAHIFA_ADMIN_EMAIL` | `SAHIFA_AUTH_MODE=oidc` with a missing, short or placeholder setting | Fill in the rows of section 4a, step 5; the session secret needs 32 characters (`openssl rand -hex 32`) |
-| Sign-in page: "Sign-in failed (invalid_token)" | the realm's issuer differs from `SAHIFA_OIDC_ISSUER`, or the user's email is not verified | Copy the issuer from `<kc>/realms/sahifa/.well-known/openid-configuration`; verify the email at Google or GitHub |
+| Sign-in page: "Sign-in failed (invalid_token)" | the realm's issuer differs from `SAHIFA_OIDC_ISSUER`, or the user's email is not verified | Copy the issuer from `https://<kc>/realms/<realm>/.well-known/openid-configuration`; verify the email at Google or GitHub |
 | Signed in, "No access yet" | the address is neither `SAHIFA_ADMIN_EMAIL` nor in `SAHIFA_ALLOWED_EMAILS` | Add it to `SAHIFA_ALLOWED_EMAILS`, Save & Update |
 | API log: `refusing to start in prod` naming a `SAHIFA_CONN_*` variable | that source URL carries a placeholder password | Put the generated `sahifa_reader` password in it |
 | Web log: `dial tcp: lookup api ... no such host` | `SAHIFA_API_UPSTREAM` missing or misspelled on the **web** app | Set it to `srv-captain--sahifa-api:8000` (two dashes) and Save & Update |
