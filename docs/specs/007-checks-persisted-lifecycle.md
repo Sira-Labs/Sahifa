@@ -55,9 +55,12 @@ that the next scan judges my data by my decisions instead of starting over.
   `saved=None` keeps today's behaviour (CLI, uploads).
 - A locked check whose column no longer exists is still returned by `reconcile`. It is not
   evaluated: it appears in `AssetReport.unevaluated` with reason `column_missing`, so the
-  owner sees a stale lock rather than losing it silently.
+  owner sees a stale lock rather than losing it silently. (Implementation: two more reasons,
+  `parent_missing` for a saved foreign-key check whose parent table is gone and `unknown_type`,
+  because evaluating either would fail the whole asset.)
 - `ScanReport` gains `checks: list[CheckSpec]`: every reconciled spec, including the
   proposed ones and the unevaluated locked ones. The API persists from this list.
+  (Implementation: `report_version` 2; version 1 reports still load, both fields default empty.)
 
 ### Database (migration 0003)
 
@@ -66,7 +69,7 @@ that the next scan judges my data by my decisions instead of starting over.
 | `assets` | `id` uuid PK, `connection_id` → connections (cascade), `namespace` text, `name` text, `kind` (`table`, `view`, `file`), `row_count` bigint, `last_scan_id` → scans (set null), `created_at`, `updated_at`; unique (`connection_id`, `namespace`, `name`) |
 | `columns` | `asset_id` → assets (cascade), `name` text, `position` int, `physical_type` text, `logical_type` text, `semantic_type` text null, `role` text; PK (`asset_id`, `name`) |
 | `checks` | `id` uuid PK, `asset_id` → assets (cascade), `key` text (the core id), `type`, `column_name` text null, `columns` jsonb, `params` jsonb, `dimension`, `severity`, `kind` (`rule`, `baseline`, `manual`), `origin`, `status` CHECK (`proposed`, `active`, `locked`, `retired`), `max_fail_ratio` float, `version` int (+1 on every change), `last_scan_id` → scans (set null), `created_at`, `updated_at`; unique (`asset_id`, `key`); index (`asset_id`, `status`) |
-| `check_events` | `id` uuid PK, `check_id` → checks (cascade), `at`, `user_id` → users (set null; null for the scanner), `action` (`created`, `regenerated`, `approve`, `reject`, `lock`, `unlock`, `retire`, `restore`), `from_status`, `to_status`, `params_before` jsonb null, `params_after` jsonb null; index (`check_id`, `at`) |
+| `check_events` | `id` uuid PK, `check_id` → checks (cascade), `at`, `user_id` → users (set null; null for the scanner, dev and proxy), `actor` text not null (immutable: the user's email at the time, or `scanner`, `dev`, `proxy`), `action` (`created`, `regenerated`, `approve`, `reject`, `lock`, `unlock`, `retire`, `restore`), `from_status`, `to_status`, `params_before` jsonb null, `params_after` jsonb null; index (`check_id`, `at`) |
 
 ### API (all behind `current_user`; changes need the CSRF header)
 
@@ -76,7 +79,7 @@ that the next scan judges my data by my decisions instead of starting over.
 | `GET /api/assets/{id}` | — | the asset with `columns: [{"name", "position", "physical_type", "logical_type", "semantic_type", "role"}]`; 404 if unknown |
 | `GET /api/checks?asset_id=&status=` | `asset_id` required; `status` optional, repeatable | `[{"id", "key", "type", "title", "column", "columns", "params", "dimension", "severity", "kind", "origin", "status", "max_fail_ratio", "version", "updated_at", "last_scan_id"}]` ordered by column, then type; 404 for an unknown asset |
 | `POST /api/checks/{id}/{action}` | `action` ∈ `approve`, `reject`, `lock`, `unlock`, `retire`, `restore`; body `{"version": n}` | 200 the updated check; 404 unknown check; 409 `invalid_transition` (with `status`); 409 `stale_version` (with the current `version`); 422 without `version` |
-| `GET /api/checks/{id}/events` | — | `[{"at", "user", "action", "from_status", "to_status", "params_before", "params_after"}]`, newest first; `user` is the email or `null` for the scanner |
+| `GET /api/checks/{id}/events` | — | `[{"at", "actor", "action", "from_status", "to_status", "params_before", "params_after"}]`, newest first; `actor` is the email, or `scanner`, `dev` or `proxy` |
 
 Allowed transitions:
 
@@ -128,10 +131,10 @@ Allowed transitions:
    2. Compare its version with the request: a mismatch → 409 `stale_version`.
    3. Check the transition table: a forbidden transition → 409 `invalid_transition`.
    4. Set the new status, add 1 to `version`, set `updated_at`.
-   5. Insert an event with the signed-in user's id.
+   5. Insert an event with the signed-in user's id and their email as `actor`.
    6. Return the check.
 
-   In `dev` and `proxy` mode the event's `user_id` is null.
+   In `dev` and `proxy` mode the event's `user_id` is null and its `actor` is `dev` or `proxy`.
 6. **Scores.** No change to the scoring rules. They already count only `active` and `locked`
    checks, and retired checks are no longer evaluated at all.
 7. **Logging.** The API logs:
@@ -147,27 +150,29 @@ Allowed transitions:
 
 ## Acceptance criteria
 
-- [ ] `reconcile` follows the table for every row (unit tests, one per row).
-- [ ] Scanning the faulty shop twice through a DuckDB connection stores its assets, columns and
+- [x] `reconcile` follows the table for every row (unit tests, one per row).
+- [x] Scanning the faulty shop twice through a DuckDB connection stores its assets, columns and
       checks once. The second scan inserts nothing new and regenerates only checks whose
       parameters changed.
-- [ ] **A locked check keeps its parameters across scans**, which is S2-1's "done when":
+- [x] **A locked check keeps its parameters across scans**, which is S2-1's "done when":
   - approve and lock `sah.accepted_values` on `orders.status` (a baseline, so it starts
     `proposed`);
   - add a new status value to the data and scan again;
   - the locked check still has the old value set and reports the new value as failing;
   - an active baseline on another column picked up its new parameters.
-- [ ] A retired check is not evaluated, does not appear in the report and is not re-created.
-- [ ] Each lifecycle action works from its allowed status and returns 409 `invalid_transition`
+- [x] A retired check is not evaluated, does not appear in scan results or findings, stays visible
+      (Retired tab) on the asset report, and is not re-created.
+- [x] Each lifecycle action works from its allowed status and returns 409 `invalid_transition`
       from every other one. A stale `version` returns 409 `stale_version`.
-- [ ] Every change writes one `check_events` row with the user. Scanner events have no user.
-- [ ] A lock made while a scan runs survives that scan's persistence step.
-- [ ] `alembic check` passes after migration 0003; downgrade to 0002 and upgrade again work.
-- [ ] Web: the asset report lists checks by status, and each allowed action calls the API with
+- [x] Every change writes one `check_events` row with the user and an immutable `actor`. Scanner
+      events have no `user_id` and the `actor` `scanner`; deleting a user keeps the `actor`.
+- [x] A lock made while a scan runs survives that scan's persistence step.
+- [x] `alembic check` passes after migration 0003; downgrade to 0002 and upgrade again work.
+- [x] Web: the asset report lists checks by status, and each allowed action calls the API with
       the CSRF header and updates the list. A 409 `stale_version` reloads it.
-- [ ] Hostile-name tests pass with persistence: asset and column names with quotes,
+- [x] Hostile-name tests pass with persistence: asset and column names with quotes,
       semicolons and Unicode.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 

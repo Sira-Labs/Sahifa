@@ -51,7 +51,23 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Route ids under the new layout route are `/_app/...` (`getRouteApi` in four pages).
       - "Add a passkey" runs Keycloak's passkey registration (`kc_action`) after a fresh sign-in;
         the account console alone could not add a first passkey (spec 006, decision 7).
-- [ ] 007 Assets, columns and checks persisted; lifecycle actions — `docs/specs/007-checks-persisted-lifecycle.md` (draft, awaiting approval).
+- [x] **007 Assets, columns and checks persisted; lifecycle actions** — `docs/specs/007-checks-persisted-lifecycle.md`
+      - `ScanReport.checks` holds the reconciled specs before evaluation (evaluated copies): the
+        freshness check writes its measured age into its params and would otherwise regenerate
+        every scan. `report_version` is 2; version 1 reports still load and render.
+      - Unevaluated reasons beyond `column_missing`: `parent_missing` (a saved foreign key whose
+        parent table is gone) and `unknown_type`, so a stale saved check never fails the asset.
+      - An inferred foreign key dropped for weak evidence is not persisted; a locked or manual one
+        is always evaluated.
+      - A scan regenerates `params`, `columns`, `severity` and `max_fail_ratio` of open generated
+        checks; the event records the params. Unchanged checks only get `last_scan_id`, no version.
+      - The persist step skips a check whose version differs from the one loaded at scan start,
+        and the UPDATE repeats the guard (`WHERE version = loaded`); concurrent inserts use
+        `ON CONFLICT DO NOTHING`. Assets that failed keep their old columns and row count.
+      - `check_events.at` defaults to `clock_timestamp()` so events of one transaction order;
+        `actor` is the email, `scanner`, `dev` or `proxy`; deleting a user keeps it.
+      - 409 bodies carry `detail` (`stale_version`, `invalid_transition`), `version` or `status`
+        and a `message` the web shows; the auth test fixture deletes users instead of truncating.
 - [ ] 008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
 - [ ] 009 Findings across scans with deduplication and occurrences.
 - [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
