@@ -31,4 +31,9 @@ All notable changes to this project are documented here. The format follows
   approve, reject, lock, unlock, retire and restore, and every change is recorded with who made
   it (`/api/assets`, `/api/checks`, migration 0003).
 
+### Fixed
+- Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now
+  uses `assets/favicon.svg`), Tabayyun is linked at tabayyun-stg.siralabs.org, and the page links
+  the running preview at sahifa-stg.siralabs.org.
+
 [Unreleased]: https://github.com/Sira-Labs/Sahifa/commits/main
