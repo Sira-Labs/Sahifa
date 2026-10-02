@@ -74,7 +74,9 @@ async def env(tmp_path: Path) -> AsyncIterator[Env]:
     upgrade(DB_URL)
     owner = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
     with owner.connect() as conn:
-        conn.execute(text("TRUNCATE login_flows, sessions, users"))
+        conn.execute(text("TRUNCATE login_flows, sessions"))
+        # Check events (spec 007) refer to users and keep their actor when a user goes.
+        conn.execute(text("DELETE FROM users"))
     idp = FakeIdp()
     async with AsyncExitStack() as stack:
 

@@ -6,7 +6,7 @@ ADR-0005. Packages: `core/` (reconciliation of saved and generated checks), `api
 (migration 0003, scan runner, `/api/assets`, `/api/checks`), `web/` (checks on the asset
 report).
 
-Status: draft 2026-10-02, waiting for approval.
+Status: approved 2026-10-02 by the owner; implemented in the same session as spec 006.
 
 ## Goal
 
@@ -55,9 +55,12 @@ that the next scan judges my data by my decisions instead of starting over.
   `saved=None` keeps today's behaviour (CLI, uploads).
 - A locked check whose column no longer exists is still returned by `reconcile`. It is not
   evaluated: it appears in `AssetReport.unevaluated` with reason `column_missing`, so the
-  owner sees a stale lock rather than losing it silently.
+  owner sees a stale lock rather than losing it silently. (Implementation: two more reasons,
+  `parent_missing` for a saved foreign-key check whose parent table is gone and `unknown_type`,
+  because evaluating either would fail the whole asset.)
 - `ScanReport` gains `checks: list[CheckSpec]`: every reconciled spec, including the
   proposed ones and the unevaluated locked ones. The API persists from this list.
+  (Implementation: `report_version` 2; version 1 reports still load, both fields default empty.)
 
 ### Database (migration 0003)
 
@@ -147,29 +150,29 @@ Allowed transitions:
 
 ## Acceptance criteria
 
-- [ ] `reconcile` follows the table for every row (unit tests, one per row).
-- [ ] Scanning the faulty shop twice through a DuckDB connection stores its assets, columns and
+- [x] `reconcile` follows the table for every row (unit tests, one per row).
+- [x] Scanning the faulty shop twice through a DuckDB connection stores its assets, columns and
       checks once. The second scan inserts nothing new and regenerates only checks whose
       parameters changed.
-- [ ] **A locked check keeps its parameters across scans**, which is S2-1's "done when":
+- [x] **A locked check keeps its parameters across scans**, which is S2-1's "done when":
   - approve and lock `sah.accepted_values` on `orders.status` (a baseline, so it starts
     `proposed`);
   - add a new status value to the data and scan again;
   - the locked check still has the old value set and reports the new value as failing;
   - an active baseline on another column picked up its new parameters.
-- [ ] A retired check is not evaluated, does not appear in scan results or findings, stays visible
+- [x] A retired check is not evaluated, does not appear in scan results or findings, stays visible
       (Retired tab) on the asset report, and is not re-created.
-- [ ] Each lifecycle action works from its allowed status and returns 409 `invalid_transition`
+- [x] Each lifecycle action works from its allowed status and returns 409 `invalid_transition`
       from every other one. A stale `version` returns 409 `stale_version`.
-- [ ] Every change writes one `check_events` row with the user and an immutable `actor`. Scanner
+- [x] Every change writes one `check_events` row with the user and an immutable `actor`. Scanner
       events have no `user_id` and the `actor` `scanner`; deleting a user keeps the `actor`.
-- [ ] A lock made while a scan runs survives that scan's persistence step.
-- [ ] `alembic check` passes after migration 0003; downgrade to 0002 and upgrade again work.
-- [ ] Web: the asset report lists checks by status, and each allowed action calls the API with
+- [x] A lock made while a scan runs survives that scan's persistence step.
+- [x] `alembic check` passes after migration 0003; downgrade to 0002 and upgrade again work.
+- [x] Web: the asset report lists checks by status, and each allowed action calls the API with
       the CSRF header and updates the list. A 409 `stale_version` reloads it.
-- [ ] Hostile-name tests pass with persistence: asset and column names with quotes,
+- [x] Hostile-name tests pass with persistence: asset and column names with quotes,
       semicolons and Unicode.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 

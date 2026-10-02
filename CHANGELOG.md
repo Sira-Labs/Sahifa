@@ -25,5 +25,10 @@ All notable changes to this project are documented here. The format follows
   backend-for-frontend with an HttpOnly session cookie, CSRF header, devices, logout and
   back-channel logout; only the admin and allowed emails get access. Installs behind HTTP
   basic auth keep working in `proxy` mode.
+- Checks persist per asset (spec 007): each scan stores the connection's assets, columns and
+  checks; the next scan keeps locked checks' parameters, never re-creates retired ones and
+  refreshes open baselines from the new profile. The asset report lists checks by status with
+  approve, reject, lock, unlock, retire and restore, and every change is recorded with who made
+  it (`/api/assets`, `/api/checks`, migration 0003).
 
 [Unreleased]: https://github.com/Sira-Labs/Sahifa/commits/main

@@ -5,13 +5,15 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from . import semantics
-from .checks import CATALOGUE, Check, Context
+from .checks import BY_TYPE, CATALOGUE, Check, Context
 from .checks.base import pct
+from .checks.lifecycle import keeps_saved, reconcile
 from .connectors import Relation, open_source
 from .errors import SahifaError
 from .models import (
@@ -29,6 +31,7 @@ from .models import (
     ScanReport,
     ScanStats,
     SourceInfo,
+    UnevaluatedCheck,
     ValueCount,
 )
 from .profile import profile_asset
@@ -61,9 +64,13 @@ def run_scan(
     *,
     scan_id: str | None = None,
     names: dict[str, str] | None = None,
+    saved: Mapping[str, list[CheckSpec]] | None = None,
 ) -> ScanReport:
     """Assess every asset of `source` and return the report. Raises `SahifaError` when the
-    source cannot be opened; a failing asset is recorded in the report and the scan goes on."""
+    source cannot be opened; a failing asset is recorded in the report and the scan goes on.
+
+    `saved` holds the stored checks per asset label (spec 007); they are reconciled with the
+    generated ones. Without it every check is generated afresh."""
     options = options or ScanOptions()
     scan_id = scan_id or str(uuid.uuid4())
     started = datetime.now(UTC).replace(microsecond=0)
@@ -95,6 +102,7 @@ def run_scan(
         assets: list[AssetReport] = []
         asset_dims: list[tuple[AssetReport, dict[Dimension, Estimate]]] = []
         results_all: list[CheckResult] = []
+        specs_all: list[CheckSpec] = []
         for label, prof in profiles.items():
             if prof.error or label not in relations:
                 assets.append(
@@ -111,15 +119,18 @@ def run_scan(
                 continue
             ctx = Context(asset=prof, assets=profiles, src=src, rel=relations[label], scan_time=started)
             try:
-                results = evaluate_asset(ctx)
+                evaluation = evaluate_asset(ctx, (saved or {}).get(label))
             except SahifaError as e:
                 log.warning("asset.checks_failed %s: %s", label, e)
                 prof.error = str(e)
-                results = []
+                evaluation = AssetEvaluation()
             finally:
                 src.release(relations[label])
+            results = evaluation.results
             results_all += results
+            specs_all += evaluation.specs
             report, dims = asset_report(prof, results)
+            report.unevaluated = evaluation.unevaluated
             assets.append(report)
             asset_dims.append((report, dims))
         stats = ScanStats(
@@ -149,6 +160,7 @@ def run_scan(
         findings=findings,
         health=health_items(list(profiles.values()), kind),
         proposed=[r for r in results_all if not r.spec.status.scores],
+        checks=specs_all,
         stats=stats,
     )
 
@@ -156,8 +168,46 @@ def run_scan(
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
 
-def evaluate_asset(ctx: Context) -> list[CheckResult]:
-    specs: list[tuple[Check, CheckSpec]] = [(c, s) for c in CATALOGUE for s in c.generate(ctx)]
+@dataclass
+class AssetEvaluation:
+    """What `evaluate_asset` found for one asset."""
+
+    # The reconciled specs as they were before evaluation (the API persists these).
+    specs: list[CheckSpec] = field(default_factory=list)
+    results: list[CheckResult] = field(default_factory=list)
+    unevaluated: list[UnevaluatedCheck] = field(default_factory=list)
+
+
+def missing_reason(s: CheckSpec, ctx: Context) -> str | None:
+    """Why a (saved) check cannot run against this asset now, or None when it can."""
+    if s.type not in BY_TYPE:
+        return "unknown_type"
+    present = {c.name for c in ctx.asset.columns}
+    if any(c not in present for c in [s.column or "", *s.columns] if c):
+        return "column_missing"
+    parent = s.params.get("parent") if s.type == "sah.foreign_key" else None
+    if parent is not None and parent not in ctx.assets:
+        return "parent_missing"
+    return None
+
+
+def evaluate_asset(ctx: Context, saved: list[CheckSpec] | None = None) -> AssetEvaluation:
+    """Generate the asset's checks, reconcile them with the saved ones and evaluate the result.
+
+    Retired checks are not evaluated. A saved check whose column (or parent table) is gone is
+    listed as unevaluated instead of failing the asset."""
+    generated = [s for c in CATALOGUE for s in c.generate(ctx)]
+    out = AssetEvaluation()
+    specs: list[tuple[Check, CheckSpec]] = []
+    for s in reconcile(generated, saved or []):
+        reason = missing_reason(s, ctx)
+        if reason is not None:
+            out.specs.append(s)
+            out.unevaluated.append(UnevaluatedCheck(spec=s, reason=reason))  # type: ignore[arg-type]
+            continue
+        # Evaluate a copy: profile checks note what they measured in their params.
+        specs.append((BY_TYPE[s.type], s.model_copy(deep=True)))
+        out.specs.append(s)
     counts: dict[str, tuple[int, int, list[tuple[str, int]]]] = {}
     sql_specs = [(c, s) for c, s in specs if c.evaluation == "sql"]
     if sql_specs:
@@ -176,17 +226,20 @@ def evaluate_asset(ctx: Context) -> list[CheckResult]:
         if c.evaluation == "profile":
             counts[s.id] = c.evaluate_profile(s, ctx)
 
-    results = []
+    dropped: set[str] = set()
     for c, s in specs:
         n, k, examples = counts[s.id]
-        if not c.accept(s, n, k):
+        # Weak evidence drops a generated candidate; a locked or manual one is the owner's call.
+        if not keeps_saved(s) and not c.accept(s, n, k):
+            dropped.add(s.id)
             continue
         if k > 0 and c.evaluation == "sql" and not examples:
             sql = c.examples_sql(s, ctx)
             if sql:
                 examples = [(str(v), int(m)) for v, m in ctx.src.query(sql)]
-        results.append(result_of(c, s, n, k, examples, ctx))
-    return results
+        out.results.append(result_of(c, s, n, k, examples, ctx))
+    out.specs = [s for s in out.specs if s.id not in dropped]
+    return out
 
 
 def grouped_values(ctx: Context, column: str) -> list[tuple[str, int]]:

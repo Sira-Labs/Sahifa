@@ -66,7 +66,8 @@ core in a worker thread (R1 sprint 1) or a Procrastinate worker (from sprint 2, 
 | `/healthz`, `/api/version` | liveness, version, commit, schema revision |
 | `/api/connections` | list, create (non-secret config plus `secret_ref`), read, test |
 | `/api/scans` | create on a connection, create from uploaded files, list, read, report, findings |
-| `/api/checks` | list per asset, approve, lock, retire (sprint 2) |
+| `/api/assets` | assets stored per connection by scans, with columns and check counts (spec 007) |
+| `/api/checks` | list per asset, approve, reject, lock, unlock, retire, restore, events (spec 007) |
 | `/api/findings` | list, filter, change status (R2 lifecycle) |
 | `/api/auth/*` | sign-in through Keycloak, BFF cookie session (spec 006, ADR-0010) |
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import anyio
 from sqlalchemy import update
@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ..db.models import Connection, Finding, Scan
 from ..logging import get_logger
 from ..settings import Settings
+from .checks import Saved, load_saved, persist_checks
 from .connections import resolve
+
+if TYPE_CHECKING:
+    from sahifa_core.models import CheckSpec
 
 log = get_logger("sahifa.scans")
 INTERRUPTED = "interrupted by a restart"
@@ -45,27 +49,30 @@ class ScanRunner:
 
     async def _run(self, scan_id: uuid.UUID) -> None:
         async with self.limit:
-            async with self.sessions() as db:
-                scan = await db.get(Scan, scan_id)
-                if scan is None:
-                    return
-                conn = await db.get(Connection, scan.connection_id)
-                if conn is None:
-                    return
-                source = resolve(conn)
-                names = conn.config.get("names") if conn.kind == "upload" else None
-                scan.status, scan.started_at = "running", datetime.now(UTC)
-                await db.commit()
-            log.info("scan.started", scan_id=str(scan_id), connection=conn.name)
             try:
+                # Inside the failure boundary: a database error while loading the saved checks
+                # marks the scan failed instead of leaving it queued.
+                async with self.sessions() as db:
+                    scan = await db.get(Scan, scan_id)
+                    if scan is None:
+                        return
+                    conn = await db.get(Connection, scan.connection_id)
+                    if conn is None:
+                        return
+                    source = resolve(conn)
+                    names = conn.config.get("names") if conn.kind == "upload" else None
+                    saved = await load_saved(db, conn.id)
+                    scan.status, scan.started_at = "running", datetime.now(UTC)
+                    await db.commit()
+                log.info("scan.started", scan_id=str(scan_id), connection=conn.name)
                 if source is None:
                     raise RuntimeError(
                         f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}"
                     )
                 report = await anyio.to_thread.run_sync(
-                    lambda: _execute(source, names, scan_id, scan.sample_rows, self.settings)
+                    lambda: _execute(source, names, scan_id, scan.sample_rows, self.settings, saved.specs)
                 )
-                await self._succeed(scan_id, report)
+                await self._succeed(scan_id, report, saved)
                 log.info("scan.succeeded", scan_id=str(scan_id))
             except Exception as e:
                 message = str(e)[:1000] or e.__class__.__name__
@@ -78,7 +85,9 @@ class ScanRunner:
                     )
                     await db.commit()
 
-    async def _succeed(self, scan_id: uuid.UUID, report: dict[str, Any]) -> None:
+    async def _succeed(self, scan_id: uuid.UUID, report: dict[str, Any], saved: Saved | None = None) -> None:
+        """Store the report, its findings and (spec 007) its assets, columns and checks in one
+        transaction."""
         async with self.sessions() as db:
             scan = await db.get(Scan, scan_id)
             if scan is None:
@@ -117,7 +126,21 @@ class ScanRunner:
                 )
             scan.finding_counts = counts
             scan.assets_count = len(report.get("assets", []))
+            persisted = await persist_checks(
+                db,
+                scan_id=scan_id,
+                connection_id=scan.connection_id,
+                report=report,
+                versions=saved.versions if saved else {},
+            )
             await db.commit()
+        log.info(
+            "scan.checks_persisted",
+            scan_id=str(scan_id),
+            inserted=persisted.inserted,
+            regenerated=persisted.regenerated,
+            skipped=persisted.skipped,
+        )
 
 
 def _execute(
@@ -126,6 +149,7 @@ def _execute(
     scan_id: uuid.UUID,
     sample_rows: int,
     settings: Settings,
+    saved: dict[str, list[CheckSpec]] | None = None,
 ) -> dict[str, Any]:
     """Run the core engine synchronously (in a thread) and return the report as JSON."""
     from sahifa_core.scan import ScanOptions, run_scan
@@ -136,7 +160,7 @@ def _execute(
         memory_limit=settings.duckdb_memory,
         statement_timeout_s=settings.statement_timeout_s,
     )
-    report = run_scan(source, options, scan_id=str(scan_id), names=names)
+    report = run_scan(source, options, scan_id=str(scan_id), names=names, saved=saved)
     data: dict[str, Any] = report.model_dump(mode="json")
     return data
 

@@ -178,9 +178,13 @@ export type AssetReport = {
   score: Score;
   columns: ColumnReport[];
   checks: CheckResult[];
+  /** Saved checks that could not run this scan (report version 2, spec 007). */
+  unevaluated?: UnevaluatedCheck[];
   time_series_candidate: boolean;
   error: string | null;
 };
+
+export type UnevaluatedCheck = { spec: CheckSpec; reason: "column_missing" | "parent_missing" | "unknown_type" };
 
 export type SourceInfo = { kind: "duckdb" | "postgres"; label: string };
 
@@ -208,9 +212,50 @@ export type ScanReport = {
   findings: Finding[];
   health: HealthItem[];
   proposed: CheckResult[];
+  /** Every reconciled check before evaluation (report version 2, spec 007). */
+  checks?: CheckSpec[];
   stats: ScanStats;
   iso_25012: Partial<Record<Dimension, string>>;
 };
 
 /** Filters of `GET /api/scans/{id}/findings` and the findings page's search params. */
 export type FindingFilters = { severity?: Severity; dimension?: Dimension; asset?: string };
+
+// --- Assets and checks (spec 007) ---------------------------------------------------------
+
+export type CheckCounts = Record<CheckStatus, number>;
+
+/** An asset stored by the scans of a connection. */
+export type Asset = {
+  id: string;
+  connection_id: string;
+  namespace: string;
+  name: string;
+  label: string;
+  kind: "table" | "view" | "file";
+  row_count: number | null;
+  last_scan_id: string | null;
+  checks: CheckCounts;
+};
+
+/** A stored check with its lifecycle status; `key` is the report's `CheckSpec.id`. */
+export type StoredCheck = {
+  id: string;
+  key: string;
+  type: string;
+  title: string;
+  column: string | null;
+  columns: string[];
+  params: Record<string, unknown>;
+  dimension: Dimension;
+  severity: Severity;
+  kind: "rule" | "baseline" | "manual";
+  origin: "generated" | "manual" | "suggested" | "declared";
+  status: CheckStatus;
+  max_fail_ratio: number;
+  version: number;
+  updated_at: string;
+  last_scan_id: string | null;
+};
+
+export type CheckAction = "approve" | "reject" | "lock" | "unlock" | "retire" | "restore";

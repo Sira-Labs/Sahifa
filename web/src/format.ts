@@ -138,9 +138,15 @@ export function titleCase(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : s;
 }
 
-/** `public.orders`, or `orders` without a namespace (core `AssetRef.label`). */
+/** A label part, quoted (quotes doubled) when it holds a dot or a quote, as in the core. */
+function labelPart(part: string): string {
+  return part.includes(".") || part.includes('"') ? `"${part.replaceAll('"', '""')}"` : part;
+}
+
+/** `public.orders`, `orders` without a namespace, `"a.b".c` when a part holds a dot (core
+ * `AssetRef.label`, lossless). */
 export function assetLabel(ref: AssetRef): string {
-  return ref.namespace ? `${ref.namespace}.${ref.name}` : ref.name;
+  return ref.namespace ? `${labelPart(ref.namespace)}.${labelPart(ref.name)}` : labelPart(ref.name);
 }
 
 /** `orders.customer_id`, or `orders` for an asset-level finding. */
@@ -177,4 +183,22 @@ export function samplePolicy(sampleRows: number | null | undefined): string {
   if (sampleRows === 0) return "every row read";
   if (sampleRows === null || sampleRows === undefined) return "default sample";
   return `up to ${formatCount(sampleRows)} rows per table`;
+}
+
+/** A check's parameters in one short line: `values: paid, shipped · max: 4`. Long lists are cut. */
+export function formatParams(params: Record<string, unknown>, maxItems = 6): string {
+  const parts = Object.entries(params).map(([key, value]) => `${key.replace(/_/g, " ")}: ${paramValue(value, maxItems)}`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+function paramValue(value: unknown, maxItems: number): string {
+  if (Array.isArray(value)) {
+    const shown = value.slice(0, maxItems).map((v) => paramValue(v, maxItems));
+    return value.length > maxItems ? `${shown.join(", ")} … (${value.length - maxItems} more)` : shown.join(", ");
+  }
+  if (typeof value === "number") return formatNumber(value);
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }

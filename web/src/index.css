@@ -513,6 +513,11 @@ summary {
   color: var(--fg);
   border-bottom-color: var(--accent);
 }
+.tab-count {
+  margin-inline-start: 4px;
+  font-weight: 600;
+  color: var(--muted);
+}
 
 /* ---------- Chips and tags ---------- */
 .chip {
