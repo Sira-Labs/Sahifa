@@ -156,8 +156,8 @@ jobs:
           token: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
           image: ${{ steps.gate.outputs.api_image }}
 
-      # Any Docker host with the compose bundle (self-hosted installs). The bundle gains a
-      # worker service with spec 008; until then the api runs scans in a thread (ADR-0009).
+      # Any Docker host with the compose bundle (self-hosted installs). The bundle's worker
+      # service runs the api image too, so it gets the same digest (spec 008, ADR-0009).
       - name: copy compose bundle
         if: steps.gate.outputs.host == 'true'
         uses: appleboy/scp-action@v1.0.0

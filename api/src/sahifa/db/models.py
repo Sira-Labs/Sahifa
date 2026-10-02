@@ -1,4 +1,7 @@
-"""Tables of migrations 0001 (spec 004), 0002 (spec 006) and 0003 (spec 007)."""
+"""Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007) and 0004 (spec 008).
+
+Procrastinate's own tables (migration 0004) are not mapped here; Alembic ignores them.
+"""
 
 from __future__ import annotations
 
@@ -69,6 +72,9 @@ class Scan(Base):
     assets_count: Mapped[int | None] = mapped_column(Integer)
     report: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     report_version: Mapped[int | None] = mapped_column(Integer)
+    # The Procrastinate job that runs the scan in queue mode (spec 008); no foreign key, since
+    # Procrastinate owns its table and may delete finished jobs.
+    job_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class Finding(Base):

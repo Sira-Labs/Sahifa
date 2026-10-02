@@ -23,3 +23,15 @@ worker (Postgres as the queue, no broker; its ADR-0004 and spec 002) with the sa
 
 - Until sprint 2 the API container's memory must cover DuckDB scans (`SAHIFA_DUCKDB_MEMORY`,
   default 1 GB).
+
+## Update 2026-10-02 (spec 008)
+
+- Enqueueing is not transactional: the API commits the scan as `queued`, then defers the job
+  on Procrastinate's own connection pool and stores `scans.job_id`. A failed defer marks the
+  scan failed; the reaper re-queues `queued` scans left without a live job. This keeps the
+  SQLAlchemy session and Procrastinate's psycopg pool apart.
+- `SAHIFA_SCAN_EXECUTION` chooses: `inline` (the default, the sprint 1 thread) or `queue` (the
+  worker). Inline stays until the owner creates the worker app.
+- Procrastinate is pinned (3.10.0); migration 0004 carries its schema as released, and a newer
+  version arrives with its own migration.
+- Scheduled scans (spec 010) use the periodic tasks of the same app.

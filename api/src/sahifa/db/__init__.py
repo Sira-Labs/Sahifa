@@ -12,15 +12,19 @@ class Base(DeclarativeBase):
     pass
 
 
-def make_engine(url: str) -> AsyncEngine:
-    return create_async_engine(url, pool_pre_ping=True, pool_size=5, max_overflow=5)
+def make_engine(url: str, application_name: str | None = None) -> AsyncEngine:
+    """`application_name` names the connections in `pg_stat_activity` (the worker's, spec 008)."""
+    connect_args = {"application_name": application_name} if application_name else {}
+    return create_async_engine(
+        url, pool_pre_ping=True, pool_size=5, max_overflow=5, connect_args=connect_args
+    )
 
 
 class Database:
     """Holds the engine and session factory for the app's lifetime."""
 
-    def __init__(self, url: str) -> None:
-        self.engine = make_engine(url)
+    def __init__(self, url: str, application_name: str | None = None) -> None:
+        self.engine = make_engine(url, application_name)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def session(self) -> AsyncIterator[AsyncSession]:

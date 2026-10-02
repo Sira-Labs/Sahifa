@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import Connection, Finding, Scan
 from ..deps import session, settings
+from ..jobs import enqueue_scan
 from ..logging import get_logger
 from ..schemas import Items, Page, ScanIn, ScanOut, ScanScore
 from ..settings import Settings
@@ -54,12 +55,20 @@ def to_out(scan: Scan, conn: Connection) -> ScanOut:
 async def _enqueue(
     request: Request, db: AsyncSession, conn: Connection, sample_rows: int, options: dict[str, Any]
 ) -> ScanOut:
+    """Commit the scan as `queued`, then hand it to the inline runner or, in queue mode, defer
+    its job (spec 008)."""
     scan = Scan(connection_id=conn.id, sample_rows=sample_rows, options=options, status="queued")
     db.add(scan)
     await db.commit()
     await db.refresh(scan)
-    request.app.state.runner.submit(scan.id)
-    log.info("scan.queued", scan_id=str(scan.id), connection=conn.name)
+    cfg: Settings = request.app.state.settings
+    if cfg.scan_execution == "queue":
+        await enqueue_scan(db, scan)
+        if scan.job_id is not None:
+            log.info("scan.queued", scan_id=str(scan.id), connection=conn.name, job_id=scan.job_id)
+    else:
+        request.app.state.runner.submit(scan.id)
+        log.info("scan.queued", scan_id=str(scan.id), connection=conn.name)
     return to_out(scan, conn)
 
 

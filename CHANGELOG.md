@@ -30,6 +30,13 @@ All notable changes to this project are documented here. The format follows
   refreshes open baselines from the new profile. The asset report lists checks by status with
   approve, reject, lock, unlock, retire and restore, and every change is recorded with who made
   it (`/api/assets`, `/api/checks`, migration 0003).
+- Scans can run in a separate worker (spec 008): with `SAHIFA_SCAN_EXECUTION=queue` the API
+  enqueues each scan in a Procrastinate queue on its own Postgres and `sahifa-worker` (the API
+  image with `SAHIFA_ROLE=worker`) runs it. A reaper fails scans whose worker stopped and
+  re-queues scans left without a job; old upload folders are deleted hourly after
+  `SAHIFA_UPLOAD_TTL_DAYS` (also in the default inline mode). `/healthz` lists connected
+  workers by commit. Migration 0004; the compose bundle gains a `worker` service, CapRover a
+  worker app and a one-click template for it.
 
 ### Fixed
 - Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now

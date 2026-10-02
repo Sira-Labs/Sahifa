@@ -1,4 +1,6 @@
-# Sahifa — CapRover one-click template: db, api and web (the worker follows with spec 008).
+# Sahifa — CapRover one-click template: db, api and web. Scans run inside the api
+# (SAHIFA_SCAN_EXECUTION=inline); the optional worker (spec 008) is a second template,
+# sahifa-worker.yml, deployed later with the same app name.
 #
 # Use: CapRover → Apps → One-Click Apps/Databases → ">> TEMPLATE <<" → paste this file →
 #      app name "sahifa-stg" on the staging server (or "sahifa" on production) → Deploy.
@@ -46,6 +48,8 @@ services:
       SAHIFA_ALLOWED_EMAILS: $$cap_allowed_emails
       SAHIFA_SAMPLE_ROWS: '100000'
       SAHIFA_MAX_UPLOAD_MB: '200'
+      # inline: the api runs scans. Set queue after adding the worker (sahifa-worker.yml).
+      SAHIFA_SCAN_EXECUTION: inline
       # Optional: a database to assess, as a URL with a read-only login (deploy/caprover.md section 6).
       SAHIFA_CONN_DEMO: $$cap_demo_source
     caproverExtra:
@@ -128,6 +132,8 @@ caproverOneClickApp:
       (3) For automatic deploys, enable App Tokens on api and web and put them on the GitHub
       environment (deploy/caprover.md section 5), with CAPROVER_APP_API=$$cap_appname-api and
       CAPROVER_APP_WEB=$$cap_appname-web.
+      (4) Optional, later: the scan worker, with the template sahifa-worker.yml and the same
+      app name (deploy/caprover.md section 3).
   displayName: Sahifa
   isOfficial: false
   description: Self-hosted data quality for whole data stores (صحيفة) — database, api and web.

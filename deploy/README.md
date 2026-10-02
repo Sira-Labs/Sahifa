@@ -9,7 +9,7 @@ finding is left, so a failed scan leaves an untagged digest that nothing deploys
 
 | Image | Contents |
 |---|---|
-| `ghcr.io/sira-labs/sahifa-api` | Python API with the `sahifa_core` library (profiling, checks, scoring, DuckDB and Postgres connectors) and the Alembic migrations; also the worker from R1 sprint 2 (`SAHIFA_ROLE=worker`) |
+| `ghcr.io/sira-labs/sahifa-api` | Python API with the `sahifa_core` library (profiling, checks, scoring, DuckDB and Postgres connectors) and the Alembic migrations; also the worker (`SAHIFA_ROLE=worker`, spec 008) |
 | `ghcr.io/sira-labs/sahifa-web` | Static SPA served by Caddy with security headers; proxies `/api` and `/healthz` to the API and serves `/version.json` |
 
 Tags: `latest` (main), `main`, `sha-<short>`, and `<version>` for tags. The compose bundle
@@ -106,34 +106,47 @@ zstd -d < sahifa-images.tar.zst | docker load
 `sahifa` (for instance the CSV files `sahifa synth` writes, with `\copy`), and point the dev
 API at it with
 `SAHIFA_CONN_SHOP=postgresql://sahifa_reader:sahifa_reader@localhost:5432/shop?schemas=public`.
+To try queue mode, start the API and, in `api/`, a worker with the same environment plus
+`SAHIFA_SCAN_EXECUTION=queue` on both: `SAHIFA_ROLE=worker uv run python -m sahifa.worker`.
 The core alone needs no infrastructure: `sahifa scan <dir>` runs on DuckDB in memory.
 
 ## Scans and the worker
 
-Release 0.1, sprint 1: the api runs each scan in a background thread, at most
-`SAHIFA_MAX_CONCURRENT_SCANS` (default 2) at once, so the api container's memory must cover
-DuckDB (`SAHIFA_DUCKDB_MEMORY`, default `1GB`, per scan). Scans left `running` by a restart
-are marked `failed` with "interrupted" when the api starts again (ADR-0009).
+`SAHIFA_SCAN_EXECUTION` decides where scans run (ADR-0009, spec 008):
 
-From R1 sprint 2 (spec 008) scans move to a Procrastinate worker on the same Postgres: a
-`sahifa-worker` app or compose service from the api image with `SAHIFA_ROLE=worker` and the
-same environment as the api. The worker names its database connections
-`sahifa-worker/<commit>`, and `GET /healthz` on the api lists them in its `workers` field;
-the deploy workflows use that to wait until the worker runs the new commit.
+- `inline` (the default, and the CapRover template): the api runs each scan in a background
+  thread, at most `SAHIFA_MAX_CONCURRENT_SCANS` (default 2) at once, so the api container's
+  memory must cover DuckDB (`SAHIFA_DUCKDB_MEMORY`, default `1GB`, per scan). Scans left
+  `running` by a restart are marked `failed` with "interrupted" when the api starts again,
+  and the api deletes old uploads hourly.
+- `queue` (the compose bundle): the api records each scan and defers a job to a Procrastinate
+  queue in its own Postgres; a `sahifa-worker` app or compose service runs it. The worker is
+  the api image with `SAHIFA_ROLE=worker` and the same environment as the api plus
+  `SAHIFA_SCAN_EXECUTION=queue` on both (it refuses to start otherwise, exit code 2). It never
+  migrates: it waits up to 5 minutes for the api to migrate, then exits with code 3. It runs
+  the scans, a reaper every 5 minutes (scans of a worker silent for
+  `SAHIFA_REAPER_STALE_MINUTES`, default 10, fail with "interrupted: the worker stopped";
+  scans left queued without a job are queued again) and the hourly upload clean-up. Api and
+  worker must share the uploads volume (`/data`).
+
+The worker names its database connections `sahifa-worker/<commit>`, and `GET /healthz` on the
+api lists them in its `workers` field as `{"commit", "connections"}`; the deploy workflows use
+that to wait until the worker runs the new commit. CapRover: `caprover.md` section 3.
 
 ## Uploads
 
-Uploaded files are stored under random names in `SAHIFA_DATA_DIR/uploads/<scan id>/` (the
+Uploaded files are stored under random names in `SAHIFA_DATA_DIR/uploads/<batch>/` (the
 image default is `/data`; the compose bundle mounts the `data` volume there), limited by
 `SAHIFA_MAX_UPLOAD_MB` (200), `SAHIFA_MAX_UPLOAD_FILES` (20) and the extensions `.csv`,
-`.tsv`, `.parquet`, `.json`, `.jsonl`, `.ndjson`, and deleted after `SAHIFA_UPLOAD_TTL_DAYS`
-(7). They are disposable working copies: the scan report keeps what was found, so the volume
+`.tsv`, `.parquet`, `.json`, `.jsonl`, `.ndjson`, and deleted `SAHIFA_UPLOAD_TTL_DAYS` (7)
+days after their scan finished, by an hourly clean-up (in the worker, or in the api in inline
+mode); folders of queued or running scans are kept. They are disposable working copies: the scan report keeps what was found, so the volume
 needs no backup.
 
 ## Source connections
 
 Each Postgres database to assess is one environment variable on the api (and the worker,
-once it exists), `SAHIFA_CONN_<NAME>`, holding a URL such as
+in queue mode), `SAHIFA_CONN_<NAME>`, holding a URL such as
 `postgresql://sahifa_reader:<password>@host:5432/db?schemas=public,sales`. At start the api
 registers a connection named `<name>` in lower case; Sahifa's database stores only that
 variable's name, never the credentials (ADR-0006). Every session against a source is a

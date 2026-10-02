@@ -32,6 +32,12 @@ from the hand-made `-stg` suffix of sections 1–4: the template puts the suffix
 
 The template is optional: sections 1–4 set up the same apps by hand.
 
+The worker (queue mode, section 3) has its own template, `deploy/caprover/one-click/sahifa-worker.yml`:
+paste it the same way with the **same** app name (`sahifa-stg`); it creates `sahifa-stg-worker`
+on the api's upload volume `sahifa-stg-data` and asks for the api's values (database password,
+auth settings). Then set `SAHIFA_SCAN_EXECUTION=queue` on `sahifa-stg-api`, and set
+`CAPROVER_APP_WORKER=sahifa-stg-worker` with the worker's app token on the GitHub environment.
+
 ## Checklist for the owner (first deploy)
 
 Sahifa has no install yet, so the first deploy is a clean setup of staging on the current
@@ -59,6 +65,12 @@ server. Production follows later (section 5, "Production, later").
 7. **Verify:** `GET https://sahifa-stg.siralabs.org/api/version` (after the basic-auth prompt)
    shows the commit of that push, and the release run's last step says
    `web and api run <commit>`.
+8. **Queue mode (spec 008), when you are ready:** create `sahifa-worker-stg` with the api's
+   variables plus `SAHIFA_ROLE=worker` and `SAHIFA_SCAN_EXECUTION=queue`, the api's persistent
+   directory label `sahifa-stg-data` on `/data`, and its app token as
+   `CAPROVER_APP_TOKEN_WORKER` on the `staging` environment; then set
+   `SAHIFA_SCAN_EXECUTION=queue` on `sahifa-api-stg` and check that `/healthz` lists the
+   worker (section 3). Until then scans run inside the api, which is fine for staging.
 
 Optional, any time after: connect a test database to assess (section 6).
 
@@ -68,8 +80,8 @@ Two independent CapRover servers at Hetzner, shared with the other Sīra Labs pr
 
 | Server | Apps | Domain | Data |
 |---|---|---|---|
-| **Staging and tools** (the current server) | `sahifa-db-stg`, `sahifa-api-stg`, `sahifa-web-stg`, later `sahifa-worker-stg` | `sahifa-stg.siralabs.org` | test data only |
-| **Production** (server in Germany) | `sahifa-db`, `sahifa-api`, `sahifa-web`, later `sahifa-worker` | `sahifa.siralabs.org` | real people's data, and only there |
+| **Staging and tools** (the current server) | `sahifa-db-stg`, `sahifa-api-stg`, `sahifa-web-stg`, optionally `sahifa-worker-stg` | `sahifa-stg.siralabs.org` | test data only |
+| **Production** (server in Germany) | `sahifa-db`, `sahifa-api`, `sahifa-web`, optionally `sahifa-worker` | `sahifa.siralabs.org` | real people's data, and only there |
 
 Sections 1–4 below describe one server's apps with the production names. On staging every app
 name gets the `-stg` suffix, and so does every internal address and label that names an app:
@@ -80,7 +92,7 @@ name gets the `-stg` suffix, and so does every internal address and label that n
 | `SAHIFA_API_UPSTREAM` (web app) | `srv-captain--sahifa-api:8000` | `srv-captain--sahifa-api-stg:8000` |
 | `SAHIFA_PUBLIC_URL` (api app) | `https://sahifa.siralabs.org` | `https://sahifa-stg.siralabs.org` |
 | Persistent directory label of the db | `sahifa-pgdata` | `sahifa-stg-pgdata` |
-| Persistent directory label of the api | `sahifa-data` | `sahifa-stg-data` |
+| Persistent directory label of the api (and the worker, the same label) | `sahifa-data` | `sahifa-stg-data` |
 | `CAPROVER_APP_API`, `_WEB`, `_WORKER` on the GitHub environment | unset (defaults `sahifa-api`, `sahifa-web`, `sahifa-worker`) | `sahifa-api-stg`, `sahifa-web-stg`, `sahifa-worker-stg` |
 
 A staging app that keeps an unsuffixed address talks to nothing, or, once production apps
@@ -162,8 +174,9 @@ Rules:
     | `SAHIFA_SAMPLE_ROWS` | `100000` | rows per table or file the profile and checks see; `0` reads everything |
     | `SAHIFA_MAX_UPLOAD_MB` | `200` | per upload |
     | `SAHIFA_MAX_UPLOAD_FILES` | `20` | per upload |
-    | `SAHIFA_UPLOAD_TTL_DAYS` | `7` | uploaded files are deleted after this |
-    | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | scans the api runs at once (ADR-0009) |
+    | `SAHIFA_UPLOAD_TTL_DAYS` | `7` | uploaded files are deleted this long after their scan finished (hourly clean-up) |
+    | `SAHIFA_SCAN_EXECUTION` | `inline` | `inline`: the api runs scans; `queue`: the worker does (section 3, same value on both apps) |
+    | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | scans run at once, by the api or, in queue mode, by the worker (ADR-0009) |
     | `SAHIFA_DUCKDB_MEMORY` | `1GB` | DuckDB's memory limit per scan |
     | `SAHIFA_STATEMENT_TIMEOUT_S` | `60` | per statement against a source |
     | `SAHIFA_LOG_LEVEL` | `info` | |
@@ -181,10 +194,11 @@ Rules:
     reports it as `schema_revision`.
   - Persistent directory: `/data`, label `sahifa-data`. Uploads are disposable (deleted after
     `SAHIFA_UPLOAD_TTL_DAYS`), but without the directory a restart loses the files of scans
-    still queued.
+    still queued. In queue mode the worker mounts the same label (section 3).
   - Container HTTP port: `8000`
-  - Memory: until the worker arrives scans run inside the api, so give the container at least
-    `SAHIFA_DUCKDB_MEMORY` × `SAHIFA_MAX_CONCURRENT_SCANS` plus 512 MB.
+  - Memory: in inline mode (the default) scans run inside the api, so give the container at
+    least `SAHIFA_DUCKDB_MEMORY` × `SAHIFA_MAX_CONCURRENT_SCANS` plus 512 MB. In queue mode
+    (section 3) that budget moves to the worker and the api needs about 512 MB.
 - HTTP Settings: no public domain. Tick **Do not expose as web-app**, so the API is reachable
   only through the web app and its password; the web app reaches it as
   `srv-captain--sahifa-api:8000` either way.
@@ -192,27 +206,54 @@ Rules:
   *Deploy via ImageName*: `ghcr.io/sira-labs/sahifa-api:latest`, or leave it to the first
   push to `main`.
 
-## 3. Worker app: `sahifa-worker` (later, R1 sprint 2)
+## 3. Worker app: `sahifa-worker` (queue mode, spec 008)
 
-Until spec 008 the api runs scans in a background thread and there is no worker app; skip
-this section. From sprint 2 scans run in a Procrastinate worker on the same Postgres
-(ADR-0009). Create app `sahifa-worker` then, with the api image and one extra variable:
+Optional. Without it the api runs scans in a background thread (`SAHIFA_SCAN_EXECUTION=inline`,
+the default) and cleans old uploads itself. With it, scans run in a separate Procrastinate
+worker on the same Postgres (ADR-0009), so the api stays responsive and its memory no longer
+has to cover DuckDB; a reaper fails scans whose worker died ("interrupted: the worker
+stopped") and re-queues scans that were never queued, and the worker deletes old uploads.
 
-| Name | Value |
-|---|---|
-| `SAHIFA_ROLE` | `worker` |
-| the api variables | identical to the api app (`SAHIFA_ENV`, `SAHIFA_DATABASE_URL`, every `SAHIFA_CONN_*`, the limits); the worker never needs `SAHIFA_MIGRATION_DATABASE_URL` |
+1. **Create app** `sahifa-worker` (`sahifa-worker-stg` on staging) with **Has Persistent
+   Data** ticked. It runs the api image; nothing else is built.
+2. **Environment variables:** copy every variable of the api app (`SAHIFA_ENV`,
+   `SAHIFA_DATABASE_URL`, the sign-in rows or `SAHIFA_ACCESS_GATE`, every `SAHIFA_CONN_*`, the
+   limits) unchanged, then add:
 
-- Has Persistent Data with `/data` as on the api, if uploads stay on a volume; spec 008
-  decides whether both share a bucket instead.
-- No HTTP settings: the worker serves nothing. Tick **Do not expose as web-app**.
-- Deployment tab → **Enable App Token**, copy it into the GitHub secret
-  `CAPROVER_APP_TOKEN_WORKER` of the environment. The workflows deploy the worker only when
-  that secret exists, so nothing breaks before the app is created. First deploy via
-  ImageName: `ghcr.io/sira-labs/sahifa-api:latest`.
-- The worker names its database connections `sahifa-worker/<commit>`; `GET /healthz` on the
-  api lists them in its `workers` field, and the deploy workflows wait for the new commit
-  there.
+   | Name | Value |
+   |---|---|
+   | `SAHIFA_ROLE` | `worker` |
+   | `SAHIFA_SCAN_EXECUTION` | `queue` |
+
+   The worker checks the production settings exactly as the api does, so the api's set passes.
+   It never migrates: it waits up to 5 minutes for the api to bring the schema to its own
+   version, then exits with code 3 (and CapRover restarts it). `SAHIFA_MIGRATION_DATABASE_URL`
+   is not needed. Optional: `SAHIFA_REAPER_STALE_MINUTES` (default `10`), the time without a
+   heartbeat after which a worker's running scans count as interrupted; `SAHIFA_MAX_CONCURRENT_SCANS`
+   is the worker's concurrency; `SAHIFA_UPLOAD_TTL_DAYS` the upload clean-up.
+3. **Shared uploads.** The api stores uploads under `/data` and the worker reads them, so both
+   apps mount the **same** persistent directory: App Configs → Persistent Directories → path in
+   app `/data`, **label `sahifa-data`** (`sahifa-stg-data` on staging), exactly the label of
+   the api app. CapRover names the Docker volume after the label, so the two apps share one
+   volume. This works on a single server (a multi-node swarm needs shared storage, R3).
+4. **No HTTP.** The worker serves nothing: tick **Do not expose as web-app**; the container
+   HTTP port does not matter. Its healthcheck looks for the running worker process.
+5. **App token.** Deployment tab → **Enable App Token**, copy it into the GitHub secret
+   `CAPROVER_APP_TOKEN_WORKER` of the environment (`staging`, later `production`). The
+   workflows deploy the worker only when that secret exists. First deploy via ImageName:
+   `ghcr.io/sira-labs/sahifa-api:latest` (or the `sha-<short>` the api runs).
+6. **Switch the api to queue mode:** add `SAHIFA_SCAN_EXECUTION=queue` to the **api** app too,
+   Save & Update. From then on the api only records and enqueues scans. Both apps must use the
+   same mode: a worker with `inline` refuses to start (exit code 2), and an api in `inline`
+   would run scans itself next to the worker.
+7. **Check:** `GET /healthz` (through the web app) lists the worker in `workers`, e.g.
+   `[{"commit": "<sha>", "connections": 4}]`: the worker names its database connections
+   `sahifa-worker/<commit>`. Upload a file; the worker log shows `scan.started` and
+   `scan.succeeded` with `worker` = the commit. The deploy workflows wait for that commit in
+   `workers` once the token is set.
+
+To go back to inline, set `SAHIFA_SCAN_EXECUTION=inline` (or remove it) on the api and stop the
+worker app; scans still queued are marked interrupted at the api's next start.
 
 ## 4. Web app: `sahifa-web`
 
@@ -388,8 +429,8 @@ Settings → Environments:
 
 | Environment | Deployment branches and tags | Protection | Variables | Secrets |
 |---|---|---|---|---|
-| `staging` | Selected: branch `main`, tag pattern `v*` | none | `CAPROVER_SERVER` (the current server's `https://captain.…`), `CAPROVER_WEB_URL=https://sahifa-stg.siralabs.org`, `CAPROVER_APP_API=sahifa-api-stg`, `CAPROVER_APP_WEB=sahifa-web-stg`, `CAPROVER_APP_WORKER=sahifa-worker-stg` | `CAPROVER_APP_TOKEN_API`, `CAPROVER_APP_TOKEN_WEB` of the staging apps (`CAPROVER_APP_TOKEN_WORKER` from sprint 2); `CAPROVER_WEB_BASIC_AUTH` (`user:password` of section 4a) |
-| `production` | Selected: branch `main` | Required reviewer: the owner; prevent self-review off | `CAPROVER_SERVER` (the production server), `CAPROVER_WEB_URL=https://sahifa.siralabs.org`; the `CAPROVER_APP_*` variables stay unset (defaults `sahifa-api`, `sahifa-web`, `sahifa-worker`); for a compose host instead: `DEPLOY_HOST`, `DEPLOY_USER` | `CAPROVER_APP_TOKEN_API`, `_WEB` (and `_WORKER` from sprint 2) of the production apps; `CAPROVER_WEB_BASIC_AUTH`; `DEPLOY_SSH_KEY` for a compose host |
+| `staging` | Selected: branch `main`, tag pattern `v*` | none | `CAPROVER_SERVER` (the current server's `https://captain.…`), `CAPROVER_WEB_URL=https://sahifa-stg.siralabs.org`, `CAPROVER_APP_API=sahifa-api-stg`, `CAPROVER_APP_WEB=sahifa-web-stg`, `CAPROVER_APP_WORKER=sahifa-worker-stg` | `CAPROVER_APP_TOKEN_API`, `CAPROVER_APP_TOKEN_WEB` of the staging apps (`CAPROVER_APP_TOKEN_WORKER` once the worker app exists, section 3); `CAPROVER_WEB_BASIC_AUTH` (`user:password` of section 4a) |
+| `production` | Selected: branch `main` | Required reviewer: the owner; prevent self-review off | `CAPROVER_SERVER` (the production server), `CAPROVER_WEB_URL=https://sahifa.siralabs.org`; the `CAPROVER_APP_*` variables stay unset (defaults `sahifa-api`, `sahifa-web`, `sahifa-worker`); for a compose host instead: `DEPLOY_HOST`, `DEPLOY_USER` | `CAPROVER_APP_TOKEN_API`, `_WEB` (and `_WORKER` once production has a worker) of the production apps; `CAPROVER_WEB_BASIC_AUTH`; `DEPLOY_SSH_KEY` for a compose host |
 
 Do not create repository-level `CAPROVER_*` variables or secrets (Settings → Secrets and
 variables → Actions): repository values reach every job, environment values only the jobs
@@ -468,8 +509,8 @@ credentials (ADR-0006). For each Postgres database:
    ```
 
    `schemas` limits the scan to those schemas. Save & Update. At start the api registers a
-   connection named after the variable in lower case (`shop`). From sprint 2 add the same
-   variable to `sahifa-worker`.
+   connection named after the variable in lower case (`shop`). With a worker (section 3) add
+   the same variable to `sahifa-worker`: the worker reads the source.
 4. **Check.** In the web app, the connection list shows `shop`; *Test* succeeds. Start a
    scan. A failure is logged by the api as `conn.failed`
    (connection test or start-up) or `scan.failed` (a scan), with the connection name and the
@@ -559,6 +600,11 @@ none of it: its data can be rebuilt.
 | API log: `scan.failed` with `canceling statement due to statement timeout` or `lock timeout` | a table too large for the sample query in 60 s, or a long lock on the source | Lower `SAHIFA_SAMPLE_ROWS` or raise `SAHIFA_STATEMENT_TIMEOUT_S`; scan outside the source's busy hours |
 | Upload answers `413` | the file is larger than `SAHIFA_MAX_UPLOAD_MB`, or than nginx in front allows | Raise the limit, and `client_max_body_size` in the web app's HTTP Settings → nginx configuration |
 | The api restarts during a scan; the scan shows `failed: interrupted` | the container ran out of memory (DuckDB) | Give it more memory, or lower `SAHIFA_DUCKDB_MEMORY` or `SAHIFA_MAX_CONCURRENT_SCANS` |
+| A scan shows `interrupted: the worker stopped` | the worker died or was redeployed during the scan (out of memory, or stopped before the scan ended); the reaper marked it after `SAHIFA_REAPER_STALE_MINUTES` | Rescan; for memory, as in the row above but on the worker app |
+| Worker exits with code 2: `refusing to start the worker: SAHIFA_SCAN_EXECUTION is inline` | the worker app lacks `SAHIFA_SCAN_EXECUTION=queue` | Set it on the worker and the api (section 3) |
+| Worker log: `db.schema_mismatch`, exit code 3 | the api has not migrated to the worker's image within 5 minutes | Deploy the same image to the api (it migrates on start); the worker then starts |
+| Worker scans fail with `No such file` for an upload | the worker does not share the api's `/data` volume | Give both apps the same persistent directory label (section 3, step 3) |
+| Scans stay `queued` | queue mode on the api but no worker running | Start the worker app, or set `SAHIFA_SCAN_EXECUTION=inline` on the api |
 | DB log: `superuser password is not specified` | image deployed before the env vars were saved | Save & Update the db app; it initialises on the next start |
 
 Environment variable changes only take effect after **Save & Update** on that app's App

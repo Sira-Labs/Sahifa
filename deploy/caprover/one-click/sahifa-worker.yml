@@ -1,0 +1,100 @@
+# Sahifa — CapRover one-click template: the optional worker (spec 008) for an install made
+# with sahifa.yml. Scans then run in <name>-worker instead of inside <name>-api.
+#
+# Use: CapRover → Apps → One-Click Apps/Databases → ">> TEMPLATE <<" → paste this file →
+#      the SAME app name as the install ("sahifa-stg" or "sahifa") → Deploy.
+# Creates: <name>-worker, from the api image, sharing <name>-api's upload volume (<name>-data).
+# Then set SAHIFA_SCAN_EXECUTION=queue on <name>-api (see the closing steps).
+# Runbook: deploy/caprover.md section 3
+captainVersion: 4
+services:
+  # Takes scan jobs from the Procrastinate queue in <name>-db; serves no HTTP. Its variables
+  # are the api's (copy any you changed there, every SAHIFA_CONN_* too) plus the two below.
+  $$cap_appname-worker:
+    image: ghcr.io/sira-labs/sahifa-api:$$cap_tag
+    restart: always
+    volumes:
+      # The same label as the api's volume, so both see the uploaded files.
+      - $$cap_appname-data:/data
+    environment:
+      SAHIFA_ROLE: worker
+      SAHIFA_SCAN_EXECUTION: queue
+      SAHIFA_ENV: prod
+      SAHIFA_PUBLIC_URL: https://$$cap_domain
+      SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:$$cap_db_password@srv-captain--$$cap_appname-db:5432/sahifa
+      SAHIFA_DATA_DIR: /data
+      SAHIFA_AUTH_MODE: $$cap_auth_mode
+      SAHIFA_ACCESS_GATE: basic-auth-at-proxy
+      SAHIFA_OIDC_ISSUER: $$cap_oidc_issuer
+      SAHIFA_OIDC_CLIENT_ID: sahifa-api
+      SAHIFA_OIDC_CLIENT_SECRET: $$cap_oidc_client_secret
+      SAHIFA_SESSION_SECRET: $$cap_session_secret
+      SAHIFA_ADMIN_EMAIL: $$cap_admin_email
+      SAHIFA_ALLOWED_EMAILS: $$cap_allowed_emails
+      SAHIFA_SAMPLE_ROWS: '100000'
+      SAHIFA_CONN_DEMO: $$cap_demo_source
+    caproverExtra:
+      notExposeAsWebApp: 'true'
+
+caproverOneClickApp:
+  variables:
+    - id: $$cap_domain
+      label: Public domain
+      defaultValue: sahifa-stg.siralabs.org
+      description: The install's domain, as on the api (SAHIFA_PUBLIC_URL).
+      validRegex: /^[a-z0-9.-]+$/
+    - id: $$cap_tag
+      label: Image tag
+      defaultValue: latest
+      description: The api's image tag; CI redeploys the worker with the api's image once CAPROVER_APP_TOKEN_WORKER is set.
+      validRegex: /^[A-Za-z0-9._-]+$/
+    - id: $$cap_db_password
+      label: Database password
+      defaultValue: ''
+      description: The password inside the api's SAHIFA_DATABASE_URL (App Configs of <name>-api).
+      validRegex: /^[A-Za-z0-9]{16,}$/
+    - id: $$cap_auth_mode
+      label: Auth mode
+      defaultValue: proxy
+      description: As on the api (SAHIFA_AUTH_MODE). The worker checks the same production settings as the api.
+      validRegex: /^(proxy|oidc)$/
+    - id: $$cap_oidc_issuer
+      label: Keycloak realm URL (optional)
+      defaultValue: ''
+      description: As on the api (SAHIFA_OIDC_ISSUER); empty for proxy.
+    - id: $$cap_oidc_client_secret
+      label: Keycloak client secret (optional)
+      defaultValue: ''
+      description: As on the api (SAHIFA_OIDC_CLIENT_SECRET); empty for proxy.
+    - id: $$cap_session_secret
+      label: Session secret
+      defaultValue: ''
+      description: As on the api (SAHIFA_SESSION_SECRET).
+      validRegex: /^[A-Za-z0-9]{32,}$/
+    - id: $$cap_admin_email
+      label: Admin email (optional)
+      defaultValue: ''
+      description: As on the api (SAHIFA_ADMIN_EMAIL).
+    - id: $$cap_allowed_emails
+      label: Allowed emails (optional)
+      defaultValue: ''
+      description: As on the api (SAHIFA_ALLOWED_EMAILS).
+    - id: $$cap_demo_source
+      label: Database to assess (optional)
+      defaultValue: ''
+      description: As on the api (SAHIFA_CONN_DEMO). Add any further SAHIFA_CONN_* of the api by hand afterwards.
+  instructions:
+    start: >-
+      Adds the Sahifa worker to an install made with the sahifa template. Enter the same app
+      name as the install (e.g. sahifa-stg) and copy the values from the api app's App Configs.
+    end: >-
+      Done. Next: (1) $$cap_appname-api → App Configs → add SAHIFA_SCAN_EXECUTION=queue →
+      Save & Update; from now on the worker runs the scans. Copy any further SAHIFA_CONN_* of
+      the api to $$cap_appname-worker. (2) Open https://$$cap_domain/healthz → "workers" lists
+      the worker's commit. (3) For automatic deploys, enable the App Token on
+      $$cap_appname-worker and put it on the GitHub environment as CAPROVER_APP_TOKEN_WORKER,
+      with CAPROVER_APP_WORKER=$$cap_appname-worker (deploy/caprover.md section 5).
+  displayName: Sahifa worker
+  isOfficial: false
+  description: The optional scan worker of a Sahifa install (Procrastinate queue in its database).
+  documentation: https://github.com/Sira-Labs/Sahifa/blob/main/deploy/caprover.md
