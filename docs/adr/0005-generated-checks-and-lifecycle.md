@@ -34,5 +34,5 @@ profiling baseline at detection but good at proposing rules.
 
 ## Consequences
 
-- R1 sprint 1 regenerates checks per scan inside the report; spec 006 persists them per asset.
+- R1 sprint 1 regenerates checks per scan inside the report; spec 007 persists them per asset.
 - The UI needs approve, lock and retire actions with an audit trail (R2 audit log).

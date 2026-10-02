@@ -23,7 +23,7 @@ async def healthz(db: AsyncSession = Depends(session)) -> dict[str, Any]:
         database = "ok"
     except (SQLAlchemyError, OSError):
         database = "unavailable"
-    # `workers` lists worker commits once the worker exists (spec 007); empty until then.
+    # `workers` lists worker commits once the worker exists (spec 008); empty until then.
     return {
         "status": "ok" if database == "ok" else "degraded",
         "database": database,

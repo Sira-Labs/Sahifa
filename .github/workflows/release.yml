@@ -166,7 +166,7 @@ jobs:
           WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
         run: |
           if [ -n "$SERVER" ]; then echo "on=true" >> "$GITHUB_OUTPUT"; else echo "on=false" >> "$GITHUB_OUTPUT"; echo "::notice::CAPROVER_SERVER not set on environment 'staging'; skipping the deploy"; fi
-          # The worker app arrives in R1 sprint 2 (spec 007, ADR-0009): deployed only when its token is set.
+          # The worker app arrives in R1 sprint 2 (spec 008, ADR-0009): deployed only when its token is set.
           if [ -n "$WORKER_TOKEN" ]; then echo "worker=true" >> "$GITHUB_OUTPUT"; else echo "worker=false" >> "$GITHUB_OUTPUT"; echo "CAPROVER_APP_TOKEN_WORKER not set; skipping worker deploy"; fi
       - uses: actions/checkout@v7
         if: steps.gate.outputs.on == 'true'

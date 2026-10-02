@@ -72,7 +72,7 @@ stateDiagram-v2
   from the new profile, never touches `locked` or `manual` checks, and never re-creates a
   `retired` one.
 - In R1 sprint 1 checks live inside the scan report and are regenerated every scan; sprint 2
-  persists them per asset (spec 006).
+  persists them per asset (spec 007).
 
 ## Threshold strategy
 

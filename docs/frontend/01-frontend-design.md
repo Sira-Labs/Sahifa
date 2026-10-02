@@ -5,7 +5,7 @@
 Vite + React 19 + TypeScript, TanStack Router (file-free route tree in `router.tsx`) and
 TanStack Query, Tailwind v4, vitest with Testing Library. Served by Caddy (ADR-0007). No chart
 library in R1: score bars and interval bars are plain elements on a 0–100 scale, as on the
-product page; uPlot arrives with the score history (spec 010).
+product page; uPlot arrives with the score history (spec 011).
 
 ## Visual language
 

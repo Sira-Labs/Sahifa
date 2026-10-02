@@ -53,7 +53,7 @@ jobs:
           WANT: ${{ inputs.commit }}
           URL: ${{ vars.CAPROVER_WEB_URL }}
           BASIC_AUTH: ${{ secrets.CAPROVER_WEB_BASIC_AUTH }}
-          # Staging runs a worker once its app exists (R1 sprint 2, spec 007); its token marks it.
+          # Staging runs a worker once its app exists (R1 sprint 2, spec 008); its token marks it.
           WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
         run: |
           if ! [[ "$WANT" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::commit must be a full 40-character SHA"; exit 1; fi
@@ -157,7 +157,7 @@ jobs:
           image: ${{ steps.gate.outputs.api_image }}
 
       # Any Docker host with the compose bundle (self-hosted installs). The bundle gains a
-      # worker service with spec 007; until then the api runs scans in a thread (ADR-0009).
+      # worker service with spec 008; until then the api runs scans in a thread (ADR-0009).
       - name: copy compose bundle
         if: steps.gate.outputs.host == 'true'
         uses: appleboy/scp-action@v1.0.0

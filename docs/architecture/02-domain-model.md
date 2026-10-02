@@ -109,7 +109,7 @@ every level is a weighted mean of the level below, and nothing is computed twice
   `max_fail_ratio` parameter (default 0 for keys and declared constraints, set from the
   profile for generated checks; catalogue).
 - Severity is the check's severity. Within a scan, one check yields at most one finding.
-- R1 keeps findings per scan. R2 (spec 008) keeps one open finding per check across scans,
+- R1 keeps findings per scan. R2 (spec 009) keeps one open finding per check across scans,
   counting occurrences, with the Tabayyun lifecycle (open, acknowledged, resolved, muted).
 
 ## Raw data and proposals

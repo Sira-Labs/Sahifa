@@ -76,5 +76,5 @@ Unit (`core/tests/test_profile.py`): `test_profile_counts_shop`, `test_roles`,
 
 ## Out of scope
 
-S3 paths and credentials (spec 009, sprint 2), Snowflake and BigQuery (sprint 7), approximate
+S3 paths and credentials (spec 010, sprint 2), Snowflake and BigQuery (sprint 7), approximate
 distinct counts above 1 M sampled rows (sprint 3 performance work).

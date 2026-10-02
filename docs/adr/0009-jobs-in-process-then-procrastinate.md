@@ -15,7 +15,7 @@ worker (Postgres as the queue, no broker; its ADR-0004 and spec 002) with the sa
 - **Release 0.1, sprint 1:** the API runs a scan in a background thread (`anyio.to_thread`),
   at most `SAHIFA_MAX_CONCURRENT_SCANS` (default 2) at once; scans left `running` by a restart
   are marked `failed` with "interrupted" at start-up.
-- **Sprint 2 (spec 007):** Procrastinate on the same Postgres, a `sahifa-worker` app from the
+- **Sprint 2 (spec 008):** Procrastinate on the same Postgres, a `sahifa-worker` app from the
   API image with `SAHIFA_ROLE=worker`, transactional enqueue, the stale-run reaper and
   scheduled scans, exactly the Tabayyun pattern.
 

@@ -1,6 +1,6 @@
 """Running scans in a worker thread and persisting their reports (spec 004, ADR-0009).
 
-Until the Procrastinate worker (spec 007) a scan runs in the API process: one thread per
+Until the Procrastinate worker (spec 008) a scan runs in the API process: one thread per
 scan, at most `max_concurrent_scans` at once. A restart leaves running scans behind; the
 start-up step marks them failed.
 """
