@@ -1,0 +1,55 @@
+name: Check proposal
+description: Propose a new data-quality check or a change to an existing check's defaults
+labels: ["type: check", "needs: design"]
+body:
+  - type: input
+    id: id
+    attributes:
+      label: Check id
+      description: Namespaced as in the catalogue, e.g. `sah.not_null`, or `store.` for a store-health item.
+    validations:
+      required: true
+  - type: dropdown
+    id: dimension
+    attributes:
+      label: Primary quality dimension
+      options: [completeness, validity, accuracy, consistency, uniqueness, currentness, store health (not scored)]
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      description: A rule holds for any data and starts active; a baseline is learned from this data and starts proposed (ADR-0005).
+      options: [rule, baseline, manual]
+    validations:
+      required: true
+  - type: textarea
+    id: fault
+    attributes:
+      label: Fault it detects
+      description: The real-world failure mode, how often it occurs and what damage it causes downstream. Cite sources where possible (see docs/research/).
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Method and default thresholds
+      description: The fail predicate or the evaluation on grouped values, which profile fields it needs, which logical types and column roles it applies to, and why the default threshold is what it is.
+    validations:
+      required: true
+  - type: textarea
+    id: dialects
+    attributes:
+      label: SQL dialects
+      description: Can it be evaluated in the source (Postgres and DuckDB via SQLGlot), or does it need Python on grouped values?
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and summary
+      description: What the finding's evidence contains and an example plain-language summary.
+  - type: textarea
+    id: synth
+    attributes:
+      label: Synthetic fault for tests
+      description: How `synth` would inject this fault so the check has a test.

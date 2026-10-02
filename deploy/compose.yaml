@@ -1,0 +1,70 @@
+# Production bundle: images published by .github/workflows/release.yml.
+#   cp .env.example .env   # fill secrets, choose SAHIFA_TAG
+#   docker compose -f deploy/compose.yaml up -d
+# SAHIFA_TAG is required: manual installs set a version or a sha-<short> tag. promote.yml
+# instead sets SAHIFA_API_IMAGE and SAHIFA_WEB_IMAGE to the digest-pinned images staging ran
+# (ADR-0012); when set they take precedence over the tag.
+# Scans run in the api process until R1 sprint 2; a `worker` service from the api image with
+# SAHIFA_ROLE=worker joins this file with spec 007 (ADR-0009).
+services:
+  web:
+    image: ${SAHIFA_WEB_IMAGE:-ghcr.io/sira-labs/sahifa-web:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SAHIFA_API_UPSTREAM: api:8000
+      # Caddy obtains a certificate for this name; empty means plain HTTP on :80.
+      SAHIFA_DOMAIN: ${SAHIFA_DOMAIN:-}
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    image: ${SAHIFA_API_IMAGE:-ghcr.io/sira-labs/sahifa-api:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
+    restart: unless-stopped
+    # .env carries SAHIFA_ACCESS_GATE, SAHIFA_PUBLIC_URL, the optional limits and every
+    # SAHIFA_CONN_<NAME> source connection (ADR-0006).
+    env_file: .env
+    # The image migrates the schema on every start before serving.
+    environment:
+      SAHIFA_ENV: prod
+      SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/sahifa
+      SAHIFA_DATA_DIR: /data
+    volumes:
+      # Uploaded files, deleted after SAHIFA_UPLOAD_TTL_DAYS; disposable, no backup needed.
+      - data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    # The major version must not move under a persistent data directory; pin a minor version
+    # or a digest for production and bump it deliberately.
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sahifa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: sahifa
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sahifa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  data:
+  caddy_data:

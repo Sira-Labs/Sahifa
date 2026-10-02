@@ -1,0 +1,43 @@
+name: Bug report
+description: Something behaves incorrectly (wrong finding, crash, bad score, failed scan, UI error)
+labels: ["bug", "needs: triage"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [core (profiling, checks, scoring), connectors (Postgres, DuckDB, files), api, web, deploy, docs]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the check id (e.g. `sah.not_null`), the asset and column, and the finding or error text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        A minimal dataset is ideal: `sahifa synth <dir>` plus the `sahifa scan` command, a small
+        CSV attached, or the `CREATE TABLE` and a few `INSERT`s for Postgres. Never attach real
+        customer data, connection strings or credentials.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Git SHA, image tag (`sha-…`) or package version.
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python and Node versions, source type and version (e.g. Postgres 16, Parquet file), deployment method (CapRover, compose, dev, CLI).

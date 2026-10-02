@@ -1,0 +1,41 @@
+# Development infrastructure only: one Postgres 17 on localhost:5432 that holds
+#   - `sahifa`, the API's metadata database (SAHIFA_DATABASE_URL and SAHIFA_TEST_DATABASE_URL), and
+#   - `shop`, an empty demo source with a read-only login `sahifa_reader` (SAHIFA_TEST_SOURCE_URL,
+#     or SAHIFA_CONN_SHOP for the dev API), set up the way deploy/caprover.md section 6 asks
+#     owners to set up a real source.
+# The API and web run on the host. Dev credentials only; the port is bound to localhost.
+#   SAHIFA_DATABASE_URL=postgresql+psycopg://sahifa:sahifa@localhost:5432/sahifa
+#   SAHIFA_CONN_SHOP=postgresql://sahifa_reader:sahifa_reader@localhost:5432/shop?schemas=public
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: sahifa
+      POSTGRES_PASSWORD: sahifa   # dev only; prod uses generated secrets
+      POSTGRES_DB: sahifa
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    configs:
+      - source: demo-source
+        target: /docker-entrypoint-initdb.d/10-demo-source.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sahifa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+configs:
+  # Runs once, when the data directory is created (`docker compose down -v` to start over).
+  demo-source:
+    content: |
+      CREATE DATABASE shop;
+      CREATE ROLE sahifa_reader LOGIN PASSWORD 'sahifa_reader';   -- dev only
+      GRANT CONNECT ON DATABASE shop TO sahifa_reader;
+      \connect shop
+      GRANT USAGE ON SCHEMA public TO sahifa_reader;
+      GRANT SELECT ON ALL TABLES IN SCHEMA public TO sahifa_reader;
+      ALTER DEFAULT PRIVILEGES FOR ROLE sahifa IN SCHEMA public GRANT SELECT ON TABLES TO sahifa_reader;
+      GRANT pg_read_all_stats TO sahifa_reader;
+
+volumes:
+  pgdata:
