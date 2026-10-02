@@ -20,15 +20,7 @@ from .models import AssetRef
 # Characters `sah.non_printing` looks for: C0 controls except tab, LF and CR, DEL, no-break
 # space, zero-width space and the byte-order mark. Written as the characters themselves in a
 # bracket expression, which RE2 (DuckDB) and Postgres ARE both accept.
-NON_PRINTING_CLASS = (
-    "["
-    + "\x01-\x08"
-    + "\x0b\x0c"
-    + "\x0e-\x1f"
-    + "\x7f"
-    + " ​﻿"
-    + "]"
-)
+NON_PRINTING_CLASS = "[" + "\x01-\x08" + "\x0b\x0c" + "\x0e-\x1f" + "\x7f" + "\u00a0\u200b\ufeff" + "]"
 
 NUMERIC_LIKE = r"\s*[-+]?([0-9]+([.,][0-9]+)?|[.,][0-9]+)([eE][-+]?[0-9]+)?\s*"
 DATE_LIKE = (
@@ -36,6 +28,7 @@ DATE_LIKE = (
     r"(Z|[+-][0-9]{2}:?[0-9]{2})?)?|[0-9]{1,2}[./][0-9]{1,2}[./]([0-9]{4}|[0-9]{2}))\s*"
 )
 LEADING_ZERO_NUMBER = r"0[0-9]+"
+WHITESPACE_ONLY = r"\s*"
 BLANK_TOKENS = ("n/a", "na", "null", "none", "nil", "-", "--", "?", "unknown", "undefined", "#n/a")
 
 
@@ -46,6 +39,7 @@ class Dialect:
     sqlglot_name = ""
     text_type = "VARCHAR"
     double_type = "DOUBLE"
+    letter_class = "[A-Za-z]"
 
     def ident(self, name: str) -> str:
         if "\x00" in name:
@@ -98,7 +92,8 @@ class Dialect:
     def is_blank(self, expr: str) -> str:
         """True for empty, whitespace-only and placeholder text (`sah.not_blank`)."""
         trimmed = f"trim({expr})"
-        return f"({trimmed} = '' OR lower({trimmed}) IN {self.literal_list(BLANK_TOKENS)})"
+        only_space = self.regex_full(expr, WHITESPACE_ONLY)
+        return f"({only_space} OR lower({trimmed}) IN {self.literal_list(BLANK_TOKENS)})"
 
     def sum_case(self, predicate: str) -> str:
         return f"SUM(CASE WHEN {predicate} THEN 1 ELSE 0 END)"
@@ -106,6 +101,7 @@ class Dialect:
 
 class DuckDBDialect(Dialect):
     name = "duckdb"
+    letter_class = r"\p{L}"
     sqlglot_name = "duckdb"
     text_type = "VARCHAR"
     double_type = "DOUBLE"
@@ -125,6 +121,7 @@ class DuckDBDialect(Dialect):
 
 class PostgresDialect(Dialect):
     name = "postgres"
+    letter_class = "[[:alpha:]]"
     sqlglot_name = "postgres"
     text_type = "TEXT"
     double_type = "DOUBLE PRECISION"
