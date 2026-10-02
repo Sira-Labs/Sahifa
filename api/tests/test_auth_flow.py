@@ -458,6 +458,7 @@ async def test_add_passkey_runs_the_keycloak_action(env: Env) -> None:
         query = parse_qs(urlsplit(started.headers["location"]).query)
         assert query["kc_action"] == ["webauthn-register-passwordless"]
         assert query["kc_idp_hint"] == ["github"] and query["prompt"] == ["login"]
+        assert query["login_hint"] == [ADMIN]
         callback, _ = env.idp.authorize(
             started.headers["location"], email=ADMIN, sub=f"kc-{ADMIN}", **method_claims("github")
         )
@@ -476,3 +477,26 @@ async def test_unknown_action_status_is_ignored(env: Env) -> None:
         )
         done = await c.get(f"{callback}&kc_action_status=%2F%2Fevil.example")
         assert done.status_code == 302 and done.headers["location"] == "/scans"
+
+
+async def test_add_passkey_as_another_account_is_refused(env: Env) -> None:
+    """When "Add a passkey" comes back as someone else, the browser keeps its own session and
+    is not switched to the other account; an action result without a session is refused too."""
+    async with browser(env.app) as c:
+        await sign_in(env, c, "google")
+        started = await c.get("/api/auth/passkey/add")
+        callback, _ = env.idp.authorize(
+            started.headers["location"], email=ALLOWED, sub=f"kc-{ALLOWED}", **method_claims("google")
+        )
+        refused = await c.get(f"{callback}&kc_action_status=success")
+        assert refused.status_code == 409 and "account_mismatch" in refused.text
+        assert (await c.get("/api/auth/me")).json()["user"]["email"] == ADMIN
+    assert live_sessions(env) == 1
+    assert sql(env, "SELECT count(*) FROM users WHERE email = :e", e=ALLOWED)[0][0] == 0
+
+    async with browser(env.app) as c:
+        started = await start(c, "google")
+        callback, _ = env.idp.authorize(
+            started.headers["location"], email=ADMIN, sub=f"kc-{ADMIN}", **method_claims("google")
+        )
+        assert (await c.get(f"{callback}&kc_action_status=success")).status_code == 409

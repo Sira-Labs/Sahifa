@@ -83,8 +83,8 @@ flowchart TD
 |---|---|---|
 | `GET /api/auth/options` | — | `{"mode": "oidc", "methods": ["google", "github", "passkey"], "account_url": "<issuer>/account"}`; in `dev` and `proxy`: `{"mode": "dev", "methods": [], "account_url": null}` |
 | `GET /api/auth/login?method=google&next=/scans/new` | `method` ∈ enabled methods; `next` a relative path, default `/` | 302 to the IdP's authorization endpoint (`response_type=code`, `scope=openid email profile`, `state`, `nonce`, `code_challenge` S256). Every method adds `prompt=login` (an existing Keycloak SSO session from another method cannot answer); `google`/`github` add `kc_idp_hint`. Sets `__Host-sahifa_login` (flow token, 10 min). Unknown or disabled method → 400 `unknown_method`; IdP unreachable → 503 `idp_unavailable`; not in `oidc` → 404 |
-| `GET /api/auth/passkey/add` | cookie | 302 to the IdP like `login` with the session's method, plus `kc_action=webauthn-register-passwordless`: a fresh sign-in, then Keycloak's passkey registration; `next` is `/settings/account`. 401 without a session; 404 outside `oidc` |
-| `GET /api/auth/callback?code&state[&kc_action_status]` | from the IdP | 302 to `next`; sets `__Host-sahifa_session` and revokes the browser's previous session; clears `__Host-sahifa_login`. A `kc_action_status` of `success`, `cancelled` or `error` is passed on as `?passkey=<status>`. Failures are short HTML pages (behaviour 3) |
+| `GET /api/auth/passkey/add` | cookie | 302 to the IdP like `login` with the session's method, plus `kc_action=webauthn-register-passwordless` and `login_hint=<email>`: a fresh sign-in, then Keycloak's passkey registration; `next` is `/settings/account`. 401 without a session; 404 outside `oidc` |
+| `GET /api/auth/callback?code&state[&kc_action_status]` | from the IdP | 302 to `next`; sets `__Host-sahifa_session` and revokes the browser's previous session in the same transaction; clears `__Host-sahifa_login`. A `kc_action_status` of `success`, `cancelled` or `error` is passed on as `?passkey=<status>`; with one, the signed-in user must be the browser's current one (else 409 `account_mismatch`, nothing changes). Failures are short HTML pages (behaviour 3) |
 | `GET /api/auth/me` | cookie | 200 `{"mode", "user": {"id", "email", "display_name"}, "sign_in_method", "admin"}`; 401 `not_authenticated`; 403 `{"detail": "no_access", "email", "message"}`. In `dev`/`proxy`: the fixed principal, `sign_in_method` `dev`/`proxy`, `id` and `email` null |
 | `GET /api/auth/sessions` | cookie | `[{"id", "current", "sign_in_method", "created_at", "last_seen_at", "user_agent", "ip_address"}]`, never tokens; `[]` in `dev`/`proxy` |
 | `DELETE /api/auth/sessions/{id}` | CSRF header | 204; only the user's own sessions (404 otherwise); the current one also clears the cookie |
@@ -222,7 +222,7 @@ sequenceDiagram
    that `sid` (or, without one, every session of the identity `sub`) is revoked.
 10. **Logging:** `auth.login` (user id, method, access), `auth.denied` (reason: `no_access`,
     `login_expired`, `invalid_token`, `passkey_required`, `idp_error`, `csrf_header`,
-    `csrf_origin`, `email_taken`, `invalid_logout_token`), `auth.idp_unavailable` (URL, error
+    `csrf_origin`, `email_taken`, `account_mismatch`, `invalid_logout_token`), `auth.action` (user id, status), `auth.idp_unavailable` (URL, error
     type), `auth.logout`, `auth.session_revoked` (reason, count). Never tokens, codes, cookie
     values or secrets.
 
@@ -327,7 +327,10 @@ Web (`web/src/__tests__`):
    sign-in before it adds a credential, and in this realm that re-authentication offers only a
    passkey, which a first-time user has not got, so the owner could not add one. "Add a
    passkey" now runs the registration as an application-initiated action (`kc_action`) after a
-   fresh sign-in with the session's own method (`prompt=login` plus `kc_idp_hint`).
+   fresh sign-in with the session's own method (`prompt=login` plus `kc_idp_hint`), with
+   `login_hint` preselecting the account. If that sign-in returns as another user, the
+   callback refuses it (409 `account_mismatch`) so the browser is not switched; the passkey
+   then belongs to the account that just authenticated, which that person controls.
 
 ## Out of scope
 

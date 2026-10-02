@@ -311,6 +311,8 @@ sequenceDiagram
    with the same provider, then confirm the passkey on the device (fingerprint, face or PIN).
    Back on Account it says "Passkey added"; from then on "Sign in with a passkey" works.
    **Manage passkeys** (Keycloak's account console → *Signing in*) renames or removes them.
+   A realm imported before 2026-10-02: Identity providers → `google` → turn on
+   **Pass login_hint**, so Google preselects the signed-in account.
    A first sign-in always goes through Google or GitHub. Passkeys belong to the Keycloak host:
    a new Keycloak host needs new passkeys.
 

@@ -146,9 +146,11 @@ async def test_authorization_url_with_an_action(idp):
         code_verifier="v" * 43,
         redirect_uri="https://t.example/cb",
         action="webauthn-register-passwordless",
+        login_hint="bo@example.org",
     )
     query = parse_qs(urlsplit(url).query)
     assert query["kc_action"] == ["webauthn-register-passwordless"]
+    assert query["login_hint"] == ["bo@example.org"]
     assert query["kc_idp_hint"] == ["google"] and query["prompt"] == ["login"]
 
 

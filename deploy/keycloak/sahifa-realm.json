@@ -118,6 +118,7 @@
         "clientSecret": "set-in-admin-console",
         "defaultScope": "openid email profile",
         "syncMode": "IMPORT",
+        "loginHint": "true",
         "guiOrder": "1"
       }
     },

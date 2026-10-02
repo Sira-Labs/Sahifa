@@ -193,12 +193,23 @@ async def add_passkey(request: Request) -> Response:
     if current.sign_in_method not in settings.enabled_sign_in_methods:
         raise HTTPException(status_code=400, detail="unknown_method")
     return await _start_flow(
-        request, oidc, method=current.sign_in_method, next_path=ACCOUNT_PATH, action=PASSKEY_ACTION
+        request,
+        oidc,
+        method=current.sign_in_method,
+        next_path=ACCOUNT_PATH,
+        action=PASSKEY_ACTION,
+        login_hint=current.email,
     )
 
 
 async def _start_flow(
-    request: Request, oidc: OidcClient, *, method: str, next_path: str, action: str | None = None
+    request: Request,
+    oidc: OidcClient,
+    *,
+    method: str,
+    next_path: str,
+    action: str | None = None,
+    login_hint: str | None = None,
 ) -> Response:
     """Store a login flow and send the browser to the IdP's authorization endpoint."""
     settings = settings_of(request)
@@ -217,6 +228,7 @@ async def _start_flow(
             code_verifier=flow.code_verifier,
             redirect_uri=_public_url(settings) + CALLBACK_PATH,
             action=action,
+            login_hint=login_hint,
         )
     except IdpUnavailableError as exc:
         raise HTTPException(status_code=503, detail="idp_unavailable") from exc
@@ -239,6 +251,10 @@ async def _take_flow(request: Request, state: str | None) -> Flow | None:
     if taken is None or not taken[1] or state is None or taken[0].state != state:
         return None
     return taken[0]
+
+
+class _AccountMismatchError(Exception):
+    """An application-initiated action came back signed in as a user other than the browser's."""
 
 
 @router.get("/callback")
@@ -280,6 +296,7 @@ async def callback(
         return _failure(400, reason)
 
     previous = await current_session(request)
+    action_ran = kc_action_status in ACTION_STATUSES
     session_token = new_token()
     try:
         async with factory_of(request)() as db, db.begin():
@@ -290,6 +307,9 @@ async def callback(
                 email=str(claims["email"]),
                 display_name=str(claims.get("name") or ""),
             )
+            if action_ran and (previous is None or previous.user_id != user.user_id):
+                # "Add a passkey" re-authenticated as someone else: no account switch here.
+                raise _AccountMismatchError
             await store.create_session(
                 db,
                 id_hash=token_hash(session_secret(settings), session_token),
@@ -302,20 +322,23 @@ async def callback(
                 absolute=settings.session_absolute,
                 idle=settings.session_idle,
             )
+            if previous is not None:
+                # The new cookie replaces this browser's old session; revoke it in the same
+                # transaction rather than orphan it.
+                await store.revoke(db, previous.id, user_id=previous.user_id)
     except EmailTakenError:
         log.warning("auth.denied", reason="email_taken", method=flow.method)
         return _failure(409, "account_conflict")
-    if previous is not None:
-        # The new cookie replaces this browser's old session; revoke it rather than orphan it.
-        async with factory_of(request)() as db, db.begin():
-            await store.revoke(db, previous.id, user_id=previous.user_id)
+    except _AccountMismatchError:
+        log.warning("auth.denied", reason="account_mismatch", method=flow.method)
+        return _failure(409, "account_mismatch")
     access = settings.has_access(user.email)
     log.info("auth.login", user_id=str(user.user_id), method=flow.method, access=access)
     if not access:
         # A session anyway, so the web app can say who is signed in ("No access yet").
         log.info("auth.denied", reason="no_access", user_id=str(user.user_id), method=flow.method)
     next_path = flow.next_path
-    if kc_action_status in ACTION_STATUSES:
+    if action_ran:
         log.info("auth.action", user_id=str(user.user_id), status=kc_action_status)
         next_path += ("&" if "?" in next_path else "?") + urlencode({"passkey": kc_action_status})
     response = RedirectResponse(next_path, status_code=302, headers=NO_STORE)
