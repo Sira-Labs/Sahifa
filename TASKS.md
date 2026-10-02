@@ -68,7 +68,22 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         `actor` is the email, `scanner`, `dev` or `proxy`; deleting a user keeps it.
       - 409 bodies carry `detail` (`stale_version`, `invalid_transition`), `version` or `status`
         and a `message` the web shows; the auth test fixture deletes users instead of truncating.
-- [ ] 008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
+- [x] **008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up** — `docs/specs/008-worker-reaper-cleanup.md`
+      - `SAHIFA_SCAN_EXECUTION=inline` stays the default; CapRover switches to `queue` once the
+        owner creates the worker app (checklist item 8). The compose bundle runs `queue` with a
+        `worker` service.
+      - Commit-then-defer, not a transactional enqueue (ADR-0009 update): Procrastinate has its
+        own psycopg pool; a failed defer fails the scan, the reaper re-queues the rest.
+      - Procrastinate pinned to 3.10.0; migration 0004 applies its `schema.sql` vendored next to
+        it (MIT notice kept), so 0004 never changes; a test fails on a version bump.
+      - The clean-up uses the existing `SAHIFA_UPLOAD_TTL_DAYS` (no `..._RETENTION_HOURS`, owner);
+        folders map to scans through the connection name `upload-<folder>`.
+      - Worker and reaper share one threshold (`SAHIFA_REAPER_STALE_MINUTES`, also Procrastinate's
+        `stalled_worker_timeout`); a cancelled job marks its scan interrupted immediately.
+      - `execute_scan` claims a scan with `SELECT ... FOR UPDATE` and runs only `queued` scans,
+        for both modes, which makes the job idempotent.
+      - The worker has its own one-click template (`sahifa-worker.yml`), since a CapRover template
+        cannot make an app optional; the worker healthcheck looks for its process in `/proc`.
 - [ ] 009 Findings across scans with deduplication and occurrences.
 - [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
 - [ ] 011 Score history per asset and store.

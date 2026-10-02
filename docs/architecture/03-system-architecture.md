@@ -10,7 +10,7 @@ flowchart LR
     subgraph Sahifa install
         WEB["sahifa-web<br/>Caddy: static SPA, /api proxy"]
         API["sahifa-api<br/>FastAPI"]
-        WRK["sahifa-worker<br/>same image, role=worker (R1 sprint 2)"]
+        WRK["sahifa-worker<br/>same image, role=worker (spec 008)"]
         DB[("sahifa-db<br/>PostgreSQL 17<br/>metadata, profiles, results")]
         UP[("uploads<br/>volume or S3 bucket")]
     end
@@ -59,7 +59,12 @@ The engine. Pure functions plus connectors; no FastAPI, no ORM.
 
 FastAPI with Pydantic v2, SQLAlchemy 2 async and Alembic on PostgreSQL 17, structlog JSON
 logs. It owns connections, scans, results, findings and the check lifecycle, and calls the
-core in a worker thread (R1 sprint 1) or a Procrastinate worker (from sprint 2, ADR-0009).
+core in a worker thread (`SAHIFA_SCAN_EXECUTION=inline`, the default) or through a
+Procrastinate queue on the same Postgres (`queue`, spec 008, ADR-0009). In queue mode the
+`sahifa-worker` process (`python -m sahifa.worker`) runs the `scans` and `maintenance`
+queues: `run_scan`, the reaper every 5 minutes (scans of stalled workers fail with
+"interrupted", scans left queued without a job are re-queued) and the hourly upload clean-up.
+Both modes run one shared `execute_scan`.
 
 | Route group | R1 |
 |---|---|
@@ -94,8 +99,8 @@ sequenceDiagram
     participant S as Source store
     U->>A: POST /api/scans {connection_id} or POST /api/scans/upload (files)
     A->>D: insert scan (queued)
+    A->>W: run scan id (thread, or a Procrastinate job deferred on sahifa-db)
     A-->>U: 202 {id, status: queued}
-    A->>W: run scan id
     W->>D: status running
     W->>S: list assets, row counts (read-only)
     loop per asset
@@ -131,13 +136,13 @@ a failure to connect fails the scan with the error message (credentials are neve
 |---|---|---|
 | Connections, scans, checks, results, findings, scores | `sahifa-db` (Postgres 17), relational tables | until deleted |
 | Scan report (profiles, results, evidence) | `scans.report` (`jsonb`) | with the scan |
-| Uploaded files | `SAHIFA_DATA_DIR/uploads/<scan id>/` (a volume) or an S3 bucket | 7 days by default (`SAHIFA_UPLOAD_TTL_DAYS`), then deleted with a maintenance job |
+| Uploaded files | `SAHIFA_DATA_DIR/uploads/<batch>/` (a volume shared by api and worker; S3 in R3) | 7 days after the scan finished by default (`SAHIFA_UPLOAD_TTL_DAYS`), then deleted by the hourly `clean_uploads` job |
 | Source data | stays in the source | never copied |
 
 ## Deployment shapes
 
-1. **CapRover** (the Sira family servers): `sahifa-db`, `sahifa-api`, `sahifa-web`, later
-   `sahifa-worker`, staging with the `-stg` suffix (ADR-0012, `deploy/caprover.md`).
+1. **CapRover** (the Sira family servers): `sahifa-db`, `sahifa-api`, `sahifa-web` and, once
+   queue mode is on, `sahifa-worker` (sharing the api's `/data` volume), staging with the `-stg` suffix (ADR-0012, `deploy/caprover.md`).
 2. **Docker compose** on any host: `deploy/compose.yaml` with Caddy TLS.
 3. **CLI only**: `uvx sahifa-core scan ./data/` for a one-off report without a server.
 
@@ -148,7 +153,8 @@ a failure to connect fails the scan with the error message (credentials are neve
   size, count and extension, stored under random names; identifiers quoted by SQLGlot,
   values never interpolated; example values of personal semantic types masked.
 - **Observability:** structlog JSON with `scan_id` and `asset` on every line; `/healthz`
-  reports database and worker state; errors to GlitchTip on the staging-and-tools server
+  reports the database and the connected workers by commit (connections named
+  `sahifa-worker/<commit>` in `pg_stat_activity`); errors to GlitchTip on the staging-and-tools server
   (ADR-0012) from R2.
 - **Performance budget (R1):** a 1,000-table Postgres schema with a 100k-row sample per
   table in under 10 minutes on 2 vCPU; one aggregate query plus one check query per asset,

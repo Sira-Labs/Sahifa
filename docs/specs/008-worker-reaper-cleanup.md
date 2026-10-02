@@ -37,7 +37,7 @@ disk does not fill.
 | `SAHIFA_SCAN_EXECUTION` | `inline` | `inline`: the API runs scans in a thread (today's behaviour). `queue`: the API enqueues a Procrastinate job and a worker runs it. |
 | `SAHIFA_ROLE` | `api` | `worker` starts the Procrastinate worker instead of the HTTP server. It requires `SAHIFA_SCAN_EXECUTION=queue`; otherwise the worker refuses to start with exit code 2. |
 | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | Inline: threads in the API. Queue: the worker's concurrency. |
-| `SAHIFA_UPLOAD_RETENTION_HOURS` | `24` | Upload folders whose scan finished longer ago than this are deleted. `0` disables the clean-up. |
+| `SAHIFA_UPLOAD_TTL_DAYS` | `7` | Existing setting (spec 004). Upload folders whose scan finished longer ago than this are deleted. |
 | `SAHIFA_REAPER_STALE_MINUTES` | `10` | A running job whose worker has sent no heartbeat for this long is treated as stalled. A queued scan with no job, older than this, is re-queued. |
 
 ### Jobs (`sahifa.jobs`, one Procrastinate app on the API's database)
@@ -46,7 +46,7 @@ disk does not fill.
 |---|---|---|---|
 | `run_scan(scan_id)` | `scans` | Deferred by `POST /api/scans` and `POST /api/scans/upload` in queue mode | Runs exactly what the inline runner does today: load saved checks, `run_scan`, persist the report and checks, mark the scan succeeded or failed. |
 | `reap()` | `maintenance` | Periodic, every 5 minutes | (1) For running jobs whose worker is stalled, marks the scan failed with `interrupted: the worker stopped` and the job failed. (2) Re-queues a `queued` scan older than `SAHIFA_REAPER_STALE_MINUTES` that has no job. |
-| `clean_uploads()` | `maintenance` | Periodic, hourly | Deletes upload folders of finished scans older than the retention, and orphan upload folders older than the retention with no scan. Never touches a folder whose scan is `queued` or `running`. |
+| `clean_uploads()` | `maintenance` | Periodic, hourly | Deletes upload folders of finished scans older than `SAHIFA_UPLOAD_TTL_DAYS`, and orphan upload folders older than that with no scan. Never touches a folder whose scan is `queued` or `running`. |
 
 The scan's reports, findings and checks stay in the database. Only the uploaded files are
 deleted.
@@ -109,25 +109,25 @@ deleted.
 
 ## Acceptance criteria
 
-- [ ] In queue mode, a scan posted to the API is run by a worker started with
+- [x] In queue mode, a scan posted to the API is run by a worker started with
       `python -m sahifa.worker`, and the report matches an inline scan of the same files.
-- [ ] Inline mode is unchanged: the existing scan tests pass without modification.
-- [ ] Killing the worker during a scan, then running the reaper with a short stale time,
+- [x] Inline mode is unchanged: the existing scan tests pass without modification.
+- [x] Killing the worker during a scan, then running the reaper with a short stale time,
       marks the scan `failed` with "interrupted". A `queued` scan without a job is re-queued
       and then completes.
-- [ ] `clean_uploads` deletes only folders older than the retention whose scans are finished,
-      plus orphan folders. It keeps running and queued scans' folders and refuses paths outside
-      `uploads_dir`.
-- [ ] `/healthz` lists a running worker as `{"commit", "connections"}`, and `wait-live.sh`
+- [x] `clean_uploads` deletes only folders older than `SAHIFA_UPLOAD_TTL_DAYS` whose scans
+      are finished, plus orphan folders. It keeps running and queued scans' folders and refuses
+      paths outside `uploads_dir`.
+- [x] `/healthz` lists a running worker as `{"commit", "connections"}`, and `wait-live.sh`
       accepts it (a test parses the output with the script's `jq` filter).
-- [ ] Migration 0004 upgrades and downgrades, and `alembic check` is clean.
-- [ ] `SAHIFA_ROLE=worker` with `SAHIFA_SCAN_EXECUTION=inline` exits 2 with a clear message.
-- [ ] Deploy docs:
+- [x] Migration 0004 upgrades and downgrades, and `alembic check` is clean.
+- [x] `SAHIFA_ROLE=worker` with `SAHIFA_SCAN_EXECUTION=inline` exits 2 with a clear message.
+- [x] Deploy docs:
   - `deploy/caprover.md` section 3 is complete: worker app, shared volume, variables, token;
   - the switch to queue mode is a checklist item for the owner;
   - `compose.yaml` has a `worker` service;
   - the one-click template offers the worker.
-- [ ] `make lint` and `make test` pass. Procrastinate is MIT-licensed (ADR-0008).
+- [x] `make lint` and `make test` pass. Procrastinate is MIT-licensed (ADR-0008).
 
 ## Test cases
 
@@ -138,11 +138,33 @@ deleted.
   - a failure to defer;
   - the reaper on a stalled job (simulate by setting the job's heartbeat in the past);
   - re-queueing a `queued` scan without a job;
-  - clean-up: retention, running scans kept, orphans, path traversal and symlink refused;
+  - clean-up: `SAHIFA_UPLOAD_TTL_DAYS`, running scans kept, orphans, path traversal and symlink refused;
   - `/healthz` with a connection named `sahifa-worker/<commit>`;
   - worker start-up refusals (role and mode, old schema).
 - **Migration:** upgrade, `alembic check`, downgrade to 0003, upgrade again.
 - **Script:** the `wait-live.sh` filter on a sample `/healthz` body.
+
+## Implementation notes
+
+- `SAHIFA_UPLOAD_RETENTION_HOURS` dropped: the existing `SAHIFA_UPLOAD_TTL_DAYS` (default 7,
+  at least 1, so no off switch) already promised this deletion and is documented (owner, 2026-10-02).
+- Enqueueing commits the scan, then defers on Procrastinate's own pool (not one transaction
+  with the insert); the reaper covers the gap, as behaviour 2 describes (ADR-0009 update).
+- Migration 0004 carries Procrastinate 3.10.0's `schema.sql` as a file next to it (with its MIT
+  notice) instead of reading the installed package, so 0004 never changes; Procrastinate is
+  pinned to `==3.10.0` and a test fails on a bump, which needs a new migration.
+- The reaper also re-queues a `queued` scan whose job ended without running it (not only
+  `job_id` null); the queueing lock is `scan:<id>`.
+- The worker prunes workers silent for `SAHIFA_REAPER_STALE_MINUTES` at start (Procrastinate's
+  `stalled_worker_timeout`), so both use one threshold; their jobs are then found by the reaper.
+- A job cancelled by Procrastinate (abort, or shutdown) marks its scan interrupted at once.
+- Upload folders map to scans by the connection name `upload-<folder>` set at upload.
+- The worker image healthcheck looks for a running `python -m sahifa.worker` in `/proc`.
+- `compose.yaml` runs queue mode with a `worker` service by default; CapRover stays inline
+  until the owner creates the worker app.
+- The one-click worker is a second template, `deploy/caprover/one-click/sahifa-worker.yml`,
+  pasted with the install's app name: a CapRover template cannot make an app optional, and a
+  worker in inline mode must exit 2.
 
 ## Out of scope
 
