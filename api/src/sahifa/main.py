@@ -17,7 +17,7 @@ from .auth import CsrfMiddleware, NoAccessError, OidcClient, build_oidc, current
 from .db import Database
 from .db.migrate import head_revision
 from .logging import configure, get_logger
-from .routers import auth, connections, health, scans
+from .routers import assets, auth, checks, connections, health, scans
 from .services.connections import register_from_env
 from .services.scans import ScanRunner, mark_interrupted
 from .settings import Settings, get_settings, prod_problems
@@ -99,6 +99,8 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     protected = [Depends(current_user)]
     app.include_router(connections.router, dependencies=protected)
     app.include_router(scans.router, dependencies=protected)
+    app.include_router(assets.router, dependencies=protected)
+    app.include_router(checks.router, dependencies=protected)
     return app
 
 

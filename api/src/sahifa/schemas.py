@@ -1,4 +1,4 @@
-"""Response and request models of the HTTP API (spec 004)."""
+"""Response and request models of the HTTP API (specs 004 and 007)."""
 
 from __future__ import annotations
 
@@ -70,3 +70,68 @@ class Page(BaseModel, Generic[T]):
 
 class Items(BaseModel, Generic[T]):
     items: list[T]
+
+
+class CheckCounts(BaseModel):
+    proposed: int = 0
+    active: int = 0
+    locked: int = 0
+    retired: int = 0
+
+
+class ColumnOut(BaseModel):
+    name: str
+    position: int
+    physical_type: str
+    logical_type: str
+    semantic_type: str | None
+    role: str
+
+
+class AssetOut(BaseModel):
+    id: uuid.UUID
+    connection_id: uuid.UUID
+    namespace: str
+    name: str
+    label: str
+    kind: str
+    row_count: int | None
+    last_scan_id: uuid.UUID | None
+    checks: CheckCounts
+
+
+class AssetDetail(AssetOut):
+    columns: list[ColumnOut]
+
+
+class CheckOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    type: str
+    title: str
+    column: str | None
+    columns: list[str]
+    params: dict[str, Any]
+    dimension: str
+    severity: str
+    kind: str
+    origin: str
+    status: str
+    max_fail_ratio: float
+    version: int
+    updated_at: datetime
+    last_scan_id: uuid.UUID | None
+
+
+class CheckActionIn(BaseModel):
+    version: int = Field(ge=1)
+
+
+class CheckEventOut(BaseModel):
+    at: datetime
+    actor: str
+    action: str
+    from_status: str | None
+    to_status: str
+    params_before: dict[str, Any] | None
+    params_after: dict[str, Any] | None
