@@ -5,8 +5,8 @@
 # never starts would otherwise leave the job green. Polls <URL>/version.json (web image) and
 # <URL>/api/version (api image) and, with CHECK_WORKER=true, waits until <URL>/healthz lists a
 # connected worker on the commit in its `workers` field (the worker names its database
-# connections `sahifa-worker/<commit>`). The worker arrives in R1 sprint 2 (spec 007); until
-# then the workflows leave CHECK_WORKER unset.
+# connections `sahifa-worker/<commit>`; spec 008). The workflows set CHECK_WORKER only when
+# the environment has CAPROVER_APP_TOKEN_WORKER, i.e. a worker app exists.
 #
 #   URL=https://sahifa-stg.siralabs.org WANT=<full sha> CHECK_WORKER=true wait-live.sh
 # A deploy without a URL to check fails: set CAPROVER_WEB_URL on the environment.

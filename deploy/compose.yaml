@@ -4,8 +4,9 @@
 # SAHIFA_TAG is required: manual installs set a version or a sha-<short> tag. promote.yml
 # instead sets SAHIFA_API_IMAGE and SAHIFA_WEB_IMAGE to the digest-pinned images staging ran
 # (ADR-0012); when set they take precedence over the tag.
-# Scans run in the api process until R1 sprint 2; a `worker` service from the api image with
-# SAHIFA_ROLE=worker joins this file with spec 008 (ADR-0009).
+# Scans run in the `worker` service (the api image with SAHIFA_ROLE=worker, spec 008,
+# ADR-0009): the api records and enqueues them in Postgres (SAHIFA_SCAN_EXECUTION=queue on
+# both), and both share the `data` volume for uploads.
 services:
   web:
     image: ${SAHIFA_WEB_IMAGE:-ghcr.io/sira-labs/sahifa-web:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
@@ -34,6 +35,7 @@ services:
       SAHIFA_ENV: prod
       SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/sahifa
       SAHIFA_DATA_DIR: /data
+      SAHIFA_SCAN_EXECUTION: queue
     volumes:
       # Uploaded files, deleted after SAHIFA_UPLOAD_TTL_DAYS; disposable, no backup needed.
       - data:/data
@@ -45,6 +47,25 @@ services:
       start_period: 20s
     depends_on:
       db:
+        condition: service_healthy
+
+  worker:
+    # The same image and environment as the api; it waits for the api's migration, runs the
+    # scans, the reaper and the upload clean-up, and serves no HTTP. Its healthcheck (the
+    # image's) checks that the worker process runs. Scale with `--scale worker=N`.
+    image: ${SAHIFA_API_IMAGE:-ghcr.io/sira-labs/sahifa-api:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SAHIFA_ENV: prod
+      SAHIFA_ROLE: worker
+      SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/sahifa
+      SAHIFA_DATA_DIR: /data
+      SAHIFA_SCAN_EXECUTION: queue
+    volumes:
+      - data:/data
+    depends_on:
+      api:
         condition: service_healthy
 
   db:

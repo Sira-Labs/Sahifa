@@ -1,13 +1,22 @@
 #!/bin/sh
 # One image, two roles, chosen by SAHIFA_ROLE (default api):
 #   api     migrate to the newest schema (idempotent, safe on every start), then serve.
-#   worker  arrives with spec 007 (Procrastinate); refused until then.
+#   worker  the Procrastinate worker (spec 008): needs SAHIFA_SCAN_EXECUTION=queue (exit 2
+#           otherwise), waits up to 5 minutes for the api to migrate (exit 3 after that) and
+#           never migrates itself.
 # A failed migration stops the new api container before uvicorn starts, so the previous
-# release keeps serving. `sahifa-api healthcheck` is the image's HEALTHCHECK.
+# release keeps serving. `sahifa-api healthcheck` is the image's HEALTHCHECK: /healthz for the
+# api, a running `python -m sahifa.worker` process for the worker, which serves no HTTP.
 set -eu
 role="${SAHIFA_ROLE:-api}"
 if [ "${1:-}" = "healthcheck" ]; then
-  [ "$role" = worker ] && exit 0
+  if [ "$role" = worker ]; then
+    # [s] keeps grep from matching its own command line.
+    for f in /proc/[0-9]*/cmdline; do
+      if tr '\0' ' ' < "$f" 2>/dev/null | grep -q -- '-m [s]ahifa\.worker'; then exit 0; fi
+    done
+    exit 1
+  fi
   exec python -c 'import sys, urllib.request
 try:
     sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=2).status == 200 else 1)
@@ -19,8 +28,11 @@ case "$role" in
     python -m sahifa.db.migrate upgrade head
     exec uvicorn sahifa.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips "*"
     ;;
+  worker)
+    exec python -m sahifa.worker
+    ;;
   *)
-    echo "SAHIFA_ROLE must be api (the worker arrives with spec 007), not '$role'" >&2
+    echo "SAHIFA_ROLE must be api or worker, not '$role'" >&2
     exit 2
     ;;
 esac
