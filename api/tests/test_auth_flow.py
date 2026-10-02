@@ -444,3 +444,35 @@ async def test_session_older_than_a_minute_is_touched(env: Env) -> None:
         assert (await c.get("/api/scans")).status_code == 200
         fresh = sql(env, "SELECT now() - last_seen_at < interval '1 minute' FROM sessions")[0][0]
         assert fresh is True
+
+
+async def test_add_passkey_runs_the_keycloak_action(env: Env) -> None:
+    """`/api/auth/passkey/add` re-authenticates with the session's method, asks Keycloak for
+    the passkey registration and lands on the account page with the action's status; the new
+    session replaces the browser's old one."""
+    async with browser(env.app) as c:
+        assert (await c.get("/api/auth/passkey/add")).status_code == 401
+        await sign_in(env, c, "github")
+        started = await c.get("/api/auth/passkey/add")
+        assert started.status_code == 302
+        query = parse_qs(urlsplit(started.headers["location"]).query)
+        assert query["kc_action"] == ["webauthn-register-passwordless"]
+        assert query["kc_idp_hint"] == ["github"] and query["prompt"] == ["login"]
+        callback, _ = env.idp.authorize(
+            started.headers["location"], email=ADMIN, sub=f"kc-{ADMIN}", **method_claims("github")
+        )
+        done = await c.get(f"{callback}&kc_action_status=success")
+        assert done.status_code == 302 and done.headers["location"] == "/settings/account?passkey=success"
+        assert (await c.get("/api/auth/me")).json()["sign_in_method"] == "github"
+    assert live_sessions(env) == 1
+
+
+async def test_unknown_action_status_is_ignored(env: Env) -> None:
+    """Only Keycloak's own `kc_action_status` values reach the redirect."""
+    async with browser(env.app) as c:
+        started = await start(c, "google", "/scans")
+        callback, _ = env.idp.authorize(
+            started.headers["location"], email=ADMIN, sub=f"kc-{ADMIN}", **method_claims("google")
+        )
+        done = await c.get(f"{callback}&kc_action_status=%2F%2Fevil.example")
+        assert done.status_code == 302 and done.headers["location"] == "/scans"

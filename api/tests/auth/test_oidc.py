@@ -134,6 +134,22 @@ async def test_authorization_url_per_method(idp, method):
         assert "kc_idp_hint" not in query
     else:
         assert query["kc_idp_hint"] == [method]
+    assert "kc_action" not in query
+
+
+async def test_authorization_url_with_an_action(idp):
+    """An application-initiated action rides on the fresh sign-in as `kc_action`."""
+    url = await idp.client().authorization_url(
+        method="google",
+        state="st",
+        nonce=NONCE,
+        code_verifier="v" * 43,
+        redirect_uri="https://t.example/cb",
+        action="webauthn-register-passwordless",
+    )
+    query = parse_qs(urlsplit(url).query)
+    assert query["kc_action"] == ["webauthn-register-passwordless"]
+    assert query["kc_idp_hint"] == ["google"] and query["prompt"] == ["login"]
 
 
 async def test_code_exchange_checks_the_verifier(idp):
