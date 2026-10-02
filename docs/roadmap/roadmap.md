@@ -93,3 +93,4 @@ site/            product page for siralabs.org
 | 2026-10-01 | Research 01–04 in the planning session; name and repository chosen |
 | 2026-10-02 | R0 complete: docs, ADRs, catalogue, specs 001–005, product page; sprint 1 started |
 | 2026-10-02 | SAP data added to the plan (ADR-0014): HANA connector and SAP rule pack in R2 |
+| 2026-10-02 | Sprint 1 merged (PR #1): engine, API, web; images on GHCR |

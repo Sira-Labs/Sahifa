@@ -48,7 +48,7 @@ gantt
     Research and design                     :done, r0, 2026-10-01, 2026-10-02
 
     section R1 first preview, release 0.1
-    S1 first scan end to end                :active, s1, 2026-10-02, 2026-10-03
+    S1 first scan end to end                :done, s1, 2026-10-02, 2026-10-03
     S2 checks lifecycle, worker, history    :s2, 2026-10-03, 2026-10-06
     S3 hardening, staging, release 0.1      :s3, 2026-10-06, 2026-10-08
     R1 feature-complete                     :milestone, r1, 2026-10-08, 0d
@@ -71,7 +71,7 @@ gantt
 
 | Sprint | Topic | Forecast end | Actual | PRs |
 |---|---|---|---|---|
-| 1 | first scan end to end | 2–3 Oct | | |
+| 1 | first scan end to end | 2–3 Oct | done 2 Oct | #1 |
 | 2 | checks lifecycle, worker, history | 4–6 Oct | | |
 | 3 | hardening, staging, release 0.1 | 7–10 Oct | | |
 | 4 | sign-in, tenants, RBAC | 9–13 Oct | | |

@@ -13,13 +13,29 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       check specification and catalogue, roadmap, sprint plan, specs 001–005, CapRover plan,
       product page design (`site/index.html`).
 
-## Sprint 1 — first scan end to end (2 Oct 2026)
+## Sprint 1 — first scan end to end (done 2 Oct 2026, PR #1)
 
-- [~] **001 Repository scaffold, CI, release and deploy pipeline** — `docs/specs/001-repository-and-pipeline.md`
-- [~] **002 Connectors, sampling and column profiles** — `docs/specs/002-connectors-and-profiling.md`
-- [~] **003 The R1 checks, scoring with intervals, the report and the CLI** — `docs/specs/003-checks-scoring-report.md`
-- [~] **004 API: connections, scans and persistence** — `docs/specs/004-api-connections-and-scans.md`
-- [~] **005 Web: scans, new scan, store report, asset report, findings** — `docs/specs/005-web-scans-and-report.md`
+- [x] **001 Repository scaffold, CI, release and deploy pipeline** — `docs/specs/001-repository-and-pipeline.md`
+      - Images published to GHCR on 2 Oct (release run 2); `deploy-staging` skips until the owner
+        sets `CAPROVER_SERVER` on the `staging` environment. Compose bundle not yet run end to end.
+      - CapRover one-click template added (`deploy/caprover/one-click/sahifa.yml`); it names apps
+        `<name>-db/-api/-web`, so staging from the template is `sahifa-stg-api`, not `sahifa-api-stg`.
+- [x] **002 Connectors, sampling and column profiles** — `docs/specs/002-connectors-and-profiling.md`
+      - Postgres samples are CTEs (`TABLESAMPLE BERNOULLI … REPEATABLE`): a read-only session cannot
+        create temp tables. Views are sampled as their first rows, and the report says so.
+      - Literals go through SQLGlot with NUL rejected; `standard_conforming_strings=on` is forced.
+- [x] **003 The R1 checks, scoring with intervals, the report and the CLI** — `docs/specs/003-checks-scoring-report.md`
+      - Baseline checks (pattern, accepted values, length, range, freshness) only propose on a first
+        scan, so "every R1 check fires on the faulty shop" holds for the 15 rule checks; baselines
+        are tested as proposed and unscored. Spec criterion to be reworded in the next spec PR.
+      - Asset dimension = weighted mean of column scores × product of asset-level checks.
+      - `sah.outliers` tolerance 1 %: the demo shop injects 2 % decimal-shift outliers.
+- [x] **004 API: connections, scans and persistence** — `docs/specs/004-api-connections-and-scans.md`
+      - Scans run in a thread (ADR-0009) until spec 007; findings rows carry evidence as jsonb.
+      - `Scan` also returns `connection_kind` and `files` (the web app uses both).
+- [x] **005 Web: scans, new scan, store report, asset report, findings** — `docs/specs/005-web-scans-and-report.md`
+      - Built and tested (34 tests, layout checked at 390 and 1280 px); the live round trip waits
+        for staging.
 - [ ] S1-6 product page in `Sira-Labs/siralabs.github.io` (owner: access or merge).
 
 ## Sprint 2 — checks lifecycle, worker, history
