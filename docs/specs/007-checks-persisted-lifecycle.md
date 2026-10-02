@@ -6,7 +6,7 @@ ADR-0005. Packages: `core/` (reconciliation of saved and generated checks), `api
 (migration 0003, scan runner, `/api/assets`, `/api/checks`), `web/` (checks on the asset
 report).
 
-Status: draft 2026-10-02, waiting for approval.
+Status: approved 2026-10-02 by the owner; implemented in the same session as spec 006.
 
 ## Goal
 
