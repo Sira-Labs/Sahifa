@@ -1,18 +1,21 @@
-"""Configuration from `SAHIFA_*` environment variables (spec 004).
+"""Configuration from `SAHIFA_*` environment variables (specs 004 and 006).
 
-No secret has a default. In `prod` the API refuses to start with placeholder passwords, without
-an access gate (ADR-0010) or with a source connection whose password is a placeholder.
+No secret has a default. In `prod` the API refuses to start with placeholder passwords, with a
+source connection whose password is a placeholder, and without a way to keep strangers out:
+either the OIDC sign-in (spec 006, ADR-0010) or HTTP basic auth at the proxy.
 """
 
 from __future__ import annotations
 
 import os
+import re
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_PASSWORDS = frozenset(
@@ -20,6 +23,10 @@ PLACEHOLDER_PASSWORDS = frozenset(
 )
 CONNECTION_PREFIX = "SAHIFA_CONN_"
 ACCESS_GATES = ("basic-auth-at-proxy",)
+SIGN_IN_METHODS = ("google", "github", "passkey")
+AuthMode = Literal["oidc", "dev", "proxy"]
+SESSION_SECRET_MIN = 32
+CLIENT_SECRET_MIN = 16
 
 
 class Settings(BaseSettings):
@@ -41,6 +48,76 @@ class Settings(BaseSettings):
     statement_timeout_s: int = Field(default=60, ge=1)
     log_level: str = "info"
     commit: str = "unknown"
+
+    # Sign-in (spec 006). Unset `auth_mode` resolves to oidc in prod (proxy when the basic-auth
+    # gate is declared) and dev elsewhere; see `resolved_auth_mode`.
+    auth_mode: AuthMode | None = None
+    oidc_issuer: str | None = None
+    oidc_client_id: str = "sahifa-api"
+    oidc_client_secret: SecretStr | None = None
+    session_secret: SecretStr | None = None
+    admin_email: str | None = None
+    allowed_emails: str = ""
+    sign_in_methods: str = ",".join(SIGN_IN_METHODS)
+    session_idle: timedelta = timedelta(hours=12)
+    session_absolute: timedelta = timedelta(days=30)
+
+    @field_validator(
+        "auth_mode", "oidc_issuer", "oidc_client_secret", "session_secret", "admin_email", mode="before"
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        """An empty variable (`SAHIFA_AUTH_MODE=` in a .env file) means unset."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("session_idle", "session_absolute", mode="before")
+    @classmethod
+    def _duration(cls, value: object) -> object:
+        """Accept `30s`, `15m`, `12h` and `30d` besides pydantic's own duration forms."""
+        if isinstance(value, str) and (m := re.fullmatch(r"\s*(\d+)\s*([smhd])\s*", value)):
+            unit = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days"}[m.group(2)]
+            return timedelta(**{unit: int(m.group(1))})
+        return value
+
+    @field_validator("sign_in_methods")
+    @classmethod
+    def _methods(cls, value: str) -> str:
+        """Only known methods, at least one, without duplicates."""
+        methods = [m.strip().lower() for m in value.split(",") if m.strip()]
+        unknown = sorted(set(methods) - set(SIGN_IN_METHODS))
+        if unknown or not methods:
+            raise ValueError(f"sign_in_methods must name some of {', '.join(SIGN_IN_METHODS)}; got {value!r}")
+        return ",".join(dict.fromkeys(methods))
+
+    @property
+    def resolved_auth_mode(self) -> AuthMode:
+        """The auth mode in force: the setting; unset, `oidc` in prod (or `proxy` when the
+        basic-auth gate is declared, so installs from before spec 006 keep starting) and `dev`
+        elsewhere."""
+        if self.auth_mode is not None:
+            return self.auth_mode
+        if self.env != "prod":
+            return "dev"
+        return "proxy" if self.access_gate in ACCESS_GATES else "oidc"
+
+    @property
+    def enabled_sign_in_methods(self) -> tuple[str, ...]:
+        """The sign-in methods the login page offers, in the configured order."""
+        return tuple(self.sign_in_methods.split(","))
+
+    @property
+    def access_emails(self) -> frozenset[str]:
+        """Lower-cased addresses that get access: the admin email and the allowed emails."""
+        listed = [self.admin_email or "", *self.allowed_emails.split(",")]
+        return frozenset(e.strip().lower() for e in listed if e.strip())
+
+    def is_admin(self, email: str | None) -> bool:
+        """Whether `email` is the configured admin address."""
+        return bool(email and self.admin_email and email.strip().lower() == self.admin_email.strip().lower())
+
+    def has_access(self, email: str | None) -> bool:
+        """Whether a signed-in `email` may use this install (spec 006, behaviour 4)."""
+        return bool(email) and (email or "").strip().lower() in self.access_emails
 
     @property
     def migration_url(self) -> str:
@@ -64,6 +141,51 @@ def _placeholder_password(url: str) -> bool:
     return not password or password.lower() in PLACEHOLDER_PASSWORDS or len(password) < 12
 
 
+def _placeholder_secret(value: str | None, minimum: int) -> bool:
+    """True for an empty, short or change-me style secret."""
+    text = (value or "").strip()
+    lowered = text.lower()
+    return (
+        len(text) < minimum
+        or lowered in PLACEHOLDER_PASSWORDS
+        or any(word in lowered for word in ("change-me", "changeme", "change_me", "placeholder"))
+    )
+
+
+def _oidc_problems(settings: Settings) -> list[str]:
+    """Settings the OIDC sign-in needs in prod (spec 006)."""
+    problems: list[str] = []
+    url = urlsplit(settings.public_url or "")
+    if url.scheme != "https" or not url.netloc or url.path not in ("", "/"):
+        problems.append("SAHIFA_PUBLIC_URL (an https origin without a path)")
+    if not (settings.oidc_issuer or "").startswith("https://"):
+        problems.append("SAHIFA_OIDC_ISSUER (the realm's https URL)")
+    secret = settings.oidc_client_secret.get_secret_value() if settings.oidc_client_secret else None
+    if _placeholder_secret(secret, CLIENT_SECRET_MIN):
+        problems.append("SAHIFA_OIDC_CLIENT_SECRET (missing, short or placeholder)")
+    session = settings.session_secret.get_secret_value() if settings.session_secret else None
+    if _placeholder_secret(session, SESSION_SECRET_MIN):
+        problems.append(f"SAHIFA_SESSION_SECRET (missing, placeholder or under {SESSION_SECRET_MIN} chars)")
+    if "@" not in (settings.admin_email or ""):
+        problems.append("SAHIFA_ADMIN_EMAIL (the address that gets access)")
+    return problems
+
+
+def _auth_problems(settings: Settings) -> list[str]:
+    """How prod keeps strangers out: the OIDC sign-in, or basic auth at the proxy (spec 006)."""
+    mode = settings.resolved_auth_mode
+    if mode == "dev":
+        return ["SAHIFA_AUTH_MODE (dev is not allowed in prod: use oidc, or proxy behind basic auth)"]
+    if mode == "proxy":
+        if settings.access_gate not in ACCESS_GATES:
+            return ["SAHIFA_ACCESS_GATE (proxy mode needs basic-auth-at-proxy, set once basic auth is on)"]
+        return []
+    problems = _oidc_problems(settings)
+    if problems and settings.auth_mode is None:
+        problems.append("SAHIFA_ACCESS_GATE (or, without sign-in, basic-auth-at-proxy once basic auth is on)")
+    return problems
+
+
 def prod_problems(settings: Settings) -> list[str]:
     """Reasons the settings are unsafe for production; empty when they are fine."""
     if settings.env != "prod":
@@ -73,8 +195,7 @@ def prod_problems(settings: Settings) -> list[str]:
         problems.append("SAHIFA_DATABASE_URL (missing, short or placeholder password)")
     if settings.migration_database_url and _placeholder_password(settings.migration_database_url):
         problems.append("SAHIFA_MIGRATION_DATABASE_URL (missing, short or placeholder password)")
-    if settings.access_gate not in ACCESS_GATES:
-        problems.append("SAHIFA_ACCESS_GATE (set it to basic-auth-at-proxy after enabling basic auth)")
+    problems += _auth_problems(settings)
     for name, url in connection_env().items():
         if url.startswith(("postgres://", "postgresql://")) and _placeholder_password(url):
             problems.append(f"{name} (missing, short or placeholder password)")

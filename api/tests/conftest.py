@@ -14,6 +14,8 @@ from sahifa.settings import Settings
 
 DB_URL = os.environ.get("SAHIFA_TEST_DATABASE_URL")
 needs_db = pytest.mark.skipif(not DB_URL, reason="SAHIFA_TEST_DATABASE_URL not set")
+# What the web app sends on every request; unsafe requests without it get 403 (spec 006).
+CSRF = {"X-Sahifa-Request": "1"}
 
 
 @pytest.fixture
@@ -21,5 +23,8 @@ async def client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     assert DB_URL
     upgrade(DB_URL)
     app = create_app(Settings(database_url=DB_URL, data_dir=tmp_path, commit="test"))
-    async with LifespanManager(app), AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+    async with (
+        LifespanManager(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://t", headers=CSRF) as c,
+    ):
         yield c
