@@ -1,7 +1,9 @@
-// Thin fetch wrapper with one typed function per route of spec 004. Every non-2xx answer
+// Thin fetch wrapper with one typed function per route of specs 004 and 007. Every non-2xx answer
 // becomes an ApiError carrying the API's `detail` as its message. Every request carries the
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
+  Asset,
+  CheckAction,
   Connection,
   ConnectionCreate,
   ConnectionTest,
@@ -12,6 +14,7 @@ import type {
   Scan,
   ScanCreate,
   ScanReport,
+  StoredCheck,
   ValueCount,
   Version,
 } from "./types";
@@ -200,4 +203,21 @@ export const api = {
     );
     return { items: page.items.map(normalizeFinding) };
   },
+
+  listAssets: (connectionId: string, cursor?: string, limit = 200) =>
+    apiGet<Page<Asset>>(`/api/assets${query({ connection_id: connectionId, limit, cursor })}`),
+  /** The stored asset of a connection with this label, or null; walks the pages. */
+  findAsset: async (connectionId: string, label: string): Promise<Asset | null> => {
+    let cursor: string | undefined;
+    do {
+      const page = await api.listAssets(connectionId, cursor);
+      const found = page.items.find((a) => a.label === label);
+      if (found) return found;
+      cursor = page.next_cursor ?? undefined;
+    } while (cursor);
+    return null;
+  },
+  listChecks: (assetId: string) => apiGet<StoredCheck[]>(`/api/checks${query({ asset_id: assetId })}`),
+  changeCheck: (check: Pick<StoredCheck, "id" | "version">, action: CheckAction) =>
+    apiSend<StoredCheck>("POST", `/api/checks/${enc(check.id)}/${action}`, { version: check.version }),
 };

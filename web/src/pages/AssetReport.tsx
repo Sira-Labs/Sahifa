@@ -1,5 +1,6 @@
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { CheckList } from "../components/CheckList";
+import { ChecksPanel } from "../components/ChecksPanel";
 import { ColumnRow } from "../components/ColumnRow";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { ScoreCard } from "../components/ScoreCard";
@@ -15,8 +16,9 @@ function caption(a: Asset): string {
   return `The 95 % intervals cover sampling uncertainty from reading ${formatCount(a.sample_rows)} of ${formatCompact(a.population)} rows.`;
 }
 
-/** `/scans/$scanId/assets/$asset`: asset-level checks, then the columns with their profile and
- * checks. `asset` is the asset label (`namespace.name`). */
+/** `/scans/$scanId/assets/$asset`: asset-level checks, the columns with their profile and
+ * checks, then the stored checks with their lifecycle actions (spec 007). `asset` is the asset
+ * label (`namespace.name`). */
 export function AssetReport() {
   const { scanId, asset } = routeApi.useParams();
   const report = useReport(scanId);
@@ -106,6 +108,8 @@ export function AssetReport() {
           </table>
         </div>
       </section>
+
+      <ChecksPanel scanId={scanId} label={asset} asset={a} />
     </article>
   );
 }

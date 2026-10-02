@@ -178,3 +178,21 @@ export function samplePolicy(sampleRows: number | null | undefined): string {
   if (sampleRows === null || sampleRows === undefined) return "default sample";
   return `up to ${formatCount(sampleRows)} rows per table`;
 }
+
+/** A check's parameters in one short line: `values: paid, shipped · max: 4`. Long lists are cut. */
+export function formatParams(params: Record<string, unknown>, maxItems = 6): string {
+  const parts = Object.entries(params).map(([key, value]) => `${key.replace(/_/g, " ")}: ${paramValue(value, maxItems)}`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+function paramValue(value: unknown, maxItems: number): string {
+  if (Array.isArray(value)) {
+    const shown = value.slice(0, maxItems).map((v) => paramValue(v, maxItems));
+    return value.length > maxItems ? `${shown.join(", ")} … (${value.length - maxItems} more)` : shown.join(", ");
+  }
+  if (typeof value === "number") return formatNumber(value);
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
