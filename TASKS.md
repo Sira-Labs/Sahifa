@@ -40,9 +40,9 @@ next session reads). Sprint priorities, actual dates and the forecast live in
 
 ## Sprint 2 — sign-in, checks lifecycle, worker, history
 
-- [~] **006 Sign-in through Keycloak (BFF)** — `docs/specs/006-sign-in-keycloak-bff.md`
-      - Ported from Tabayyun spec 013 (`sahifa.auth`); open: the staging sign-in check, after the
-        owner sets up realm `sahifa` and switches staging to `oidc`.
+- [x] **006 Sign-in through Keycloak (BFF)** — `docs/specs/006-sign-in-keycloak-bff.md` (PRs #2, #3)
+      - Ported from Tabayyun spec 013 (`sahifa.auth`); staging runs `oidc` since 2026-10-02 and the
+        owner signed in with Google, GitHub and a passkey.
       - Access is `SAHIFA_ADMIN_EMAIL` plus `SAHIFA_ALLOWED_EMAILS`, computed per request, not stored.
       - Third auth mode `proxy`: in prod an unset mode resolves to `proxy` when
         `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` is set, so today's staging keeps starting.
@@ -51,7 +51,7 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Route ids under the new layout route are `/_app/...` (`getRouteApi` in four pages).
       - "Add a passkey" runs Keycloak's passkey registration (`kc_action`) after a fresh sign-in;
         the account console alone could not add a first passkey (spec 006, decision 7).
-- [ ] 007 Assets, columns and checks persisted; lifecycle actions.
+- [ ] 007 Assets, columns and checks persisted; lifecycle actions — `docs/specs/007-checks-persisted-lifecycle.md` (draft, awaiting approval).
 - [ ] 008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
 - [ ] 009 Findings across scans with deduplication and occurrences.
 - [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
@@ -59,9 +59,9 @@ next session reads). Sprint priorities, actual dates and the forecast live in
 
 ## Owner
 
-- [ ] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment
+- [x] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment
       (`deploy/caprover.md`, "Checklist for the owner").
 - [ ] Push access to `Sira-Labs/siralabs.github.io` for the product page.
-- [ ] Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`, Google and GitHub OAuth
+- [x] Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`, Google and GitHub OAuth
       apps, then staging to `SAHIFA_AUTH_MODE=oidc` (`deploy/caprover.md`, section 4a).
 - [ ] Buy ISO/IEC 25024 so the catalogue can cite measure identifiers.
