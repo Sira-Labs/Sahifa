@@ -60,17 +60,22 @@ class ScanRunner:
             try:
                 if source is None:
                     raise RuntimeError(
-                        f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}")
+                        f"connection {conn.name} has no source: set {conn.secret_ref or 'its files'}"
+                    )
                 report = await anyio.to_thread.run_sync(
-                    lambda: _execute(source, names, scan_id, scan.sample_rows, self.settings))
+                    lambda: _execute(source, names, scan_id, scan.sample_rows, self.settings)
+                )
                 await self._succeed(scan_id, report)
                 log.info("scan.succeeded", scan_id=str(scan_id))
-            except Exception as e:  # noqa: BLE001 - any engine failure fails the scan, with its message
+            except Exception as e:
                 message = str(e)[:1000] or e.__class__.__name__
                 log.error("scan.failed", scan_id=str(scan_id), error=message)
                 async with self.sessions() as db:
-                    await db.execute(update(Scan).where(Scan.id == scan_id).values(
-                        status="failed", error=message, finished_at=datetime.now(UTC)))
+                    await db.execute(
+                        update(Scan)
+                        .where(Scan.id == scan_id)
+                        .values(status="failed", error=message, finished_at=datetime.now(UTC))
+                    )
                     await db.commit()
 
     async def _succeed(self, scan_id: uuid.UUID, report: dict[str, Any]) -> None:
@@ -87,34 +92,59 @@ class ScanRunner:
             counts = {s: 0 for s in ("critical", "high", "medium", "low")}
             for f in report.get("findings", []):
                 counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-                db.add(Finding(
-                    scan_id=scan_id, check_type=f["check_type"], asset=f["asset"], column_name=f.get("column"),
-                    dimension=f["dimension"], severity=f["severity"], evaluated=f["evaluated"],
-                    failed=f["failed"], ratio=f["ratio"], low=f["low"], high=f["high"],
-                    summary=f["summary"], next_step=f["next_step"],
-                    evidence={"check_id": f["check_id"], "title": f.get("title"),
-                              "examples": f.get("examples", []), "sql": f.get("sql")},
-                ))
+                db.add(
+                    Finding(
+                        scan_id=scan_id,
+                        check_type=f["check_type"],
+                        asset=f["asset"],
+                        column_name=f.get("column"),
+                        dimension=f["dimension"],
+                        severity=f["severity"],
+                        evaluated=f["evaluated"],
+                        failed=f["failed"],
+                        ratio=f["ratio"],
+                        low=f["low"],
+                        high=f["high"],
+                        summary=f["summary"],
+                        next_step=f["next_step"],
+                        evidence={
+                            "check_id": f["check_id"],
+                            "title": f.get("title"),
+                            "examples": f.get("examples", []),
+                            "sql": f.get("sql"),
+                        },
+                    )
+                )
             scan.finding_counts = counts
             scan.assets_count = len(report.get("assets", []))
             await db.commit()
 
 
-def _execute(source: str | list[str], names: dict[str, str] | None, scan_id: uuid.UUID,
-             sample_rows: int, settings: Settings) -> dict[str, Any]:
+def _execute(
+    source: str | list[str],
+    names: dict[str, str] | None,
+    scan_id: uuid.UUID,
+    sample_rows: int,
+    settings: Settings,
+) -> dict[str, Any]:
     """Run the core engine synchronously (in a thread) and return the report as JSON."""
     from sahifa_core.scan import ScanOptions, run_scan
 
-    options = ScanOptions(sample_rows=sample_rows, seed=uuid.UUID(str(scan_id)).int % 2_147_483_647,
-                          memory_limit=settings.duckdb_memory,
-                          statement_timeout_s=settings.statement_timeout_s)
+    options = ScanOptions(
+        sample_rows=sample_rows,
+        seed=uuid.UUID(str(scan_id)).int % 2_147_483_647,
+        memory_limit=settings.duckdb_memory,
+        statement_timeout_s=settings.statement_timeout_s,
+    )
     report = run_scan(source, options, scan_id=str(scan_id), names=names)
-    return report.model_dump(mode="json")
+    data: dict[str, Any] = report.model_dump(mode="json")
+    return data
 
 
 async def mark_interrupted(db: AsyncSession) -> int:
     result = await db.execute(
-        update(Scan).where(Scan.status.in_(("queued", "running")))
+        update(Scan)
+        .where(Scan.status.in_(("queued", "running")))
         .values(status="failed", error=INTERRUPTED, finished_at=datetime.now(UTC))
     )
     await db.commit()

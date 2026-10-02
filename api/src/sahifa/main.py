@@ -57,8 +57,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         log.error("refusing to start in prod: " + "; ".join(problems))
         raise SystemExit(f"refusing to start in prod: {problems}")
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
-    app = FastAPI(title="Sahifa", version=__version__, lifespan=lifespan,
-                  docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+    app = FastAPI(
+        title="Sahifa",
+        version=__version__,
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        redoc_url=None,
+    )
     app.state.settings = settings
     app.include_router(health.router)
     app.include_router(connections.router)

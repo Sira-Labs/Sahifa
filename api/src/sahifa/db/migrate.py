@@ -1,9 +1,9 @@
 """Programmatic Alembic entry points; the migrations ship inside the package.
 
-    python -m sahifa.db.migrate upgrade [head]
-    python -m sahifa.db.migrate downgrade base
-    python -m sahifa.db.migrate current
-    python -m sahifa.db.migrate check
+python -m sahifa.db.migrate upgrade [head]
+python -m sahifa.db.migrate downgrade base
+python -m sahifa.db.migrate current
+python -m sahifa.db.migrate check
 """
 
 from __future__ import annotations

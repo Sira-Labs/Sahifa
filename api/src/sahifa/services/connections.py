@@ -37,8 +37,9 @@ async def register_from_env(db: AsyncSession) -> int:
     for var, url in connection_env().items():
         name = var.removeprefix(CONNECTION_PREFIX).lower().replace("_", "-")
         stmt = insert(Connection).values(name=name, kind=kind_of(url), secret_ref=var, config={})
-        stmt = stmt.on_conflict_do_update(index_elements=["name"],
-                                          set_={"kind": kind_of(url), "secret_ref": var})
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["name"], set_={"kind": kind_of(url), "secret_ref": var}
+        )
         await db.execute(stmt)
         count += 1
     await db.commit()

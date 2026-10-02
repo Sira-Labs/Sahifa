@@ -32,8 +32,12 @@ def upgrade() -> None:
     op.create_table(
         "scans",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("connection_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("connections.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "connection_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("connections.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("status", sa.String(20), server_default="queued", nullable=False),
         sa.Column("sample_rows", sa.Integer(), nullable=False),
         sa.Column("options", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb"), nullable=False),
@@ -52,8 +56,12 @@ def upgrade() -> None:
     op.create_table(
         "findings",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("scan_id", postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("scans.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "scan_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("scans.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("check_type", sa.String(100), nullable=False),
         sa.Column("asset", sa.Text(), nullable=False),
         sa.Column("column_name", sa.Text(), nullable=True),

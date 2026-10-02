@@ -23,8 +23,15 @@ log = get_logger("sahifa.connections")
 
 def to_out(conn: Connection) -> ConnectionOut:
     available = resolve(conn) is not None
-    return ConnectionOut(id=conn.id, name=conn.name, kind=conn.kind, config=public_config(conn),
-                         secret_ref=conn.secret_ref, available=available, created_at=conn.created_at)
+    return ConnectionOut(
+        id=conn.id,
+        name=conn.name,
+        kind=conn.kind,
+        config=public_config(conn),
+        secret_ref=conn.secret_ref,
+        available=available,
+        created_at=conn.created_at,
+    )
 
 
 @router.get("", response_model=Items[ConnectionOut])
@@ -35,7 +42,9 @@ async def list_connections(db: AsyncSession = Depends(session)) -> Items[Connect
 @router.post("", response_model=ConnectionOut, status_code=status.HTTP_201_CREATED)
 async def create_connection(body: ConnectionIn, db: AsyncSession = Depends(session)) -> ConnectionOut:
     if not body.secret_ref.startswith(CONNECTION_PREFIX):
-        raise HTTPException(422, f"secret_ref must name an environment variable starting with {CONNECTION_PREFIX}")
+        raise HTTPException(
+            422, f"secret_ref must name an environment variable starting with {CONNECTION_PREFIX}"
+        )
     if not os.environ.get(body.secret_ref, "").strip():
         raise HTTPException(422, f"{body.secret_ref} is not set on the server")
     conn = Connection(name=body.name, kind=body.kind, secret_ref=body.secret_ref, config=body.config)
@@ -61,8 +70,9 @@ async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(se
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTest)
-async def test_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(session),
-                          cfg: Settings = Depends(settings)) -> ConnectionTest:
+async def test_connection(
+    connection_id: uuid.UUID, db: AsyncSession = Depends(session), cfg: Settings = Depends(settings)
+) -> ConnectionTest:
     conn = await _get(db, connection_id)
     source = resolve(conn)
     if source is None:
@@ -71,13 +81,14 @@ async def test_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(s
     def probe() -> int:
         from sahifa_core.connectors import open_source
 
-        with open_source(source, statement_timeout_s=cfg.statement_timeout_s,
-                         application_name="sahifa/test") as src:
+        with open_source(
+            source, statement_timeout_s=cfg.statement_timeout_s, application_name="sahifa/test"
+        ) as src:
             return len(src.list_assets())
 
     try:
         count = await anyio.to_thread.run_sync(probe)
-    except Exception as e:  # noqa: BLE001 - the message goes back to the person testing
+    except Exception as e:
         log.warning("conn.failed", connection=conn.name, error=str(e)[:300])
         return ConnectionTest(ok=False, assets=0, error=str(e)[:500])
     return ConnectionTest(ok=True, assets=count)
