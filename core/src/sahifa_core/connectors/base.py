@@ -57,6 +57,10 @@ class Connector(ABC):
     def sample(self, ref: AssetRef, rows: int, seed: int, population: int) -> Relation:
         """Draw the scan's sample of `rows` rows (0: every row) reproducibly from `seed`."""
 
+    def full_ref(self, ref: AssetRef) -> str:
+        """What follows FROM to read every row of `ref`."""
+        return self.dialect.table(ref)
+
     @abstractmethod
     def _execute(self, sql: str) -> list[tuple[Any, ...]]: ...
 

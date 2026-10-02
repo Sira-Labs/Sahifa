@@ -40,7 +40,9 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         connection.exec_driver_sql("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_KEY,))
         connection.commit()
-        context.configure(connection=connection, target_metadata=target_metadata, transaction_per_migration=True)
+        context.configure(
+            connection=connection, target_metadata=target_metadata, transaction_per_migration=True
+        )
         with context.begin_transaction():
             context.run_migrations()
 

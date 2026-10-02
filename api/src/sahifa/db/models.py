@@ -30,9 +30,7 @@ SCAN_STATUSES = ("queued", "running", "succeeded", "failed")
 
 class Connection(Base):
     __tablename__ = "connections"
-    __table_args__ = (
-        CheckConstraint(f"kind IN {CONNECTION_KINDS}", name="ck_connections_kind"),
-    )
+    __table_args__ = (CheckConstraint(f"kind IN {CONNECTION_KINDS}", name="ck_connections_kind"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), unique=True)

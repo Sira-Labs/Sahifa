@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch or pull request.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: python core
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: core }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with: { enable-cache: true }
+      - run: uv python install 3.12
+      - run: uv sync --extra dev --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -q
+      # End to end on DuckDB: a synthetic shop with injected faults must produce findings.
+      - name: smoke scan of a synthetic shop
+        run: |
+          uv run sahifa synth /tmp/shop && uv run sahifa scan /tmp/shop --json | python3 -c "import json,sys; r=json.load(sys.stdin); assert r['findings'], 'expected findings'; print(r['score']['overall'])"
+
+  api:
+    name: python api
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: api }
+    # One throwaway Postgres serves as the metadata database and as a source to scan.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: sahifa
+          POSTGRES_PASSWORD: sahifa
+          POSTGRES_DB: sahifa
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sahifa"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:sahifa@localhost:5432/sahifa
+      SAHIFA_TEST_DATABASE_URL: postgresql+psycopg://sahifa:sahifa@localhost:5432/sahifa
+      SAHIFA_TEST_SOURCE_URL: postgresql://sahifa:sahifa@localhost:5432/sahifa
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with: { enable-cache: true }
+      - run: uv python install 3.12
+      - run: uv sync --extra dev --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -q
+      # Models and migrations must agree; the tests leave the schema at head.
+      - run: uv run alembic upgrade head && uv run alembic check
+      - run: uv run --with pip-audit pip-audit --skip-editable || true
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: web }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with: { package_json_file: web/package.json }
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm audit --audit-level high || true

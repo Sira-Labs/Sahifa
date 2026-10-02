@@ -47,8 +47,9 @@ def open_source(
     if source_kind(first) == "postgres":
         if len(items) > 1:
             raise UsageError("scan one database at a time")
-        return PostgresConnector(first, statement_timeout_s=statement_timeout_s,
-                                 application_name=application_name)
+        return PostgresConnector(
+            first, statement_timeout_s=statement_timeout_s, application_name=application_name
+        )
     if first.startswith("duckdb://"):
         path = Path(first.removeprefix("duckdb://"))
         if not path.is_file():

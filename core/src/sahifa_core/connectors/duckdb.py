@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import re
 from pathlib import Path
@@ -31,8 +32,22 @@ def logical_type(physical: str) -> LogicalType:
     t = physical.upper()
     if t.endswith("[]") or t.startswith(("STRUCT", "MAP", "UNION")) or "[" in t:
         return LogicalType.OTHER
-    if t in {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT", "USMALLINT",
-             "UINTEGER", "UBIGINT", "UHUGEINT", "INT", "INT8", "INT4", "INT2"}:
+    if t in {
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+        "UHUGEINT",
+        "INT",
+        "INT8",
+        "INT4",
+        "INT2",
+    }:
         return LogicalType.INTEGER
     if t in {"FLOAT", "DOUBLE", "REAL"} or t.startswith(("DECIMAL", "NUMERIC")):
         return LogicalType.DECIMAL
@@ -59,10 +74,17 @@ def expand_paths(paths: list[str]) -> list[Path]:
             raise UsageError(f"remote paths are not supported yet (spec 009): {raw}")
         p = Path(raw).expanduser()
         if any(ch in raw for ch in "*?["):
-            files.extend(sorted(Path(m) for m in glob.glob(str(p))
-                                if Path(m).is_file() and Path(m).suffix.lower() in SUPPORTED_EXTENSIONS))
+            files.extend(
+                sorted(
+                    Path(m)
+                    for m in glob.glob(str(p))
+                    if Path(m).is_file() and Path(m).suffix.lower() in SUPPORTED_EXTENSIONS
+                )
+            )
         elif p.is_dir():
-            files.extend(sorted(x for x in p.iterdir() if x.is_file() and x.suffix.lower() in SUPPORTED_EXTENSIONS))
+            files.extend(
+                sorted(x for x in p.iterdir() if x.is_file() and x.suffix.lower() in SUPPORTED_EXTENSIONS)
+            )
         elif p.is_file():
             if p.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 raise UsageError(f"unsupported file type {p.suffix!r}: {p.name}")
@@ -99,13 +121,13 @@ class DuckDBConnector(Connector):
             else:
                 self.con = duckdb.connect(":memory:")
                 self.label = ", ".join(f.name for f in (files or [])[:3]) + (
-                    f" and {len(files or []) - 3} more" if len(files or []) > 3 else "")
+                    f" and {len(files or []) - 3} more" if len(files or []) > 3 else ""
+                )
             self.con.execute(f"SET memory_limit = {self.dialect.literal(memory_limit)}")
             self.con.execute(f"SET threads = {int(threads)}")
-            try:
+            # Without ICU, timestamps with time zone stay in local time.
+            with contextlib.suppress(duckdb.Error):
                 self.con.execute("SET TimeZone = 'UTC'")
-            except duckdb.Error:  # ICU missing: timestamps with time zone stay in local time
-                pass
         except duckdb.Error as e:
             raise SourceError(f"cannot open DuckDB: {e}") from e
         self._database = database
@@ -146,6 +168,9 @@ class DuckDBConnector(Connector):
             for s, n, t in rows
         ]
 
+    def full_ref(self, ref: AssetRef) -> str:
+        return self._from(ref)
+
     def _from(self, ref: AssetRef) -> str:
         if ref.namespace:
             return self.dialect.table(ref)
@@ -157,8 +182,9 @@ class DuckDBConnector(Connector):
         except duckdb.Error as e:
             raise SourceError(f"cannot describe {ref.label}: {e}") from e
         columns = [
-            ColumnInfo(name=r[0], position=i + 1, physical_type=str(r[1]),
-                       logical_type=logical_type(str(r[1])))
+            ColumnInfo(
+                name=r[0], position=i + 1, physical_type=str(r[1]), logical_type=logical_type(str(r[1]))
+            )
             for i, r in enumerate(rows)
         ]
         info = AssetInfo(ref=ref, columns=columns)
@@ -184,9 +210,13 @@ class DuckDBConnector(Connector):
             elif ctype == "NOT NULL":
                 not_null.update(cols)
             elif ctype == "FOREIGN KEY" and len(cols) == 1 and ref_table and ref_cols:
-                info.foreign_keys.append(ForeignKey(
-                    column=cols[0], parent=AssetRef(namespace=info.ref.namespace, name=ref_table),
-                    parent_column=list(ref_cols)[0]))
+                info.foreign_keys.append(
+                    ForeignKey(
+                        column=cols[0],
+                        parent=AssetRef(namespace=info.ref.namespace, name=ref_table),
+                        parent_column=next(iter(ref_cols)),
+                    )
+                )
         for c in info.columns:
             c.declared_not_null = c.name in not_null
 

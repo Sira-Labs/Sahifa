@@ -37,11 +37,14 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S", "N", "T20", "SIM", "RUF"]
-ignore = ["S101", "S608"]  # S608: SQL is built through sql.py, which quotes identifiers and literals
+ignore = ["S101", "S608", "RUF001", "RUF002", "RUF003"]
+# S608: SQL is built through sql.py, which quotes identifiers and literals.
+# RUF001-3: en dashes and typographic characters in user-facing text are intended.
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "T20"]
 "src/sahifa_core/cli.py" = ["T20"]
+"src/sahifa_core/synth.py" = ["S311"]  # demo data, not security
 
 [tool.mypy]
 python_version = "3.11"

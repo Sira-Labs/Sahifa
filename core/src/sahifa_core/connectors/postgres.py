@@ -18,15 +18,25 @@ EXACT_COUNT_LIMIT = 10_000_000
 SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
 
 _TYPES: dict[str, LogicalType] = {
-    "smallint": LogicalType.INTEGER, "integer": LogicalType.INTEGER, "bigint": LogicalType.INTEGER,
-    "numeric": LogicalType.DECIMAL, "real": LogicalType.DECIMAL, "double precision": LogicalType.DECIMAL,
+    "smallint": LogicalType.INTEGER,
+    "integer": LogicalType.INTEGER,
+    "bigint": LogicalType.INTEGER,
+    "numeric": LogicalType.DECIMAL,
+    "real": LogicalType.DECIMAL,
+    "double precision": LogicalType.DECIMAL,
     "money": LogicalType.DECIMAL,
     "boolean": LogicalType.BOOLEAN,
-    "character varying": LogicalType.TEXT, "character": LogicalType.TEXT, "text": LogicalType.TEXT,
-    "uuid": LogicalType.TEXT, "name": LogicalType.TEXT, "citext": LogicalType.TEXT,
+    "character varying": LogicalType.TEXT,
+    "character": LogicalType.TEXT,
+    "text": LogicalType.TEXT,
+    "uuid": LogicalType.TEXT,
+    "name": LogicalType.TEXT,
+    "citext": LogicalType.TEXT,
     "date": LogicalType.DATE,
-    "timestamp without time zone": LogicalType.TIMESTAMP, "timestamp with time zone": LogicalType.TIMESTAMP,
-    "json": LogicalType.JSON, "jsonb": LogicalType.JSON,
+    "timestamp without time zone": LogicalType.TIMESTAMP,
+    "timestamp with time zone": LogicalType.TIMESTAMP,
+    "json": LogicalType.JSON,
+    "jsonb": LogicalType.JSON,
     "bytea": LogicalType.BINARY,
 }
 
@@ -43,7 +53,9 @@ def split_url(url: str) -> tuple[str, list[str]]:
     params = parse_qsl(parts.query, keep_blank_values=True)
     schemas = [s.strip() for k, v in params if k == "schemas" for s in v.split(",") if s.strip()]
     rest = [(k, v) for k, v in params if k != "schemas"]
-    scheme = "postgresql" if parts.scheme in ("postgres", "postgresql", "postgresql+psycopg") else parts.scheme
+    scheme = (
+        "postgresql" if parts.scheme in ("postgres", "postgresql", "postgresql+psycopg") else parts.scheme
+    )
     return urlunsplit((scheme, parts.netloc, parts.path, urlencode(rest), parts.fragment)), schemas
 
 
@@ -64,17 +76,20 @@ class PostgresConnector(Connector):
         self._url, self.schemas = split_url(url)
         parts = urlsplit(self._url)
         self.label = f"{parts.hostname or 'localhost'}/{parts.path.lstrip('/') or 'postgres'}"
-        options = " ".join([
-            "-c default_transaction_read_only=on",
-            f"-c statement_timeout={int(statement_timeout_s) * 1000}",
-            "-c lock_timeout=2000",
-            "-c idle_in_transaction_session_timeout=300000",
-            "-c TimeZone=UTC",
-            "-c standard_conforming_strings=on",
-        ])
+        options = " ".join(
+            [
+                "-c default_transaction_read_only=on",
+                f"-c statement_timeout={int(statement_timeout_s) * 1000}",
+                "-c lock_timeout=2000",
+                "-c idle_in_transaction_session_timeout=300000",
+                "-c TimeZone=UTC",
+                "-c standard_conforming_strings=on",
+            ]
+        )
         try:
-            self.con = psycopg.connect(self._url, options=options,
-                                       application_name=application_name[:63], connect_timeout=10)
+            self.con = psycopg.connect(
+                self._url, options=options, application_name=application_name[:63], connect_timeout=10
+            )
             self.con.read_only = True
             self.con.autocommit = True
         except psycopg.Error as e:
@@ -89,7 +104,7 @@ class PostgresConnector(Connector):
         self.queries += 1
         try:
             with self.con.cursor() as cur:
-                cur.execute(sql, params)  # type: ignore[arg-type]  # metadata queries use bound params
+                cur.execute(sql.encode(), params)  # metadata queries use bound parameters
                 return cur.fetchall()
         except psycopg.Error as e:
             raise SourceError(redact(str(e), self._url)) from e
@@ -114,8 +129,13 @@ class PostgresConnector(Connector):
         if not cols:
             raise SourceError(f"{ref.label} has no readable columns")
         columns = [
-            ColumnInfo(name=n, position=i + 1, physical_type=udt if dt in ("USER-DEFINED", "ARRAY") else dt,
-                       logical_type=logical_type(dt, udt), declared_not_null=(nullable == "NO"))
+            ColumnInfo(
+                name=n,
+                position=i + 1,
+                physical_type=udt if dt in ("USER-DEFINED", "ARRAY") else dt,
+                logical_type=logical_type(dt, udt),
+                declared_not_null=(nullable == "NO"),
+            )
             for i, (n, dt, udt, nullable) in enumerate(cols)
         ]
         info = AssetInfo(ref=ref, columns=columns)
@@ -128,7 +148,8 @@ class PostgresConnector(Connector):
             "  JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.n ORDER BY k.o)::text[] "
             "FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid "
             "JOIN pg_namespace n ON n.oid = t.relnamespace "
-            "LEFT JOIN pg_class fc ON fc.oid = c.confrelid LEFT JOIN pg_namespace fn ON fn.oid = fc.relnamespace "
+            "LEFT JOIN pg_class fc ON fc.oid = c.confrelid "
+            "LEFT JOIN pg_namespace fn ON fn.oid = fc.relnamespace "
             "WHERE n.nspname = %s AND t.relname = %s AND c.contype IN ('p', 'u', 'f') ORDER BY c.conname",
             [ref.namespace, ref.name],
         )
@@ -139,8 +160,13 @@ class PostgresConnector(Connector):
             elif contype == "u":
                 info.unique.append(keys)
             elif contype == "f" and len(keys) == 1 and fkeys:
-                info.foreign_keys.append(ForeignKey(column=keys[0], parent=AssetRef(namespace=fschema, name=ftable),
-                                                    parent_column=list(fkeys)[0]))
+                info.foreign_keys.append(
+                    ForeignKey(
+                        column=keys[0],
+                        parent=AssetRef(namespace=fschema, name=ftable),
+                        parent_column=next(iter(fkeys)),
+                    )
+                )
         est = self._params(
             "SELECT c.reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
             "WHERE n.nspname = %s AND c.relname = %s",
@@ -166,8 +192,10 @@ class PostgresConnector(Connector):
         else:
             # Over-sample by a fifth so LIMIT almost always has enough rows to take.
             pct = min(100.0, 100.0 * rows * 1.2 / max(population, 1))
-            body = (f"SELECT * FROM {full} TABLESAMPLE BERNOULLI ({pct:.6f}) REPEATABLE ({int(seed)}) "
-                    f"LIMIT {int(rows)}")
+            body = (
+                f"SELECT * FROM {full} TABLESAMPLE BERNOULLI ({pct:.6f}) REPEATABLE ({int(seed)}) "
+                f"LIMIT {int(rows)}"
+            )
             method = f"Bernoulli sample of about {rows:,} rows (seed {seed})"
         return Relation(asset=ref, ref=name, full=full, prefix=f"WITH {name} AS ({body}) ", method=method)
 

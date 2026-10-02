@@ -24,11 +24,18 @@ async def healthz(db: AsyncSession = Depends(session)) -> dict[str, Any]:
     except (SQLAlchemyError, OSError):
         database = "unavailable"
     # `workers` lists worker commits once the worker exists (spec 007); empty until then.
-    return {"status": "ok" if database == "ok" else "degraded", "database": database,
-            "version": __version__, "workers": []}
+    return {
+        "status": "ok" if database == "ok" else "degraded",
+        "database": database,
+        "version": __version__,
+        "workers": [],
+    }
 
 
 @router.get("/api/version")
 async def version(request: Request, cfg: Settings = Depends(settings)) -> dict[str, Any]:
-    return {"version": __version__, "commit": cfg.commit,
-            "schema_revision": getattr(request.app.state, "schema_revision", None)}
+    return {
+        "version": __version__,
+        "commit": cfg.commit,
+        "schema_revision": getattr(request.app.state, "schema_revision", None),
+    }
