@@ -44,6 +44,7 @@ describe("Devices", () => {
     expect(screen.getByText(/Signed in as/).textContent).toContain(ME.user.email);
     expect(within(screen.getByRole("listitem", { name: "Firefox on Windows" })).getByText(/a passkey/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Manage passkeys" }).getAttribute("href")).toBe(OPTIONS.account_url);
+    expect(screen.getByRole("link", { name: "Add a passkey" }).getAttribute("href")).toBe("/api/auth/passkey/add");
 
     await user.click(within(screen.getByRole("listitem", { name: "Firefox on Windows" })).getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(screen.queryByRole("listitem", { name: "Firefox on Windows" })).toBeNull());
@@ -100,5 +101,36 @@ describe("Devices", () => {
     expect(await screen.findByText(/no accounts or devices to manage/)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Signed-in devices" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Manage passkeys" })).toBeNull();
+  });
+
+  it.each([
+    ["success", /Passkey added/],
+    ["cancelled", /No passkey was added/],
+    ["error", /could not be added/],
+  ])("shows the passkey registration's outcome (%s)", async (status, text) => {
+    stubFetch(
+      (url, init) => {
+        if (url === "/api/auth/options") return OPTIONS;
+        if (url === "/api/auth/sessions") return [device("d1", true, CHROME)];
+        throw new Error(`unexpected ${init?.method ?? "GET"} ${url}`);
+      },
+      { me: ME },
+    );
+    renderApp(`/settings/account?passkey=${status}`);
+    expect((await screen.findByText(text)).getAttribute("role")).toBe("status");
+  });
+
+  it("ignores an unknown passkey status", async () => {
+    stubFetch(
+      (url, init) => {
+        if (url === "/api/auth/options") return OPTIONS;
+        if (url === "/api/auth/sessions") return [device("d1", true, CHROME)];
+        throw new Error(`unexpected ${init?.method ?? "GET"} ${url}`);
+      },
+      { me: ME },
+    );
+    renderApp("/settings/account?passkey=%3Cscript%3E");
+    await screen.findByRole("link", { name: "Add a passkey" });
+    expect(screen.queryByText(/Passkey added|No passkey|could not be added/)).toBeNull();
   });
 });
