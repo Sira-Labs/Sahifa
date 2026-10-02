@@ -1,0 +1,401 @@
+<title>Sahifa</title>
+<meta name="description" content="Sahifa assesses whole data stores: it profiles every table, checks it, scores it per ISO 25012 dimension with confidence intervals, and explains what it found. Self-hosted, Apache-2.0.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Kufi+Arabic:wght@500;700&display=swap">
+<style>
+/* Layout: Sira Labs product page. Header, hero (thesis left, an example "charter" report right:
+   a store score with its interval, ISO 25012 dimensions as interval bars, numbered clauses),
+   the four-step loop, what sets it apart, the open band, sister-of-Tabayyun, the name, when.
+   Fonts and spacing follow siralabs.org (assets/site.css); the lapis-ink palette is Sahifa's. */
+:root {
+  --bg: #eef1f5;
+  --surface: #fbfcfd;
+  --surface-2: #e3e8ef;
+  --line: #d3dae4;
+  --fg: #141b2d;
+  --muted: #4a5569;
+  --accent: #2b4fb3;
+  --accent-ink: #ffffff;
+  --ok: #1d7a4c;
+  --warn: #9a5c06;
+  --bad: #b3303a;
+  --band-bg: #141b2d;
+  --band-fg: #eef1f5;
+  --band-muted: #b9c2d6;
+  --band-chip: #222b42;
+  --band-line: #333e5c;
+  --band-accent: #9db4ff;
+  --radius: 18px;
+  --max: 1120px;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: Figtree, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-ar: "Noto Kufi Arabic", "Geeza Pro", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1220; --surface: #151c2e; --surface-2: #1c2539; --line: #283350;
+    --fg: #e8ecf4; --muted: #a6b0c5; --accent: #93abff; --accent-ink: #0d1220;
+    --ok: #4cc38a; --warn: #e3a440; --bad: #f2777f;
+    --band-bg: #e8ecf4; --band-fg: #141b2d; --band-muted: #4a5569; --band-chip: #d6dce7;
+    --band-line: #c3cad8; --band-accent: #2b4fb3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1220; --surface: #151c2e; --surface-2: #1c2539; --line: #283350;
+  --fg: #e8ecf4; --muted: #a6b0c5; --accent: #93abff; --accent-ink: #0d1220;
+  --ok: #4cc38a; --warn: #e3a440; --bad: #f2777f;
+  --band-bg: #e8ecf4; --band-fg: #141b2d; --band-muted: #4a5569; --band-chip: #d6dce7;
+  --band-line: #c3cad8; --band-accent: #2b4fb3;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.wrap { max-width: var(--max); margin: 0 auto; padding-inline: clamp(16px, 4vw, 24px); }
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 16px; top: 16px; background: var(--surface); padding: 8px 12px; z-index: 10; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; line-height: 1.08; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(38px, 5.4vw, 64px); font-weight: 700; }
+h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 700; margin-bottom: 16px; }
+h3 { font-size: 22px; font-weight: 700; }
+p { margin: 0; }
+
+/* Header */
+.site-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 22px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--fg); text-decoration: none; font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -0.02em; }
+.brand svg { width: 36px; height: 36px; }
+.nav { display: flex; gap: 22px; flex-wrap: wrap; }
+.nav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 15px; min-height: 44px; display: inline-flex; align-items: center; }
+.nav a:hover { color: var(--fg); }
+
+/* Hero */
+.hero { padding-block: 56px 48px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.hero .ar { font-family: var(--font-ar); font-size: 28px; color: var(--muted); margin: 0 0 6px; }
+.lede { font-size: clamp(19px, 2vw, 21px); color: var(--muted); max-width: 32em; margin-top: 20px; text-wrap: pretty; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.button { display: inline-flex; align-items: center; min-height: 52px; padding-inline: 22px; border-radius: 14px; font-weight: 700; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+.button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* The charter: an example store report */
+.charter { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 24px; display: grid; gap: 18px; box-shadow: 0 24px 60px -36px rgba(20, 27, 45, 0.45); min-width: 0; }
+.charter-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.charter-title { font-family: var(--font-display); font-weight: 700; font-size: 19px; margin-top: 2px; }
+.example { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px dashed var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+.score-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-block: 1px solid var(--line); padding-block: 14px; }
+.score { font-family: var(--font-display); font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -0.03em; }
+.score small { font-size: 22px; color: var(--muted); font-weight: 500; }
+.score-meta { font-size: 14px; color: var(--muted); display: grid; gap: 2px; }
+
+.dims { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.dim { display: grid; grid-template-columns: 112px minmax(0, 1fr) 118px; align-items: center; gap: 12px; font-size: 14px; }
+.dim .name { font-weight: 600; }
+.dim .val { text-align: right; font-size: 13px; color: var(--muted); }
+.dim .val b { color: var(--fg); font-weight: 500; }
+.track { position: relative; height: 14px; border-radius: 7px; background: var(--surface-2); }
+/* Scale: 80 % at the left edge, 100 % at the right. left = (v - 80) / 20. */
+.track .fill { position: absolute; inset-block: 4px; left: 0; border-radius: 3px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.track .ci { position: absolute; inset-block: 1px; border-radius: 3px; background: var(--accent); opacity: 0.9; min-width: 3px; }
+.axis { display: grid; grid-template-columns: 112px minmax(0, 1fr) 118px; gap: 12px; font-size: 11px; color: var(--muted); }
+.axis span:nth-child(2) { display: flex; justify-content: space-between; }
+
+.clauses { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.clause { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; padding-block: 11px; border-bottom: 1px solid var(--line); font-size: 14px; align-items: start; }
+.clause:last-child { border-bottom: 0; padding-bottom: 0; }
+.clause .n { font-family: var(--font-mono); color: var(--muted); font-size: 12px; padding-top: 2px; }
+.clause code { font-family: var(--font-mono); font-size: 12.5px; }
+.clause .why { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.chip { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 9px; border: 1px solid currentColor; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.ok { color: var(--ok); }
+.chip.bad { color: var(--bad); }
+.chip.warn { color: var(--warn); }
+.chip.info { color: var(--accent); }
+
+/* Sections */
+section { padding-block: 56px; }
+.section-intro { color: var(--muted); max-width: 44em; margin: 0 0 32px; }
+.grid { display: grid; gap: 18px; }
+.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.card p { color: var(--muted); font-size: 16px; }
+.step-number { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+.feature { padding: 22px 0 0; border-top: 2px solid var(--fg); display: grid; gap: 8px; align-content: start; }
+.feature p { color: var(--muted); font-size: 16px; }
+.feature .proof { font-size: 13px; color: var(--muted); font-family: var(--font-mono); }
+
+.band { background: var(--band-bg); color: var(--band-fg); border-radius: 28px; padding: clamp(28px, 5vw, 48px); display: grid; gap: 18px; }
+.band h2 { color: var(--band-fg); margin: 0; }
+.band p { color: var(--band-muted); max-width: 46em; }
+.band a { color: var(--band-accent); }
+.sources { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 6px 0 0; list-style: none; }
+.sources li { padding: 7px 14px; border-radius: 999px; background: var(--band-chip); border: 1px solid var(--band-line); color: var(--band-fg); font-weight: 600; font-size: 15px; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: start; }
+.flow { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.flow li { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; display: grid; gap: 2px; }
+.flow li b { font-family: var(--font-display); font-size: 17px; }
+.flow li span { color: var(--muted); font-size: 15px; }
+.flow .to { color: var(--accent); font-weight: 700; }
+
+.name-block { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: start; }
+.name-block .big-ar { font-family: var(--font-ar); font-size: clamp(56px, 9vw, 104px); line-height: 1.2; color: var(--accent); }
+.name-block p { color: var(--muted); max-width: 40em; margin-bottom: 14px; }
+
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; }
+.timeline li { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.timeline li:last-child { border-bottom: 0; }
+.timeline .when { font-weight: 700; }
+.timeline span:last-child { color: var(--muted); }
+.timeline strong { color: var(--fg); }
+
+.site-footer { border-top: 1px solid var(--line); padding-block: 28px 40px; margin-top: 40px; color: var(--muted); font-size: 15px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.site-footer a { color: var(--muted); }
+
+@media (max-width: 960px) {
+  .hero, .split { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: 1fr; }
+  .name-block { grid-template-columns: 1fr; gap: 8px; }
+  .timeline li { grid-template-columns: 1fr; gap: 2px; }
+}
+@media (max-width: 560px) {
+  .grid-4 { grid-template-columns: 1fr; }
+  .charter { padding: 18px; }
+  .dim, .axis { grid-template-columns: 92px minmax(0, 1fr); }
+  .dim .val { grid-column: 2; text-align: left; margin-top: -4px; }
+  .axis span:last-child { display: none; }
+  .clause { grid-template-columns: 24px minmax(0, 1fr); }
+  .clause .chip { grid-column: 2; justify-self: start; }
+  .score { font-size: 46px; }
+}
+</style>
+
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header class="site-header">
+    <a class="brand" href="#main" aria-label="Sahifa">
+      <svg viewBox="0 0 400 400" aria-hidden="true"><g transform="translate(0,0) scale(1.0)"><path d="M96 48 H252 L320 116 V336 Q320 352 304 352 H96 Q80 352 80 336 V64 Q80 48 96 48 Z" fill="var(--surface)" stroke="var(--fg)" stroke-width="22" stroke-linejoin="round"/><path d="M252 48 V100 Q252 116 268 116 H320" fill="none" stroke="var(--fg)" stroke-width="22" stroke-linejoin="round"/><g stroke="var(--fg)" stroke-width="22" stroke-linecap="round"><line x1="132" y1="168" x2="156" y2="168"/><line x1="190" y1="168" x2="268" y2="168"/><line x1="132" y1="220" x2="156" y2="220"/><line x1="190" y1="220" x2="248" y2="220"/><line x1="132" y1="272" x2="156" y2="272"/><line x1="190" y1="272" x2="200" y2="272"/></g><circle cx="292" cy="300" r="76" fill="var(--accent)" stroke="var(--surface)" stroke-width="14"/><path d="M292.00 254.00 L305.47 267.47 L324.53 267.47 L324.53 286.53 L338.00 300.00 L324.53 313.47 L324.53 332.53 L305.47 332.53 L292.00 346.00 L278.53 332.53 L259.47 332.53 L259.47 313.47 L246.00 300.00 L259.47 286.53 L259.47 267.47 L278.53 267.47 Z" fill="var(--surface)" stroke="var(--surface)" stroke-width="4" stroke-linejoin="round"/></g></svg>
+      Sahifa
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#different">What is different</a>
+      <a href="#when">When</a>
+      <a href="https://github.com/Sira-Labs/Sahifa">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="ar" lang="ar" dir="rtl" style="text-align: left">الصحيفة</p>
+        <h1 id="hero-title">Know what your data promises, and whether it keeps it.</h1>
+        <p class="lede">Sahifa reads a whole data store, from Postgres to Parquet on S3. It profiles every table, writes the checks for you, scores each quality dimension with an honest error bar, and tells you where the bad rows come from.</p>
+        <div class="actions">
+          <a class="button primary" href="#when">First preview: October 2026</a>
+          <a class="button" href="https://github.com/Sira-Labs/Sahifa">Follow the build</a>
+        </div>
+      </div>
+
+      <article class="charter" aria-label="Example report for one data store">
+        <div class="charter-head">
+          <div>
+            <div class="eyebrow">Store report · 2 Oct 2026, 06:00 UTC</div>
+            <div class="charter-title">warehouse <span class="mono">shop_prod</span></div>
+          </div>
+          <span class="example">Example data</span>
+        </div>
+
+        <div class="score-row">
+          <div class="score mono">92.7<small> / 100</small></div>
+          <div class="score-meta">
+            <span class="mono">95 % interval 92.3 – 93.1</span>
+            <span>1,284 tables · 41.2 M rows sampled</span>
+          </div>
+        </div>
+
+        <ul class="dims" aria-label="Scores per ISO/IEC 25012 characteristic, with 95 % intervals">
+          <!-- Each bar: fill to the point estimate, dark segment = interval. Scale 80–100. -->
+          <li class="dim"><span class="name">Completeness</span><span class="track"><span class="fill" style="width:90.5%"></span><span class="ci" style="left:89%;width:3%"></span></span><span class="val mono"><b>98.1</b> 97.8–98.4</span></li>
+          <li class="dim"><span class="name">Accuracy</span><span class="track"><span class="fill" style="width:48%"></span><span class="ci" style="left:40.5%;width:14.5%"></span></span><span class="val mono"><b>89.6</b> 88.1–91.0</span></li>
+          <li class="dim"><span class="name">Consistency</span><span class="track"><span class="fill" style="width:71%"></span><span class="ci" style="left:68.5%;width:4.5%"></span></span><span class="val mono"><b>94.2</b> 93.7–94.6</span></li>
+          <li class="dim"><span class="name">Validity</span><span class="track"><span class="fill" style="width:51.5%"></span><span class="ci" style="left:49.5%;width:4.5%"></span></span><span class="val mono"><b>90.3</b> 89.9–90.8</span></li>
+          <li class="dim"><span class="name">Uniqueness</span><span class="track"><span class="fill" style="width:97%"></span><span class="ci" style="left:96.5%;width:1%"></span></span><span class="val mono"><b>99.4</b> 99.3–99.5</span></li>
+          <li class="dim"><span class="name">Currentness</span><span class="track"><span class="fill" style="width:25%"></span><span class="ci" style="left:1%;width:44.5%"></span></span><span class="val mono"><b>85.0</b> 80.2–88.9</span></li>
+          <li class="axis" aria-hidden="true"><span></span><span class="mono"><span>80</span><span>90</span><span>100</span></span><span></span></li>
+        </ul>
+
+        <ol class="clauses" aria-label="Clauses of the store's contract">
+          <li class="clause">
+            <span class="n">§1</span>
+            <span><code>orders.customer_id</code> refers to <code>customers.id</code>
+              <span class="why">312 orphans since 29 Sep, 94 % of them from <code>source = pos_berlin</code>.</span></span>
+            <span class="chip bad">Broken</span>
+          </li>
+          <li class="clause">
+            <span class="n">§2</span>
+            <span><code>events</code> loaded by 06:00
+              <span class="why">Last load 3 h 40 min ago. Alert threshold set for 1 false alarm in 100 days.</span></span>
+            <span class="chip warn">Late</span>
+          </li>
+          <li class="clause">
+            <span class="n">§3</span>
+            <span><code>customers.iban</code> is a valid IBAN (ISO 13616)
+              <span class="why">99.97 % of 2.1 M rows pass the check digits.</span></span>
+            <span class="chip ok">Kept</span>
+          </li>
+          <li class="clause">
+            <span class="n">§4</span>
+            <span><code>invoices.vat_id</code> matches the EU VAT format
+              <span class="why">Suggested from the profile. Waiting for your approval.</span></span>
+            <span class="chip info">Proposed</span>
+          </li>
+        </ol>
+      </article>
+    </section>
+
+    <section id="how" aria-labelledby="how-title">
+      <h2 id="how-title">How it works</h2>
+      <p class="section-intro">One loop for every table in the store. Each run adds to a history, so the checks, the thresholds and the scores get sharper the longer Sahifa watches.</p>
+      <div class="grid grid-4">
+        <div class="card">
+          <span class="step-number">01 · Profile</span>
+          <h3>Read every column</h3>
+          <p>Types, null shares, distinct counts, patterns, ranges and keys, computed inside your database or on the files where they lie.</p>
+        </div>
+        <div class="card">
+          <span class="step-number">02 · Check</span>
+          <h3>Tests written for you</h3>
+          <p>Checks are generated from the profile and its history. You lock the ones you trust, and every new suggestion waits for your approval.</p>
+        </div>
+        <div class="card">
+          <span class="step-number">03 · Score</span>
+          <h3>With an error bar</h3>
+          <p>A score per ISO/IEC 25012 characteristic for each column, table and store, with a 95 % interval that shows how sure the number is.</p>
+        </div>
+        <div class="card">
+          <span class="step-number">04 · Explain</span>
+          <h3>Say where and why</h3>
+          <p>Every finding names the rows it found, where they cluster and what to try next. Fixes are proposals you approve. Sahifa never writes to your data.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="different" aria-labelledby="different-title">
+      <h2 id="different-title">What is different</h2>
+      <p class="section-intro">We studied the open-source and commercial tools before writing a line of code. These are the gaps Sahifa closes.</p>
+      <div class="grid grid-3">
+        <div class="feature">
+          <h3>Scores you can trust</h3>
+          <p>No other tool says how certain its quality score is. Sahifa follows the ISO/IEC 25024 measures and attaches an interval from the rows it read.</p>
+          <span class="proof">ISO/IEC 25012 · 25024</span>
+        </div>
+        <div class="feature">
+          <h3>Every store in one pass</h3>
+          <p>SQL databases, warehouses, lakehouse tables and plain files: checks run where the data lives, through one connector layer.</p>
+          <span class="proof">Postgres · Snowflake · BigQuery · DuckDB · Parquet · Iceberg · CSV</span>
+        </div>
+        <div class="feature">
+          <h3>Alerts with a promise</h3>
+          <p>Thresholds for volume, freshness and drift come with a false-alarm rate you choose, instead of a sensitivity slider.</p>
+          <span class="proof">Seasonal baselines · conformal thresholds</span>
+        </div>
+        <div class="feature">
+          <h3>Rules for your country</h3>
+          <p>Rule packs for IBANs, VAT IDs and postcodes across Europe and beyond, not only US ZIP codes and states.</p>
+          <span class="proof">ISO 13616 · EU VAT · UPU postcodes</span>
+        </div>
+        <div class="feature">
+          <h3>Contracts you can take with you</h3>
+          <p>A contract is inferred from each table's profile. Edit it, approve it and export it in the open standard.</p>
+          <span class="proof">Open Data Contract Standard v3</span>
+        </div>
+        <div class="feature">
+          <h3>A health check for the store</h3>
+          <p>Unused and duplicate tables, small-file problems on lakehouse tables and missing indexes, next to the quality findings.</p>
+          <span class="proof">Query logs · MinHash · compaction advice</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="open-title">
+      <div class="band">
+        <h2 id="open-title">Open, with nothing held back</h2>
+        <p>Sahifa runs on your own server under the Apache 2.0 licence. Many users, many connections and many projects come at no cost. Your data never leaves your network, and no telemetry is sent anywhere. It is built only on engines with Apache or MIT licences, so you can embed it and host it as you like.</p>
+        <ul class="sources" aria-label="Open foundations">
+          <li>Apache 2.0</li>
+          <li>Postgres</li>
+          <li>DuckDB</li>
+          <li>Apache Arrow</li>
+          <li>Ibis</li>
+          <li>ODCS</li>
+          <li>OpenLineage</li>
+          <li>Splink</li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="sister-title">
+      <div class="split">
+        <div>
+          <h2 id="sister-title">A sister of Tabayyun</h2>
+          <p class="section-intro">Tabayyun verifies industrial time series. Sahifa covers the rest of the store and shares its ideas: findings that live through a lifecycle, scores per dimension, corrections as separate versions with full lineage. When Sahifa finds a timestamp column with a measured value, it hands the series to Tabayyun.</p>
+          <a class="button" href="https://tabayyun.siralabs.org/">Open Tabayyun</a>
+        </div>
+        <ol class="flow" aria-label="How a store is assessed">
+          <li><b>Your store</b><span>Databases, warehouses, lakehouse tables, files</span></li>
+          <li><b>Sahifa</b><span>Tables and columns: profile, check, score, explain</span></li>
+          <li><b><span class="to">→</span> Tabayyun</b><span>Time series inside those tables: gaps, spikes, drift, flatlines</span></li>
+          <li><b>One report</b><span>A score with its interval, findings with evidence, an exportable contract</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="name-title">
+      <div class="name-block">
+        <span class="big-ar" lang="ar" dir="rtl">صحيفة</span>
+        <div>
+          <h2 id="name-title">Why the name</h2>
+          <p>The <em>Ṣaḥīfa</em> of Medina was the written charter the Prophet ﷺ agreed with the people of the city. It set down in writing what each party could expect of the others. A data contract does the same for a table.</p>
+          <p>The Sīra also tells of another <em>ṣaḥīfa</em>: the boycott document hung in the Kaaba, found eaten by termites except for the name of Allah. Records decay unless someone looks after them. Sahifa does the looking.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="when" aria-labelledby="when-title">
+      <h2 id="when-title">When</h2>
+      <ol class="timeline">
+        <li><span class="when">Now</span><span><strong>Specs and first build.</strong> Research, decision records, the check catalogue and the first working core are written in the open on GitHub.</span></li>
+        <li><span class="when">October 2026</span><span><strong>First preview</strong> at sahifa-stg.siralabs.org: profiling, generated checks and ISO scores with intervals for Postgres, DuckDB, Parquet and CSV.</span></li>
+        <li><span class="when">Nov – Dec 2026</span><span>Run history, anomaly thresholds with a false-alarm rate, drift with effect sizes, sign-in and teams.</span></li>
+        <li><span class="when">Q1 2027</span><span>Explanations of where bad rows cluster, rules proposed by an AI model and approved by you, contract export, Snowflake and BigQuery.</span></li>
+        <li><span class="when">Q2 2027</span><span>The store health report and root cause along lineage.</span></li>
+      </ol>
+      <p class="section-intro" style="margin-top: 24px">Dates are the current plan and may move. Sahifa is part of <a href="https://siralabs.org/">Sira Labs</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© 2026 Sira Labs · Sahifa: named for the charter of Medina</span>
+    <span><a href="https://siralabs.org/">Sira Labs</a> · <a href="https://github.com/Sira-Labs/Sahifa">GitHub</a></span>
+  </footer>
+</div>
