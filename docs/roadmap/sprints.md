@@ -49,12 +49,12 @@ gantt
 
     section R1 first preview, release 0.1
     S1 first scan end to end                :done, s1, 2026-10-02, 2026-10-03
-    S2 checks lifecycle, worker, history    :s2, 2026-10-03, 2026-10-06
+    S2 sign-in, checks, worker, history     :s2, 2026-10-03, 2026-10-06
     S3 hardening, staging, release 0.1      :s3, 2026-10-06, 2026-10-08
     R1 feature-complete                     :milestone, r1, 2026-10-08, 0d
 
     section R2 history and explanation
-    S4 sign-in, tenants, RBAC               :s4, 2026-10-08, 2026-10-11
+    S4 tenants, RBAC                        :s4, 2026-10-08, 2026-10-11
     S5 metric history, anomalies, drift     :s5, 2026-10-11, 2026-10-14
     S6 explanations, Tabayyun hand-off      :s6, 2026-10-14, 2026-10-16
     S7 Snowflake, BigQuery, SAP HANA, ODCS  :s7, 2026-10-16, 2026-10-20
@@ -72,9 +72,9 @@ gantt
 | Sprint | Topic | Forecast end | Actual | PRs |
 |---|---|---|---|---|
 | 1 | first scan end to end | 2–3 Oct | done 2 Oct | #1 |
-| 2 | checks lifecycle, worker, history | 4–6 Oct | | |
+| 2 | sign-in, checks lifecycle, worker, history | 4–6 Oct | | |
 | 3 | hardening, staging, release 0.1 | 7–10 Oct | | |
-| 4 | sign-in, tenants, RBAC | 9–13 Oct | | |
+| 4 | tenants, RBAC (sign-in moved to sprint 2) | 9–13 Oct | | |
 | 5 | metric history, anomalies, drift | 12–17 Oct | | |
 | 6 | explanations, Tabayyun hand-off | 14–20 Oct | | |
 | 7 | Snowflake, BigQuery, SAP HANA, ODCS | 17–24 Oct | | |
@@ -96,7 +96,7 @@ gantt
 | S2 (~3 Oct) | Worker app | `sahifa-worker-stg` with its app token (`CAPROVER_APP_TOKEN_WORKER`) |
 | S3 (~6 Oct) | Performance run | a Postgres with ~1,000 tables (the TPC-DS or a copy of a real schema without personal data) |
 | S3 (~6 Oct) | ISO/IEC 25024 | buy the standard text so the catalogue can cite measure identifiers |
-| S4 (~8 Oct) | Sign-in | Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`; Google and GitHub OAuth clients |
+| S2 (now) | Sign-in | Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`; Google and GitHub OAuth clients (`deploy/caprover.md`, section 4a) |
 | S6 (~14 Oct) | Tabayyun wheel | publish `tabayyun_core` wheels (Tabayyun release job) so Sahifa can depend on it |
 | S7 (~16 Oct) | Warehouses | Snowflake and BigQuery test accounts (trial or sandbox) |
 | S7 (~16 Oct) | SAP | a HANA Cloud trial (or a HANA/Datasphere instance) with a read-only user; for the SAP pack, read access to `DD03L`, `DD08L`, `TCURC`, `T006`; ideally an anonymised S/4HANA sample (ADR-0014) |
@@ -117,17 +117,19 @@ report with scores, intervals and findings in the browser; the same report from 
 | S1-5 | Web: scans list, new scan, store report, asset report, findings | S | 005 | the round trip works in the browser after a refresh |
 | S1-6 | Product page in the Sira Labs site | S | — | page merged in `siralabs.github.io` (needs access) |
 
-## Sprint 2 — checks lifecycle, worker, history
+## Sprint 2 — sign-in, checks lifecycle, worker, history
 
-Goal: checks belong to assets and survive scans; scans run in a worker and on a schedule.
+Goal: people sign in through Keycloak instead of a shared password; checks belong to assets
+and survive scans; scans run in a worker and on a schedule.
 
 | ID | Story | Prio | Done when |
 |---|---|---|---|
-| S2-1 | Spec 006: assets, columns and checks persisted; approve, lock, retire, restore; regeneration rules of ADR-0005 | M | a locked check keeps its parameters across scans |
-| S2-2 | Spec 007: Procrastinate worker, `sahifa-worker` app, stale-scan reaper, upload clean-up job | M | a scan posted to staging runs on the worker |
-| S2-3 | Spec 008: findings persisted across scans with deduplication and occurrences; status changes | M | a re-scan does not duplicate findings |
-| S2-4 | Spec 009: scheduled scans per connection (cron expression) | S | a nightly scan runs on staging |
-| S2-5 | Spec 010: score history per asset and store; sparkline in the report | S | the store page shows the last 30 scans |
+| S2-0 | Spec 006: sign-in through Keycloak (BFF): Google, GitHub, passkeys; admin and allowed emails; devices; logout incl. back-channel (pulled forward from sprint 4, ADR-0010) | M | the owner signs in on staging with all three methods |
+| S2-1 | Spec 007: assets, columns and checks persisted; approve, lock, retire, restore; regeneration rules of ADR-0005 | M | a locked check keeps its parameters across scans |
+| S2-2 | Spec 008: Procrastinate worker, `sahifa-worker` app, stale-scan reaper, upload clean-up job | M | a scan posted to staging runs on the worker |
+| S2-3 | Spec 009: findings persisted across scans with deduplication and occurrences; status changes | M | a re-scan does not duplicate findings |
+| S2-4 | Spec 010: scheduled scans per connection (cron expression) | S | a nightly scan runs on staging |
+| S2-5 | Spec 011: score history per asset and store; sparkline in the report | S | the store page shows the last 30 scans |
 
 ## Sprint 3 — hardening, staging, release 0.1
 

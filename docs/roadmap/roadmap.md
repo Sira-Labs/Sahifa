@@ -42,8 +42,8 @@ Exit criteria:
 
 ## R2 — History and explanation (sprints 4–8)
 
-- Sign-in through Keycloak (Google, GitHub, passkeys), org → workspace → connection RBAC with
-  row-level security, audit log (ADR-0010).
+- Sign-in through Keycloak (Google, GitHub, passkeys; pulled forward to sprint 2 as spec 006),
+  org → workspace → connection RBAC with row-level security, audit log (ADR-0010).
 - Metric history per check and column; anomaly thresholds with a chosen false-alarm rate
   (STL baselines, conformal thresholds); drift with effect sizes and PSI critical values;
   checks 16, 17, 24, 29.

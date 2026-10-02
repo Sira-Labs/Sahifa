@@ -7,7 +7,7 @@ basic-auth password, and the web app's Caddy proxies `/api` to the API app over 
 network. The API reads the sources it assesses with a read-only login.
 
 ```
-Internet ──▶ CapRover nginx (TLS, basic auth) ──▶ sahifa-web (Caddy :80) ──/api──▶ sahifa-api (:8000) ──▶ sahifa-db
+Internet ──▶ CapRover nginx (TLS; basic auth in the interim) ──▶ sahifa-web (Caddy :80) ──/api──▶ sahifa-api (:8000) ──▶ sahifa-db
 ```
 
 ## Quick start: one-click template
@@ -23,9 +23,10 @@ file, enter the app name, fill in the variables, Deploy.
 
 The template generates the database password, gives the api a volume for uploads at
 `/data`, hides the api from the internet ("Do not expose as web-app"), points the web app's
-Caddy at the api, and sets `SAHIFA_ACCESS_GATE=basic-auth-at-proxy`. After deploying, do the
+Caddy at the api, and sets `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` with `SAHIFA_AUTH_MODE=proxy`
+(its Keycloak variables are optional and empty, see section 4a). After deploying, do the
 template's closing steps: connect the domain with HTTPS, **turn on Password protect on the web
-app**, check `/healthz`, enable app tokens. The GitHub `staging` environment then needs
+app**, check `/healthz`, enable app tokens. Switching to sign-in later is section 4a. The GitHub `staging` environment then needs
 `CAPROVER_APP_API=sahifa-stg-api` and `CAPROVER_APP_WEB=sahifa-stg-web` (these names differ
 from the hand-made `-stg` suffix of sections 1–4: the template puts the suffix before the role).
 
@@ -43,9 +44,10 @@ server. Production follows later (section 5, "Production, later").
    staging column of the table below: `sahifa-db-stg` (Has Persistent Data), `sahifa-api-stg`
    (Has Persistent Data), `sahifa-web-stg` with the domain `sahifa-stg.siralabs.org`,
    Enable HTTPS and Force HTTPS.
-3. **Basic auth** on `sahifa-web-stg` (HTTP Settings → *Password protect*), then
-   `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` on `sahifa-api-stg` (section 4a). Without it the
-   api refuses to start.
+3. **Sign-in** through the Keycloak realm `sahifa` (section 4a). Until it is set up:
+   **basic auth** on `sahifa-web-stg` (HTTP Settings → *Password protect*), then
+   `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` and `SAHIFA_AUTH_MODE=proxy` on `sahifa-api-stg`
+   (section 4a, "Interim"). Without one of the two the api refuses to start.
 4. **App tokens:** Deployment tab → **Enable App Token** on `sahifa-api-stg` and
    `sahifa-web-stg`; copy both.
 5. **GitHub environment `staging`** with the variables and secrets of section 5, "GitHub
@@ -130,8 +132,28 @@ Rules:
     | `SAHIFA_MIGRATION_DATABASE_URL` | optional; an owner login for the migration step only. Defaults to `SAHIFA_DATABASE_URL` |
     | `SAHIFA_DATA_DIR` | `/data` (the image default; uploads go to `/data/uploads`) |
     | `SAHIFA_PUBLIC_URL` | the web app's address: `https://sahifa-stg.siralabs.org` on staging, `https://sahifa.siralabs.org` on production |
-    | `SAHIFA_ACCESS_GATE` | `basic-auth-at-proxy`, **only after** basic auth is on for the web app (section 4a) |
     | `SAHIFA_CONN_<NAME>` | one per database to assess (section 6) |
+
+    Sign-in (section 4a, spec 006), either the Keycloak rows:
+
+    | Name | Value |
+    |---|---|
+    | `SAHIFA_AUTH_MODE` | `oidc` |
+    | `SAHIFA_OIDC_ISSUER` | `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa` |
+    | `SAHIFA_OIDC_CLIENT_ID` | `sahifa-api` (the default) |
+    | `SAHIFA_OIDC_CLIENT_SECRET` | the `sahifa-api` client's secret from Keycloak (Clients → `sahifa-api` → Credentials) |
+    | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32`; changing it signs everyone out |
+    | `SAHIFA_ADMIN_EMAIL` | the administrator's address; always has access |
+    | `SAHIFA_ALLOWED_EMAILS` | optional: further addresses with access, comma-separated |
+    | `SAHIFA_SIGN_IN_METHODS` | optional, default `google,github,passkey` |
+    | `SAHIFA_SESSION_IDLE` / `SAHIFA_SESSION_ABSOLUTE` | optional, defaults `12h` / `30d` |
+
+    or, in the interim, the basic-auth rows (section 4a, "Interim"):
+
+    | Name | Value |
+    |---|---|
+    | `SAHIFA_AUTH_MODE` | `proxy` |
+    | `SAHIFA_ACCESS_GATE` | `basic-auth-at-proxy`, **only after** basic auth is on for the web app |
 
     Optional, with their defaults:
 
@@ -146,10 +168,13 @@ Rules:
     | `SAHIFA_STATEMENT_TIMEOUT_S` | `60` | per statement against a source |
     | `SAHIFA_LOG_LEVEL` | `info` | |
 
-    With `SAHIFA_ENV=prod` the api refuses to start without `SAHIFA_ACCESS_GATE` (ADR-0010:
-    there is no sign-in until R2, so an unprotected install must be a deliberate choice) and
-    with a placeholder password in `SAHIFA_DATABASE_URL` or any `SAHIFA_CONN_*`. Staging runs
-    `prod` too.
+    With `SAHIFA_ENV=prod` the api refuses to start unless strangers are kept out (spec 006,
+    ADR-0010): either the Keycloak rows are complete (https public URL and issuer, client
+    secret, a session secret of 32 characters or more, admin email, none a placeholder), or
+    `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` declares the proxy's password (mode `proxy`;
+    unset, the mode resolves to `proxy` when the gate is set). `SAHIFA_AUTH_MODE=dev` is
+    refused. It also refuses a placeholder password in `SAHIFA_DATABASE_URL` or any
+    `SAHIFA_CONN_*`. Staging runs `prod` too.
 
   - The image runs the schema migration on every start before serving, so a redeploy
     upgrades the database in place; the app log shows the revision and `GET /api/version`
@@ -169,7 +194,7 @@ Rules:
 
 ## 3. Worker app: `sahifa-worker` (later, R1 sprint 2)
 
-Until spec 007 the api runs scans in a background thread and there is no worker app; skip
+Until spec 008 the api runs scans in a background thread and there is no worker app; skip
 this section. From sprint 2 scans run in a Procrastinate worker on the same Postgres
 (ADR-0009). Create app `sahifa-worker` then, with the api image and one extra variable:
 
@@ -178,7 +203,7 @@ this section. From sprint 2 scans run in a Procrastinate worker on the same Post
 | `SAHIFA_ROLE` | `worker` |
 | the api variables | identical to the api app (`SAHIFA_ENV`, `SAHIFA_DATABASE_URL`, every `SAHIFA_CONN_*`, the limits); the worker never needs `SAHIFA_MIGRATION_DATABASE_URL` |
 
-- Has Persistent Data with `/data` as on the api, if uploads stay on a volume; spec 007
+- Has Persistent Data with `/data` as on the api, if uploads stay on a volume; spec 008
   decides whether both share a bucket instead.
 - No HTTP settings: the worker serves nothing. Tick **Do not expose as web-app**.
 - Deployment tab → **Enable App Token**, copy it into the GitHub secret
@@ -204,10 +229,97 @@ this section. From sprint 2 scans run in a Procrastinate worker on the same Post
 Open the domain: after the password prompt the page shows the API version and lets you
 upload a file.
 
-## 4a. Access gate: HTTP basic auth (until sign-in in R2)
+## 4a. Sign-in: Keycloak realm, Google and GitHub (spec 006)
 
-Sign-in through a Keycloak realm arrives in R2 (ADR-0010). Until then the web app is the only
-public entrance, and CapRover's nginx asks for a password in front of it:
+Sahifa signs people in through a Keycloak realm with Google, GitHub and passkeys, no
+passwords (ADR-0010). Staging uses realm `sahifa` on the current Keycloak
+(`miftachun.apps.data-and-ai-dude.ch`); production gets its own realm (and later its own
+Keycloak). Below, `<kc>` is the Keycloak host and `<public>` the install's address, e.g.
+`https://sahifa-stg.siralabs.org`.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant W as sahifa-web (/api)
+    participant K as Keycloak realm sahifa
+    participant G as Google or GitHub
+    B->>W: GET /api/auth/login?method=google
+    W-->>B: 302 to K (state, nonce, PKCE)
+    B->>K: authorize
+    K-->>B: 302 to G (kc_idp_hint)
+    B->>G: sign in
+    G-->>B: 302 to K broker endpoint
+    B->>K: broker callback
+    K-->>B: 302 to /api/auth/callback?code
+    B->>W: callback
+    W->>K: code + verifier + client secret
+    K-->>W: ID token
+    W-->>B: 302 to the app, session cookie
+```
+
+1. **Import the realm.** From a checkout of this repository:
+
+   ```bash
+   python3 deploy/keycloak/render.py https://<public> > sahifa-realm.json
+   ```
+
+   Keycloak admin console → realm drop-down → **Create realm** → *Resource file*: the rendered
+   file → Create. It sets the `sahifa-api` client's redirect URI
+   (`<public>/api/auth/callback`), post-logout redirect (`<public>/`) and back-channel logout
+   URL (`<public>/api/auth/backchannel-logout`). A second install renders with its own
+   address.
+2. **Client secret.** Realm `sahifa` → Clients → `sahifa-api` → Credentials → Regenerate, and
+   copy it into the api app's `SAHIFA_OIDC_CLIENT_SECRET`.
+3. **Google.** Google Cloud console → APIs & Services:
+   - OAuth consent screen: External, app name "Sahifa", scopes `openid`, `email`, `profile`.
+   - Credentials → Create credentials → OAuth client ID → *Web application*; authorised
+     redirect URI `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa/broker/google/endpoint`.
+   - Keycloak → Identity providers → `google`: paste the client ID and secret → Save.
+4. **GitHub.** GitHub → Settings (of the `Sira-Labs` organisation, or your account) →
+   Developer settings → OAuth Apps → New OAuth App:
+   - Homepage URL `https://<public>`; authorization callback URL
+     `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa/broker/github/endpoint`.
+   - Generate a client secret; Keycloak → Identity providers → `github`: paste the client ID
+     and secret → Save.
+   - GitHub accounts whose primary email is not verified cannot sign in (Sahifa refuses
+     unverified email).
+5. **API settings.** On `sahifa-api` set the Keycloak rows of section 2:
+
+   | Name | Value |
+   |---|---|
+   | `SAHIFA_AUTH_MODE` | `oidc` |
+   | `SAHIFA_PUBLIC_URL` | `https://<public>` (already set) |
+   | `SAHIFA_OIDC_ISSUER` | `https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa` |
+   | `SAHIFA_OIDC_CLIENT_SECRET` | from step 2 |
+   | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32` |
+   | `SAHIFA_ADMIN_EMAIL` | the administrator's address |
+   | `SAHIFA_ALLOWED_EMAILS` | optional, comma-separated |
+
+   Remove `SAHIFA_ACCESS_GATE`, then Save & Update. Only `SAHIFA_ADMIN_EMAIL` and the allowed
+   addresses get in; anyone else who signs in sees "No access yet" and gets 403 from the API.
+   A changed list takes effect at the next restart.
+6. **Basic auth off.** `sahifa-web` → HTTP Settings → untick **Password protect**, and delete
+   the GitHub secret `CAPROVER_WEB_BASIC_AUTH` of that environment. Keep the API on **Do not
+   expose as web-app**: the web app stays the single entrance, so the cookie, the `Origin`
+   check and Caddy's security headers all see one origin.
+7. **Check.** Open `<public>`: the sign-in page shows the three buttons. Sign in with Google
+   as the admin email; the header shows your name, Account lists the device.
+   `curl -s -o /dev/null -w '%{http_code}' https://<public>/api/scans` answers `401`;
+   `/api/version` and `/healthz` stay public for the deploy checks.
+8. **Passkeys.** Signed in, Account → **Manage passkeys** opens Keycloak's account console →
+   *Signing in* → Passkey → Set up. After that, "Sign in with a passkey" works on that device.
+   A first sign-in always goes through Google or GitHub. Passkeys belong to the Keycloak host:
+   a new Keycloak host needs new passkeys.
+
+**Recovering someone who lost every passkey** (operator step): confirm the person's identity
+out of band. Then in Keycloak → Users → the user → Credentials, delete the passkey (WebAuthn
+passwordless) credentials. They sign in with Google or GitHub and set up a new passkey.
+
+### Interim: HTTP basic auth at the proxy
+
+Until the realm is set up (and on installs that do without sign-in), CapRover's nginx asks
+for a password in front of the web app, and the api runs in `proxy` mode: every request acts
+as one principal, there is no login page and no device list.
 
 1. `sahifa-web` → HTTP Settings → **Password protect**: a user name (e.g. `sira`) and a
    generated password (`openssl rand -base64 24`). Save. The domain now answers `401` without
@@ -215,14 +327,16 @@ public entrance, and CapRover's nginx asks for a password in front of it:
 2. Keep the API and the worker off the internet: **Do not expose as web-app** on both
    (sections 2 and 3). Otherwise CapRover's default address of the API would bypass the
    password.
-3. `sahifa-api` → App Configs: `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` → Save & Update. The
-   api starts; it refuses to start in prod without this setting.
+3. `sahifa-api` → App Configs: `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` and
+   `SAHIFA_AUTH_MODE=proxy` → Save & Update. In prod the api refuses to start without one of
+   the two ways in (Keycloak or the gate); with the gate set and no mode, it runs as `proxy`.
 4. Put `user:password` into the GitHub secret `CAPROVER_WEB_BASIC_AUTH` of the same
    environment, so the deploy workflows can check the version behind the prompt.
 5. Share the password only with the people who test staging (or use production), through the
    password manager. Staging and production have different passwords.
 
-Set the variable only after step 1: it records that the gate exists, it does not create it.
+Set the gate variable only after step 1: it records that the gate exists, it does not create
+it.
 
 ## 5. Continuous deployment: staging, then promotion to production
 
@@ -291,8 +405,8 @@ There is no earlier install to move, so the setup is clean and in this order:
 
 1. **Staging.** Point `sahifa-stg.siralabs.org` at the current server, create
    `sahifa-db-stg`, `sahifa-api-stg` and `sahifa-web-stg` as in sections 1, 2 and 4 with the
-   staging column of the table in "Staging and production", and set up the access gate
-   (section 4a).
+   staging column of the table in "Staging and production", and set up the sign-in or, in
+   the interim, the access gate (section 4a).
 2. **GitHub environments.** Create `staging` as in the table above. Create `production` too,
    with its required reviewer and branch rule, but leave its variables and secrets empty
    until step 4: promote.yml stops at its gate with an error until then.
@@ -425,7 +539,10 @@ none of it: its data can be rebuilt.
 | Wait step: `serves web '?', api '?'` although the apps run | the basic-auth prompt answers `401` | Set `CAPROVER_WEB_BASIC_AUTH` (`user:password`) on that environment |
 | API log: `db.schema_mismatch` and the container exits with code 3 | the database is at another migration revision than the image (an older image after a newer one migrated, or a migration that failed) | Redeploy the newest image; it migrates on start. Never run two api versions against one database |
 | API log: `refusing to start in prod: ... ['SAHIFA_DATABASE_URL']` | the password is `sahifa`, `change-me` or similar; prod rejects placeholders | Use a generated password in both the db app and the URL |
-| API log: `refusing to start in prod` naming `SAHIFA_ACCESS_GATE` | the access gate is not declared (ADR-0010) | Turn on basic auth for the web app, then set `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` (section 4a) |
+| API log: `refusing to start in prod` naming `SAHIFA_ACCESS_GATE` | neither the sign-in nor the access gate is set up (spec 006, ADR-0010) | Set the Keycloak rows (section 4a), or turn on basic auth for the web app and set `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` (section 4a, "Interim") |
+| API log: `refusing to start in prod` naming `SAHIFA_OIDC_*`, `SAHIFA_SESSION_SECRET` or `SAHIFA_ADMIN_EMAIL` | `SAHIFA_AUTH_MODE=oidc` with a missing, short or placeholder setting | Fill in the rows of section 4a, step 5; the session secret needs 32 characters (`openssl rand -hex 32`) |
+| Sign-in page: "Sign-in failed (invalid_token)" | the realm's issuer differs from `SAHIFA_OIDC_ISSUER`, or the user's email is not verified | Copy the issuer from `<kc>/realms/sahifa/.well-known/openid-configuration`; verify the email at Google or GitHub |
+| Signed in, "No access yet" | the address is neither `SAHIFA_ADMIN_EMAIL` nor in `SAHIFA_ALLOWED_EMAILS` | Add it to `SAHIFA_ALLOWED_EMAILS`, Save & Update |
 | API log: `refusing to start in prod` naming a `SAHIFA_CONN_*` variable | that source URL carries a placeholder password | Put the generated `sahifa_reader` password in it |
 | Web log: `dial tcp: lookup api ... no such host` | `SAHIFA_API_UPSTREAM` missing or misspelled on the **web** app | Set it to `srv-captain--sahifa-api:8000` (two dashes) and Save & Update |
 | Web log: `lookup srv-captain--... no such host` | the API app has a different name (on staging: `-stg`) | Match the upstream to `srv-captain--<api app name>:8000` |

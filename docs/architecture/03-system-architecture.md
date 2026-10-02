@@ -68,7 +68,7 @@ core in a worker thread (R1 sprint 1) or a Procrastinate worker (from sprint 2, 
 | `/api/scans` | create on a connection, create from uploaded files, list, read, report, findings |
 | `/api/checks` | list per asset, approve, lock, retire (sprint 2) |
 | `/api/findings` | list, filter, change status (R2 lifecycle) |
-| `/api/auth/*` | sign-in through Keycloak, BFF cookie session (R2, ADR-0010) |
+| `/api/auth/*` | sign-in through Keycloak, BFF cookie session (spec 006, ADR-0010) |
 
 ### 3. Web (TypeScript, `web/`)
 
@@ -76,10 +76,11 @@ Vite + React 19 SPA with TanStack Router and Query and Tailwind v4, served by Ca
 security headers; Caddy proxies `/api` and `/healthz` to the API (ADR-0007). Screens are in
 `docs/frontend/01-frontend-design.md`.
 
-### 4. Identity provider (R2)
+### 4. Identity provider (sprint 2, spec 006)
 
 Keycloak, one realm per product, Google, GitHub and passkeys, as in Tabayyun spec 013
-(ADR-0010). Until then staging is protected with CapRover's HTTP basic auth.
+(ADR-0010); the API is the backend-for-frontend (`sahifa.auth`). Until the realm is set up,
+staging runs in `proxy` mode behind CapRover's HTTP basic auth.
 
 ## Data flow of a scan
 

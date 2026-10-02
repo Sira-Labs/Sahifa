@@ -21,5 +21,9 @@ All notable changes to this project are documented here. The format follows
   digests to production (ADR-0012); compose bundles and the CapRover guide in `deploy/`.
 - Apache-2.0 licence (ADR-0008), contribution guide, security policy, code of conduct, issue
   and pull request templates, Dependabot, CODEOWNERS and the `main` and release-tag rulesets.
+- Sign-in through a Keycloak realm with Google, GitHub and passkeys (spec 006): the API is the
+  backend-for-frontend with an HttpOnly session cookie, CSRF header, devices, logout and
+  back-channel logout; only the admin and allowed emails get access. Installs behind HTTP
+  basic auth keep working in `proxy` mode.
 
 [Unreleased]: https://github.com/Sira-Labs/Sahifa/commits/main
