@@ -38,4 +38,9 @@ All notable changes to this project are documented here. The format follows
   workers by commit. Migration 0004; the compose bundle gains a `worker` service, CapRover a
   worker app and a one-click template for it.
 
+### Fixed
+- Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now
+  uses `assets/favicon.svg`), Tabayyun is linked at tabayyun-stg.siralabs.org, and the page links
+  the running preview at sahifa-stg.siralabs.org.
+
 [Unreleased]: https://github.com/Sira-Labs/Sahifa/commits/main
