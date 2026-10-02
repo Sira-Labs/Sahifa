@@ -81,6 +81,7 @@ class FakeIdp:
             "iss": ISSUER,
             "aud": CLIENT_ID,
             "iat": int(time.time()),
+            "exp": int(time.time()) + 120,
             "jti": secrets.token_hex(8),
             "events": {BACKCHANNEL_EVENT: {}},
         }

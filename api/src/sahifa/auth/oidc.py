@@ -188,9 +188,10 @@ class OidcClient:
             "code_challenge": pkce_challenge(code_verifier),
             "code_challenge_method": "S256",
         }
-        if method == "passkey":
-            params["prompt"] = "login"
-        else:
+        # Always a fresh authentication: an existing Keycloak SSO session from another method
+        # would otherwise answer first, and its token could not prove the requested method.
+        params["prompt"] = "login"
+        if method != "passkey":
             params["kc_idp_hint"] = method
         metadata = await self.metadata()
         return f"{metadata.authorization_endpoint}?{urlencode(params)}"
@@ -269,7 +270,7 @@ class OidcClient:
     async def validate_logout_token(self, logout_token: str) -> dict[str, Any]:
         """Claims of a valid back-channel logout token (OIDC Back-Channel Logout 2.6)."""
         claims = await self._decode(logout_token)
-        self._validate(claims, iat={"essential": True})
+        self._validate(claims, iat={"essential": True}, exp={"essential": True})
         events = claims.get("events")
         if not isinstance(events, dict) or BACKCHANNEL_EVENT not in events:
             raise InvalidTokenError("events")

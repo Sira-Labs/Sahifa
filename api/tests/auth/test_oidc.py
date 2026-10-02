@@ -117,8 +117,8 @@ async def test_discovery_must_name_its_issuer(idp):
 
 @pytest.mark.parametrize("method", ["google", "github", "passkey"])
 async def test_authorization_url_per_method(idp, method):
-    """Code flow with PKCE S256; Google and GitHub carry the broker hint, passkey forces a
-    fresh authentication."""
+    """Code flow with PKCE S256; every method forces a fresh authentication, Google and GitHub
+    carry the broker hint."""
     url = await idp.client().authorization_url(
         method=method, state="st", nonce=NONCE, code_verifier="v" * 43, redirect_uri="https://t.example/cb"
     )
@@ -129,10 +129,11 @@ async def test_authorization_url_per_method(idp, method):
         "S256"
     ]
     assert query["state"] == ["st"] and query["nonce"] == [NONCE] and query["client_id"] == [CLIENT_ID]
+    assert query["prompt"] == ["login"]
     if method == "passkey":
-        assert query["prompt"] == ["login"] and "kc_idp_hint" not in query
+        assert "kc_idp_hint" not in query
     else:
-        assert query["kc_idp_hint"] == [method] and "prompt" not in query
+        assert query["kc_idp_hint"] == [method]
 
 
 async def test_code_exchange_checks_the_verifier(idp):
@@ -160,6 +161,8 @@ async def test_logout_token_validation(idp):
         idp.logout_token(),
         idp.logout_token(sid="s1", aud="other"),
         idp.logout_token(sid="s1", iat=None),
+        idp.logout_token(sid="s1", exp=None),
+        idp.logout_token(sid="s1", exp=int(time.time()) - 3600),
     ):
         with pytest.raises(InvalidTokenError):
             await client.validate_logout_token(bad)
