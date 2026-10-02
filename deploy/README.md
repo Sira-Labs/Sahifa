@@ -39,8 +39,8 @@ mkdir -p ~/sahifa && cd ~/sahifa
 curl -fsSL https://raw.githubusercontent.com/Sira-Labs/Sahifa/main/deploy/compose.yaml -o compose.yaml
 curl -fsSL https://raw.githubusercontent.com/Sira-Labs/Sahifa/main/deploy/.env.example -o .env
 # edit .env: POSTGRES_PASSWORD (mandatory, generate with `openssl rand -hex 24`),
-# SAHIFA_DOMAIN for automatic TLS, SAHIFA_PUBLIC_URL, SAHIFA_ACCESS_GATE (see "Access gate"
-# below) and one SAHIFA_CONN_<NAME> line per database to assess
+# SAHIFA_DOMAIN for automatic TLS, SAHIFA_PUBLIC_URL, the sign-in settings or the access
+# gate (see "Sign-in" below) and one SAHIFA_CONN_<NAME> line per database to assess
 docker compose up -d
 ```
 
@@ -48,15 +48,20 @@ Caddy obtains a TLS certificate automatically when `SAHIFA_DOMAIN` is set and po
 are reachable. Without a domain it serves plain HTTP on port 80 for use behind your own
 load balancer.
 
-## Access gate (until sign-in in R2)
+## Sign-in, or an access gate
 
-Sahifa has no sign-in until R2 (ADR-0010), and an install can read every source it is
-connected to. With `SAHIFA_ENV=prod` the api therefore refuses to start unless
-`SAHIFA_ACCESS_GATE=basic-auth-at-proxy` declares that something in front of it asks for a
-password. On CapRover that is the web app's HTTP basic auth (`caprover.md`, section 4a); on a
-compose host it is your load balancer or reverse proxy. Set the variable only after the
-password prompt really appears on every path, including `/api/version`; the variable does not
-protect anything by itself, it records a decision.
+An install can read every source it is connected to, so with `SAHIFA_ENV=prod` the api
+refuses to start unless one of two things keeps strangers out (spec 006, ADR-0010):
+
+- **Sign-in through Keycloak** (`SAHIFA_AUTH_MODE=oidc`): Google, GitHub and passkeys through
+  a realm `sahifa`; only `SAHIFA_ADMIN_EMAIL` and `SAHIFA_ALLOWED_EMAILS` get access. The
+  settings are in `.env.example`; the realm set-up is `caprover.md`, section 4a.
+- **An access gate** (`SAHIFA_AUTH_MODE=proxy` with `SAHIFA_ACCESS_GATE=basic-auth-at-proxy`):
+  something in front asks for a password. On CapRover that is the web app's HTTP basic auth
+  (`caprover.md`, section 4a, "Interim"); on a compose host it is your load balancer or
+  reverse proxy. Set the variable only after the password prompt really appears on every
+  path, including `/api/version`; the variable does not protect anything by itself, it
+  records a decision.
 
 ## Continuous deployment from GitHub Actions
 
@@ -110,7 +115,7 @@ Release 0.1, sprint 1: the api runs each scan in a background thread, at most
 DuckDB (`SAHIFA_DUCKDB_MEMORY`, default `1GB`, per scan). Scans left `running` by a restart
 are marked `failed` with "interrupted" when the api starts again (ADR-0009).
 
-From R1 sprint 2 (spec 007) scans move to a Procrastinate worker on the same Postgres: a
+From R1 sprint 2 (spec 008) scans move to a Procrastinate worker on the same Postgres: a
 `sahifa-worker` app or compose service from the api image with `SAHIFA_ROLE=worker` and the
 same environment as the api. The worker names its database connections
 `sahifa-worker/<commit>`, and `GET /healthz` on the api lists them in its `workers` field;

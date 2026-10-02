@@ -1,4 +1,4 @@
-# Sahifa — CapRover one-click template: db, api and web (the worker follows with spec 007).
+# Sahifa — CapRover one-click template: db, api and web (the worker follows with spec 008).
 #
 # Use: CapRover → Apps → One-Click Apps/Databases → ">> TEMPLATE <<" → paste this file →
 #      app name "sahifa-stg" on the staging server (or "sahifa" on production) → Deploy.
@@ -33,8 +33,17 @@ services:
       SAHIFA_PUBLIC_URL: https://$$cap_domain
       SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:$$cap_db_password@srv-captain--$$cap_appname-db:5432/sahifa
       SAHIFA_DATA_DIR: /data
-      # Required in prod until sign-in arrives (ADR-0010): enable HTTP basic auth on the web app first.
+      # Sign-in (spec 006): `proxy` runs behind the web app's HTTP basic auth (turn it on first)
+      # until the Keycloak realm is set up; then `oidc` with the variables below
+      # (deploy/caprover.md section 4a), and remove SAHIFA_ACCESS_GATE.
+      SAHIFA_AUTH_MODE: $$cap_auth_mode
       SAHIFA_ACCESS_GATE: basic-auth-at-proxy
+      SAHIFA_OIDC_ISSUER: $$cap_oidc_issuer
+      SAHIFA_OIDC_CLIENT_ID: sahifa-api
+      SAHIFA_OIDC_CLIENT_SECRET: $$cap_oidc_client_secret
+      SAHIFA_SESSION_SECRET: $$cap_session_secret
+      SAHIFA_ADMIN_EMAIL: $$cap_admin_email
+      SAHIFA_ALLOWED_EMAILS: $$cap_allowed_emails
       SAHIFA_SAMPLE_ROWS: '100000'
       SAHIFA_MAX_UPLOAD_MB: '200'
       # Optional: a database to assess, as a URL with a read-only login (deploy/caprover.md section 6).
@@ -75,6 +84,32 @@ caproverOneClickApp:
       defaultValue: $$cap_gen_random_hex(24)
       description: Generated. Hex is safe inside a database URL. Set once; changing it later needs ALTER ROLE.
       validRegex: /^[A-Za-z0-9]{16,}$/
+    - id: $$cap_auth_mode
+      label: Auth mode
+      defaultValue: proxy
+      description: 'proxy: behind the web app''s basic auth (works now). oidc: sign-in through Keycloak; needs the issuer, client secret and admin email below (deploy/caprover.md section 4a).'
+      validRegex: /^(proxy|oidc)$/
+    - id: $$cap_oidc_issuer
+      label: Keycloak realm URL (optional)
+      defaultValue: ''
+      description: 'For oidc, e.g. https://miftachun.apps.data-and-ai-dude.ch/realms/sahifa . Leave empty for proxy.'
+    - id: $$cap_oidc_client_secret
+      label: Keycloak client secret (optional)
+      defaultValue: ''
+      description: For oidc, the sahifa-api client's secret from Keycloak (Clients → sahifa-api → Credentials).
+    - id: $$cap_session_secret
+      label: Session secret
+      defaultValue: $$cap_gen_random_hex(32)
+      description: Generated. Keys the stored session hashes; changing it signs everyone out.
+      validRegex: /^[A-Za-z0-9]{32,}$/
+    - id: $$cap_admin_email
+      label: Admin email (optional)
+      defaultValue: ''
+      description: For oidc, the administrator's address; always has access.
+    - id: $$cap_allowed_emails
+      label: Allowed emails (optional)
+      defaultValue: ''
+      description: For oidc, further addresses with access, comma-separated. Everyone else sees "No access yet".
     - id: $$cap_demo_source
       label: Database to assess (optional)
       defaultValue: ''
@@ -86,8 +121,9 @@ caproverOneClickApp:
       called sahifa-stg-db, sahifa-stg-api and sahifa-stg-web, or "sahifa" on production.
     end: >-
       Done. Next: (1) $$cap_appname-web → HTTP Settings → connect $$cap_domain, Enable HTTPS,
-      Force HTTPS, and Password protect (basic auth): the api refuses to start in prod until
-      SAHIFA_ACCESS_GATE is set, and it is set here, so turn the password on now.
+      Force HTTPS, and Password protect (basic auth): in proxy mode the api trusts that
+      password (SAHIFA_ACCESS_GATE is set here), so turn it on now. To sign in through
+      Keycloak instead, follow deploy/caprover.md section 4a.
       (2) Open https://$$cap_domain/healthz → "status":"ok", then the app, and upload a CSV.
       (3) For automatic deploys, enable App Tokens on api and web and put them on the GitHub
       environment (deploy/caprover.md section 5), with CAPROVER_APP_API=$$cap_appname-api and

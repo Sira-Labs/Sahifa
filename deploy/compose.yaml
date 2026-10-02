@@ -5,7 +5,7 @@
 # instead sets SAHIFA_API_IMAGE and SAHIFA_WEB_IMAGE to the digest-pinned images staging ran
 # (ADR-0012); when set they take precedence over the tag.
 # Scans run in the api process until R1 sprint 2; a `worker` service from the api image with
-# SAHIFA_ROLE=worker joins this file with spec 007 (ADR-0009).
+# SAHIFA_ROLE=worker joins this file with spec 008 (ADR-0009).
 services:
   web:
     image: ${SAHIFA_WEB_IMAGE:-ghcr.io/sira-labs/sahifa-web:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
@@ -26,8 +26,8 @@ services:
   api:
     image: ${SAHIFA_API_IMAGE:-ghcr.io/sira-labs/sahifa-api:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
     restart: unless-stopped
-    # .env carries SAHIFA_ACCESS_GATE, SAHIFA_PUBLIC_URL, the optional limits and every
-    # SAHIFA_CONN_<NAME> source connection (ADR-0006).
+    # .env carries SAHIFA_PUBLIC_URL, the sign-in settings (or SAHIFA_ACCESS_GATE, spec 006),
+    # the optional limits and every SAHIFA_CONN_<NAME> source connection (ADR-0006).
     env_file: .env
     # The image migrates the schema on every start before serving.
     environment:

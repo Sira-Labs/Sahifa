@@ -1,4 +1,4 @@
-"""Tables of migration 0001 (spec 004)."""
+"""Tables of migrations 0001 (spec 004) and 0002 (spec 006)."""
 
 from __future__ import annotations
 
@@ -14,18 +14,21 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from . import Base
 
 CONNECTION_KINDS = ("postgres", "duckdb", "upload")
 SCAN_STATUSES = ("queued", "running", "succeeded", "failed")
+SIGN_IN_METHODS = ("google", "github", "passkey")
 
 
 class Connection(Base):
@@ -85,3 +88,63 @@ class Finding(Base):
     summary: Mapped[str] = mapped_column(Text)
     next_step: Mapped[str] = mapped_column(Text)
     evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+
+
+class User(Base):
+    """A person who signed in through the realm (spec 006): one identity (issuer, subject).
+
+    Access is not stored: it follows `SAHIFA_ADMIN_EMAIL` and `SAHIFA_ALLOWED_EMAILS` at each
+    request, so editing the setting takes effect at the next restart.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("issuer", "subject", name="uq_users_issuer_subject"),
+        CheckConstraint("email = lower(email)", name="ck_users_email_lower"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(Text, unique=True)
+    display_name: Mapped[str] = mapped_column(Text)
+    issuer: Mapped[str] = mapped_column(Text)
+    subject: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthSession(Base):
+    """A signed-in browser (spec 006); the cookie holds a token, the table only its HMAC."""
+
+    __tablename__ = "sessions"
+    __table_args__ = (
+        CheckConstraint(f"sign_in_method IN {SIGN_IN_METHODS}", name="ck_sessions_sign_in_method"),
+        Index("ix_sessions_user_id", "user_id"),
+        Index("ix_sessions_idp_sid", "idp_sid"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    sign_in_method: Mapped[str] = mapped_column(String(20))
+    idp_sid: Mapped[str | None] = mapped_column(Text)
+    id_token: Mapped[str | None] = mapped_column(Text)
+    ip_address: Mapped[str | None] = mapped_column(INET)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LoginFlow(Base):
+    """A sign-in between `/api/auth/login` and the callback (10 minutes, single use)."""
+
+    __tablename__ = "login_flows"
+
+    id_hash: Mapped[bytes] = mapped_column(LargeBinary, primary_key=True)
+    state: Mapped[str] = mapped_column(Text)
+    nonce: Mapped[str] = mapped_column(Text)
+    code_verifier: Mapped[str] = mapped_column(Text)
+    method: Mapped[str] = mapped_column(String(20))
+    next_path: Mapped[str] = mapped_column("next", Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

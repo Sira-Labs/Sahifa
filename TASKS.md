@@ -31,24 +31,35 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Asset dimension = weighted mean of column scores × product of asset-level checks.
       - `sah.outliers` tolerance 1 %: the demo shop injects 2 % decimal-shift outliers.
 - [x] **004 API: connections, scans and persistence** — `docs/specs/004-api-connections-and-scans.md`
-      - Scans run in a thread (ADR-0009) until spec 007; findings rows carry evidence as jsonb.
+      - Scans run in a thread (ADR-0009) until spec 008; findings rows carry evidence as jsonb.
       - `Scan` also returns `connection_kind` and `files` (the web app uses both).
 - [x] **005 Web: scans, new scan, store report, asset report, findings** — `docs/specs/005-web-scans-and-report.md`
       - Built and tested (34 tests, layout checked at 390 and 1280 px); the live round trip waits
         for staging.
 - [ ] S1-6 product page in `Sira-Labs/siralabs.github.io` (owner: access or merge).
 
-## Sprint 2 — checks lifecycle, worker, history
+## Sprint 2 — sign-in, checks lifecycle, worker, history
 
-- [ ] 006 Assets, columns and checks persisted; lifecycle actions.
-- [ ] 007 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
-- [ ] 008 Findings across scans with deduplication and occurrences.
-- [ ] 009 Scheduled scans; S3 sources through DuckDB with credentials by reference.
-- [ ] 010 Score history per asset and store.
+- [~] **006 Sign-in through Keycloak (BFF)** — `docs/specs/006-sign-in-keycloak-bff.md`
+      - Ported from Tabayyun spec 013 (`sahifa.auth`); open: the staging sign-in check, after the
+        owner sets up realm `sahifa` and switches staging to `oidc`.
+      - Access is `SAHIFA_ADMIN_EMAIL` plus `SAHIFA_ALLOWED_EMAILS`, computed per request, not stored.
+      - Third auth mode `proxy`: in prod an unset mode resolves to `proxy` when
+        `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` is set, so today's staging keeps starting.
+      - No SECURITY DEFINER login function and no identities table: one DB login, no RLS yet;
+        `users` holds (issuer, subject); a known identity with another user's email gets 409.
+      - Route ids under the new layout route are `/_app/...` (`getRouteApi` in four pages).
+- [ ] 007 Assets, columns and checks persisted; lifecycle actions.
+- [ ] 008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
+- [ ] 009 Findings across scans with deduplication and occurrences.
+- [ ] 010 Scheduled scans; S3 sources through DuckDB with credentials by reference.
+- [ ] 011 Score history per asset and store.
 
 ## Owner
 
 - [ ] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment
       (`deploy/caprover.md`, "Checklist for the owner").
 - [ ] Push access to `Sira-Labs/siralabs.github.io` for the product page.
+- [ ] Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`, Google and GitHub OAuth
+      apps, then staging to `SAHIFA_AUTH_MODE=oidc` (`deploy/caprover.md`, section 4a).
 - [ ] Buy ISO/IEC 25024 so the catalogue can cite measure identifiers.

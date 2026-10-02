@@ -71,7 +71,7 @@ def expand_paths(paths: list[str]) -> list[Path]:
     files: list[Path] = []
     for raw in paths:
         if raw.startswith(("s3://", "gs://", "http://", "https://")):
-            raise UsageError(f"remote paths are not supported yet (spec 009): {raw}")
+            raise UsageError(f"remote paths are not supported yet (planned for R2): {raw}")
         p = Path(raw).expanduser()
         if any(ch in raw for ch in "*?["):
             files.extend(

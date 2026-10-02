@@ -13,7 +13,7 @@ import type { Scan } from "../types";
 import { countError, fileError, mergeFiles, parseSampleRows } from "../validation";
 
 
-const routeApi = getRouteApi("/scans/new");
+const routeApi = getRouteApi("/_app/scans/new");
 
 /** Sample size field with an explicit "Read everything". Returns rows to send (0 = all). */
 function useSample() {

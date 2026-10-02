@@ -58,5 +58,5 @@ CI itself is the test. Locally: `docker build -f api/Dockerfile .` and
 
 ## Out of scope
 
-- The worker image role and its CapRover app: spec 007.
+- The worker image role and its CapRover app: spec 008.
 - Licence audit in CI: sprint 3 (S3-1).

@@ -79,5 +79,5 @@ coverage of intervals over seeds), `test_cli.py` (exit codes, JSON output).
 
 ## Out of scope
 
-Persisted checks and their lifecycle actions (spec 006), history-based checks (sprint 5),
+Persisted checks and their lifecycle actions (spec 007), history-based checks (sprint 5),
 explanations of clusters (sprint 6).

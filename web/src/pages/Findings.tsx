@@ -10,7 +10,7 @@ import { useReport } from "../hooks/useReport";
 import { parseFindingFilters } from "../search";
 import type { FindingFilters } from "../types";
 
-const routeApi = getRouteApi("/scans/$scanId/findings");
+const routeApi = getRouteApi("/_app/scans/$scanId/findings");
 
 function Select({
   label,

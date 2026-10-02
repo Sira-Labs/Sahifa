@@ -1,8 +1,11 @@
-import { Link, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
+import { Link, Outlet, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
+import { setUnauthorizedHandler } from "./api";
+import { Account } from "./pages/Account";
 import { AssetReport } from "./pages/AssetReport";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
 import { Layout } from "./pages/Layout";
+import { Login } from "./pages/Login";
 import { NewScan } from "./pages/NewScan";
 import { Report } from "./pages/Report";
 import { ScansList } from "./pages/ScansList";
@@ -20,42 +23,65 @@ function NotFound() {
   );
 }
 
-const rootRoute = createRootRoute({ component: Layout, notFoundComponent: NotFound });
+// Unknown paths match no layout route, so the root draws the frame around the not-found page.
+const rootRoute = createRootRoute({
+  component: Outlet,
+  notFoundComponent: () => (
+    <Layout>
+      <NotFound />
+    </Layout>
+  ),
+});
 
-const scansRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: ScansList });
+// Everything but /login lives under the app layout, which checks the session (spec 006).
+const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "_app", component: Layout, notFoundComponent: NotFound });
+
+const scansRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: ScansList });
 
 const newScanRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/scans/new",
   validateSearch: parseNewScanSearch,
   component: NewScan,
 });
 
-const reportRoute = createRoute({ getParentRoute: () => rootRoute, path: "/scans/$scanId", component: Report });
+const reportRoute = createRoute({ getParentRoute: () => appRoute, path: "/scans/$scanId", component: Report });
 
-const assetRoute = createRoute({ getParentRoute: () => rootRoute, path: "/scans/$scanId/assets/$asset", component: AssetReport });
+const assetRoute = createRoute({ getParentRoute: () => appRoute, path: "/scans/$scanId/assets/$asset", component: AssetReport });
 
 const findingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appRoute,
   path: "/scans/$scanId/findings",
   validateSearch: parseFindingFilters,
   component: Findings,
 });
 
-const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/connections", component: Connections });
+const connectionsRoute = createRoute({ getParentRoute: () => appRoute, path: "/connections", component: Connections });
+
+const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/account", component: Account });
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  validateSearch: (search: Record<string, unknown>): { next?: string } =>
+    typeof search.next === "string" ? { next: search.next } : {},
+  component: Login,
+});
 
 export const routeTree = rootRoute.addChildren([
-  scansRoute,
-  newScanRoute,
-  reportRoute,
-  assetRoute,
-  findingsRoute,
-  connectionsRoute,
+  appRoute.addChildren([scansRoute, newScanRoute, reportRoute, assetRoute, findingsRoute, connectionsRoute, accountRoute]),
+  loginRoute,
 ]);
 
-/** The app router; tests pass a memory history. */
+/** The app router; tests pass a memory history. A 401 from any API call goes to /login with
+ * the current path as `next`. */
 export function makeRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, history, defaultPreload: "intent", scrollRestoration: true });
+  const router = createRouter({ routeTree, history, defaultPreload: "intent", scrollRestoration: true });
+  setUnauthorizedHandler(() => {
+    const { pathname, href } = router.state.location;
+    if (pathname !== "/login") void router.navigate({ to: "/login", search: { next: href } });
+  });
+  return router;
 }
 
 export const router = makeRouter();
