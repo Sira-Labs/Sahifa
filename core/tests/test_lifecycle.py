@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sahifa_core.checks.lifecycle import reconcile
-from sahifa_core.models import AssetRef, CheckSpec, CheckStatus, Dimension, Severity
+from sahifa_core.models import AssetRef, CheckSpec, CheckStatus, Dimension, Severity, label_of
 from sahifa_core.scan import ScanOptions, run_scan
 
 ORDERS = AssetRef(name="orders", kind="file")
@@ -91,3 +91,12 @@ def test_manual_is_kept() -> None:
     assert reconcile([], [manual]) == [manual]
     retired = manual.model_copy(update={"status": CheckStatus.RETIRED})
     assert reconcile([], [retired]) == []
+
+
+def test_labels_are_lossless() -> None:
+    """Two assets whose dotted parts join to the same text keep distinct labels."""
+    a, b = AssetRef(namespace="a.b", name="c"), AssetRef(namespace="a", name="b.c")
+    assert a.label == '"a.b".c' and b.label == 'a."b.c"' and a.label != b.label
+    assert AssetRef(name="orders").label == "orders"
+    assert AssetRef(namespace="public", name="orders").label == "public.orders"
+    assert label_of("", 'say "hi"') == '"say ""hi"""'

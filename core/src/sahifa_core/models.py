@@ -99,6 +99,20 @@ class CheckStatus(StrEnum):
         return self in (CheckStatus.ACTIVE, CheckStatus.LOCKED)
 
 
+def _label_part(part: str) -> str:
+    """A namespace or name as it appears in a label: quoted (`"a.b"`, quotes doubled) when it
+    holds a dot or a quote, so that no two assets share a label."""
+    if "." in part or '"' in part:
+        return '"' + part.replace('"', '""') + '"'
+    return part
+
+
+def label_of(namespace: str, name: str) -> str:
+    """`public.orders`, `orders` without a namespace, `"a.b".c` when a part holds a dot; lossless,
+    unlike plain joining (`a.b` + `c` and `a` + `b.c` would both read `a.b.c`)."""
+    return f"{_label_part(namespace)}.{_label_part(name)}" if namespace else _label_part(name)
+
+
 class AssetRef(BaseModel):
     """A table, view or file set inside a source."""
 
@@ -108,7 +122,7 @@ class AssetRef(BaseModel):
 
     @property
     def label(self) -> str:
-        return f"{self.namespace}.{self.name}" if self.namespace else self.name
+        return label_of(self.namespace, self.name)
 
     def __hash__(self) -> int:
         return hash((self.namespace, self.name))

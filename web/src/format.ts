@@ -138,9 +138,15 @@ export function titleCase(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : s;
 }
 
-/** `public.orders`, or `orders` without a namespace (core `AssetRef.label`). */
+/** A label part, quoted (quotes doubled) when it holds a dot or a quote, as in the core. */
+function labelPart(part: string): string {
+  return part.includes(".") || part.includes('"') ? `"${part.replaceAll('"', '""')}"` : part;
+}
+
+/** `public.orders`, `orders` without a namespace, `"a.b".c` when a part holds a dot (core
+ * `AssetRef.label`, lossless). */
 export function assetLabel(ref: AssetRef): string {
-  return ref.namespace ? `${ref.namespace}.${ref.name}` : ref.name;
+  return ref.namespace ? `${labelPart(ref.namespace)}.${labelPart(ref.name)}` : labelPart(ref.name);
 }
 
 /** `orders.customer_id`, or `orders` for an asset-level finding. */

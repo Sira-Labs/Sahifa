@@ -7,7 +7,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, literal, select, tuple_
+from sqlalchemy import func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.models import CHECK_STATUSES, Asset, AssetColumn, Check
@@ -16,19 +16,19 @@ from ..schemas import AssetDetail, AssetOut, CheckCounts, ColumnOut, Page
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
 
-# The core's `AssetRef.label`, in SQL, for ordering and the cursor.
-LABEL = case((Asset.namespace == "", Asset.name), else_=Asset.namespace + "." + Asset.name)
+# Ordered and paged by (namespace, name), the asset's identity; the label is for display only.
+ORDER = (Asset.namespace, Asset.name, Asset.id)
 
 
 def _cursor(asset: Asset) -> str:
-    raw = json.dumps([asset.label, str(asset.id)]).encode()
+    raw = json.dumps([asset.namespace, asset.name, str(asset.id)]).encode()
     return base64.urlsafe_b64encode(raw).decode()
 
 
-def _after(cursor: str) -> tuple[str, uuid.UUID]:
+def _after(cursor: str) -> tuple[str, str, uuid.UUID]:
     try:
-        label, aid = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-        return str(label), uuid.UUID(aid)
+        namespace, name, aid = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        return str(namespace), str(name), uuid.UUID(aid)
     except (ValueError, TypeError) as e:
         raise HTTPException(422, "invalid cursor") from e
 
@@ -69,12 +69,12 @@ async def list_assets(
     cursor: str | None = None,
     db: AsyncSession = Depends(session),
 ) -> Page[AssetOut]:
-    stmt = select(Asset).order_by(LABEL, Asset.id).limit(limit + 1)
+    stmt = select(Asset).order_by(*ORDER).limit(limit + 1)
     if connection_id is not None:
         stmt = stmt.where(Asset.connection_id == connection_id)
     if cursor:
-        label, aid = _after(cursor)
-        stmt = stmt.where(tuple_(LABEL, Asset.id) > tuple_(literal(label), literal(aid)))
+        namespace, name, aid = _after(cursor)
+        stmt = stmt.where(tuple_(*ORDER) > tuple_(literal(namespace), literal(name), literal(aid)))
     rows = list(await db.scalars(stmt))
     page = rows[:limit]
     counts = await _counts(db, [a.id for a in page])

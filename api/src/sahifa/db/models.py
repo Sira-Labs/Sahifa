@@ -177,7 +177,9 @@ class Asset(Base):
     @property
     def label(self) -> str:
         """`namespace.name`, or the name alone; the core's `AssetRef.label`."""
-        return f"{self.namespace}.{self.name}" if self.namespace else self.name
+        from sahifa_core.models import label_of
+
+        return label_of(self.namespace, self.name)
 
 
 class AssetColumn(Base):

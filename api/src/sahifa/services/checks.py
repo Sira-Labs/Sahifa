@@ -35,8 +35,10 @@ REGENERABLE = ("proposed", "active")
 
 
 def label_of(namespace: str, name: str) -> str:
-    """The core's `AssetRef.label`."""
-    return f"{namespace}.{name}" if namespace else name
+    """The core's `AssetRef.label` (lossless: parts with a dot or quote are quoted)."""
+    from sahifa_core.models import label_of as core_label_of
+
+    return core_label_of(namespace, name)
 
 
 @dataclass

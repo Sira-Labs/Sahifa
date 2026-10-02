@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
+from sahifa_core.models import label_of
 from sahifa_core.synth import write_shop
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -347,7 +348,8 @@ async def test_check_list_filters_and_order(client: AsyncClient, owner: Engine) 
 @needs_db
 async def test_asset_list_pagination(client: AsyncClient, owner: Engine) -> None:
     cid = make_connection(owner)
-    names = [("", "b"), ("", "a"), ("s", "a"), ("", HOSTILE), ("", UNICODE)]
+    # The last two would both read `a.b.c` if parts were joined plainly; labels stay distinct.
+    names = [("", "b"), ("", "a"), ("s", "a"), ("", HOSTILE), ("", UNICODE), ("a.b", "c"), ("a", "b.c")]
     for ns, name in names:
         make_asset(owner, cid, name, ns)
     labels: list[str] = []
@@ -360,8 +362,8 @@ async def test_asset_list_pagination(client: AsyncClient, owner: Engine) -> None
         cursor = page["next_cursor"]
         if not cursor:
             break
-    expected = sorted(f"{ns}.{n}" if ns else n for ns, n in names)
-    assert sorted(labels) == expected and len(labels) == len(set(labels)) == 5
+    expected = sorted(label_of(ns, n) for ns, n in names)
+    assert sorted(labels) == expected and len(labels) == len(set(labels)) == 7
     assert (await client.get("/api/assets", params={"limit": 0})).status_code == 422
     assert (await client.get("/api/assets", params={"limit": 201})).status_code == 422
     assert (await client.get("/api/assets", params={"cursor": "not-a-cursor"})).status_code == 422
@@ -507,3 +509,26 @@ async def test_csrf_header_is_required_in_dev_mode(client: AsyncClient, owner: E
     bare = {k: "" for k in CSRF}
     r = await client.post(f"/api/checks/{kid}/approve", json={"version": 1}, headers=bare)
     assert r.status_code == 403 and r.json() == {"detail": "csrf"}
+
+
+@needs_db
+async def test_failure_loading_saved_checks_fails_the_scan(
+    client: AsyncClient, owner: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A database error before the scan starts marks it failed instead of leaving it queued."""
+    import sahifa.services.scans as scans_service
+
+    async def broken(*_: Any) -> Any:
+        raise RuntimeError("database went away")
+
+    write_shop(tmp_path, clean=True, rows=50)
+    cid = await connect(client, monkeypatch, tmp_path)
+    monkeypatch.setattr(scans_service, "load_saved", broken)
+    r = await client.post("/api/scans", json={"connection_id": cid, "sample_rows": 0})
+    sid = r.json()["id"]
+    for _ in range(200):
+        s = (await client.get(f"/api/scans/{sid}")).json()
+        if s["status"] in ("succeeded", "failed"):
+            break
+        await asyncio.sleep(0.05)
+    assert s["status"] == "failed" and "database went away" in s["error"]

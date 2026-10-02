@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatFailedShare, formatScoreInterval, scanSource, sortFindings } from "../format";
+import { assetLabel, formatFailedShare, formatScoreInterval, scanSource, sortFindings } from "../format";
 import { makeFinding, makeScan } from "./helpers";
 
 describe("interval display", () => {
@@ -29,5 +29,15 @@ describe("helpers", () => {
     expect(scanSource(makeScan())).toBe("shop");
     expect(scanSource(makeScan({ files: ["a.csv", "b.csv", "c.csv"] }))).toBe("Upload: 3 files");
     expect(scanSource(makeScan({ connection_name: "upload-5ca7", connection_kind: "upload", assets_count: null }))).toBe("Upload");
+  });
+});
+
+describe("asset labels", () => {
+  it("match the core: lossless when a part holds a dot or a quote", () => {
+    expect(assetLabel({ namespace: "public", name: "orders", kind: "table" })).toBe("public.orders");
+    expect(assetLabel({ namespace: "", name: "orders", kind: "file" })).toBe("orders");
+    expect(assetLabel({ namespace: "a.b", name: "c", kind: "table" })).toBe('"a.b".c');
+    expect(assetLabel({ namespace: "a", name: "b.c", kind: "table" })).toBe('a."b.c"');
+    expect(assetLabel({ namespace: "", name: 'say "hi"', kind: "file" })).toBe('"say ""hi"""');
   });
 });
