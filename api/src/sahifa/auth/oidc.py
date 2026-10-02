@@ -171,12 +171,23 @@ class OidcClient:
             return True
 
     async def authorization_url(
-        self, *, method: str, state: str, nonce: str, code_verifier: str, redirect_uri: str
+        self,
+        *,
+        method: str,
+        state: str,
+        nonce: str,
+        code_verifier: str,
+        redirect_uri: str,
+        action: str | None = None,
+        login_hint: str | None = None,
     ) -> str:
         """Where the browser goes to sign in with `method` (google, github or passkey).
 
-        `kc_idp_hint` sends Google and GitHub straight to the broker; `prompt=login` makes the
-        passkey method authenticate afresh even inside an SSO session, so `amr` is current.
+        `kc_idp_hint` sends Google and GitHub straight to the broker; `prompt=login` makes every
+        method authenticate afresh even inside an SSO session, so the method's claim is current.
+        `action` is a Keycloak application-initiated action (`kc_action`), run after that fresh
+        sign-in, which also satisfies the action's maximum authentication age. `login_hint`
+        preselects the account (Keycloak passes it on to brokers set to forward it).
         """
         params = {
             "response_type": "code",
@@ -193,6 +204,10 @@ class OidcClient:
         params["prompt"] = "login"
         if method != "passkey":
             params["kc_idp_hint"] = method
+        if action is not None:
+            params["kc_action"] = action
+        if login_hint is not None:
+            params["login_hint"] = login_hint
         metadata = await self.metadata()
         return f"{metadata.authorization_endpoint}?{urlencode(params)}"
 

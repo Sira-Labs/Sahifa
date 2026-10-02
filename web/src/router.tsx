@@ -1,6 +1,7 @@
 import { Link, Outlet, createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
 import { setUnauthorizedHandler } from "./api";
 import { Account } from "./pages/Account";
+import { isPasskeyStatus, type PasskeyStatus } from "./auth";
 import { AssetReport } from "./pages/AssetReport";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
@@ -58,7 +59,13 @@ const findingsRoute = createRoute({
 
 const connectionsRoute = createRoute({ getParentRoute: () => appRoute, path: "/connections", component: Connections });
 
-const accountRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/account", component: Account });
+const accountRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/account",
+  validateSearch: (search: Record<string, unknown>): { passkey?: PasskeyStatus } =>
+    isPasskeyStatus(search.passkey) ? { passkey: search.passkey } : {},
+  component: Account,
+});
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,

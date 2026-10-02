@@ -58,6 +58,16 @@ export function loginUrl(method: SignInMethod, next: string): string {
   return `/api/auth/login?${new URLSearchParams({ method, next: safeNext(next) })}`;
 }
 
+/** Where "Add a passkey" navigates: a fresh sign-in, then Keycloak's passkey registration. */
+export const ADD_PASSKEY_URL = "/api/auth/passkey/add";
+
+/** The outcome Keycloak reports for the passkey registration (`?passkey=` on the account page). */
+export type PasskeyStatus = "success" | "cancelled" | "error";
+
+export function isPasskeyStatus(value: unknown): value is PasskeyStatus {
+  return value === "success" || value === "cancelled" || value === "error";
+}
+
 /** Page navigation, replaceable in tests (jsdom cannot navigate). */
 export const browser = {
   assign(url: string): void {

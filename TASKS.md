@@ -49,10 +49,12 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - No SECURITY DEFINER login function and no identities table: one DB login, no RLS yet;
         `users` holds (issuer, subject); a known identity with another user's email gets 409.
       - Route ids under the new layout route are `/_app/...` (`getRouteApi` in four pages).
+      - "Add a passkey" runs Keycloak's passkey registration (`kc_action`) after a fresh sign-in;
+        the account console alone could not add a first passkey (spec 006, decision 7).
 - [ ] 007 Assets, columns and checks persisted; lifecycle actions.
 - [ ] 008 Procrastinate worker, `sahifa-worker` app, reaper, upload clean-up.
 - [ ] 009 Findings across scans with deduplication and occurrences.
-- [ ] 010 Scheduled scans; S3 sources through DuckDB with credentials by reference.
+- [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
 - [ ] 011 Score history per asset and store.
 
 ## Owner

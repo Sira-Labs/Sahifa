@@ -12,6 +12,7 @@ import ipaddress
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -43,6 +44,11 @@ CALLBACK_PATH = "/api/auth/callback"
 BACKCHANNEL_PATH = "/api/auth/backchannel-logout"
 FLOW_COOKIE_MAX_AGE_S = 600
 USER_AGENT_MAX = 512
+# Keycloak's required action that registers a passwordless WebAuthn credential (a passkey).
+PASSKEY_ACTION = "webauthn-register-passwordless"
+ACCOUNT_PATH = "/settings/account"
+# `kc_action_status` values Keycloak returns after an application-initiated action.
+ACTION_STATUSES = frozenset({"success", "cancelled", "error"})
 NO_STORE = {"Cache-Control": "no-store"}
 
 
@@ -169,12 +175,50 @@ async def login(
     settings = settings_of(request)
     if method not in settings.enabled_sign_in_methods:
         raise HTTPException(status_code=400, detail="unknown_method")
+    return await _start_flow(request, oidc, method=method, next_path=safe_next(next))
+
+
+@router.get("/passkey/add")
+async def add_passkey(request: Request) -> Response:
+    """Register a passkey: a fresh sign-in with the session's method, then Keycloak's passkey
+    registration (an application-initiated action), back to the account page.
+
+    Keycloak's account console asks for a recent sign-in before it adds a credential, and in
+    this realm that re-authentication can only offer a passkey, which a first-time user has
+    not got; starting from here re-authenticates through Google or GitHub instead.
+    """
+    oidc = _oidc(request)
+    settings = settings_of(request)
+    current = await require_session(request)
+    if current.sign_in_method not in settings.enabled_sign_in_methods:
+        raise HTTPException(status_code=400, detail="unknown_method")
+    return await _start_flow(
+        request,
+        oidc,
+        method=current.sign_in_method,
+        next_path=ACCOUNT_PATH,
+        action=PASSKEY_ACTION,
+        login_hint=current.email,
+    )
+
+
+async def _start_flow(
+    request: Request,
+    oidc: OidcClient,
+    *,
+    method: str,
+    next_path: str,
+    action: str | None = None,
+    login_hint: str | None = None,
+) -> Response:
+    """Store a login flow and send the browser to the IdP's authorization endpoint."""
+    settings = settings_of(request)
     flow = Flow(
         state=new_token(),
         nonce=new_token(),
         code_verifier=new_token(),
         method=method,
-        next_path=safe_next(next),
+        next_path=next_path,
     )
     try:
         url = await oidc.authorization_url(
@@ -183,6 +227,8 @@ async def login(
             nonce=flow.nonce,
             code_verifier=flow.code_verifier,
             redirect_uri=_public_url(settings) + CALLBACK_PATH,
+            action=action,
+            login_hint=login_hint,
         )
     except IdpUnavailableError as exc:
         raise HTTPException(status_code=503, detail="idp_unavailable") from exc
@@ -207,12 +253,17 @@ async def _take_flow(request: Request, state: str | None) -> Flow | None:
     return taken[0]
 
 
+class _AccountMismatchError(Exception):
+    """An application-initiated action came back signed in as a user other than the browser's."""
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
     state: Annotated[str | None, Query()] = None,
     code: Annotated[str | None, Query()] = None,
     error: Annotated[str | None, Query()] = None,
+    kc_action_status: Annotated[str | None, Query()] = None,
 ) -> Response:
     """Finish a sign-in: check the flow and the ID token, link the user, start a session."""
     oidc = _oidc(request)
@@ -244,6 +295,8 @@ async def callback(
         log.info("auth.denied", reason=reason, method=flow.method, detail="method_claim")
         return _failure(400, reason)
 
+    previous = await current_session(request)
+    action_ran = kc_action_status in ACTION_STATUSES
     session_token = new_token()
     try:
         async with factory_of(request)() as db, db.begin():
@@ -254,6 +307,9 @@ async def callback(
                 email=str(claims["email"]),
                 display_name=str(claims.get("name") or ""),
             )
+            if action_ran and (previous is None or previous.user_id != user.user_id):
+                # "Add a passkey" re-authenticated as someone else: no account switch here.
+                raise _AccountMismatchError
             await store.create_session(
                 db,
                 id_hash=token_hash(session_secret(settings), session_token),
@@ -266,15 +322,26 @@ async def callback(
                 absolute=settings.session_absolute,
                 idle=settings.session_idle,
             )
+            if previous is not None:
+                # The new cookie replaces this browser's old session; revoke it in the same
+                # transaction rather than orphan it.
+                await store.revoke(db, previous.id, user_id=previous.user_id)
     except EmailTakenError:
         log.warning("auth.denied", reason="email_taken", method=flow.method)
         return _failure(409, "account_conflict")
+    except _AccountMismatchError:
+        log.warning("auth.denied", reason="account_mismatch", method=flow.method)
+        return _failure(409, "account_mismatch")
     access = settings.has_access(user.email)
     log.info("auth.login", user_id=str(user.user_id), method=flow.method, access=access)
     if not access:
         # A session anyway, so the web app can say who is signed in ("No access yet").
         log.info("auth.denied", reason="no_access", user_id=str(user.user_id), method=flow.method)
-    response = RedirectResponse(flow.next_path, status_code=302, headers=NO_STORE)
+    next_path = flow.next_path
+    if action_ran:
+        log.info("auth.action", user_id=str(user.user_id), status=kc_action_status)
+        next_path += ("&" if "?" in next_path else "?") + urlencode({"passkey": kc_action_status})
+    response = RedirectResponse(next_path, status_code=302, headers=NO_STORE)
     _clear_cookie(response, LOGIN_COOKIE)
     _set_cookie(response, SESSION_COOKIE, session_token, int(settings.session_absolute.total_seconds()))
     return response

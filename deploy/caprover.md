@@ -307,8 +307,12 @@ sequenceDiagram
    as the admin email; the header shows your name, Account lists the device.
    `curl -s -o /dev/null -w '%{http_code}' <public>/api/scans` answers `401`;
    `/api/version` and `/healthz` stay public for the deploy checks.
-8. **Passkeys.** Signed in, Account → **Manage passkeys** opens Keycloak's account console →
-   *Signing in* → Passkey → Set up. After that, "Sign in with a passkey" works on that device.
+8. **Passkeys.** Signed in with Google or GitHub, Account → **Add a passkey**: sign in again
+   with the same provider, then confirm the passkey on the device (fingerprint, face or PIN).
+   Back on Account it says "Passkey added"; from then on "Sign in with a passkey" works.
+   **Manage passkeys** (Keycloak's account console → *Signing in*) renames or removes them.
+   A realm imported before 2026-10-02: Identity providers → `google` → turn on
+   **Pass login_hint**, so Google preselects the signed-in account.
    A first sign-in always goes through Google or GitHub. Passkeys belong to the Keycloak host:
    a new Keycloak host needs new passkeys.
 

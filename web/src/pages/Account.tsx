@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { METHOD_NAMES, authApi, browser, deviceName, type Device } from "../auth";
+import { getRouteApi } from "@tanstack/react-router";
+import { ADD_PASSKEY_URL, METHOD_NAMES, isPasskeyStatus, authApi, browser, deviceName, type Device, type PasskeyStatus } from "../auth";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { formatLocalTime } from "../format";
+
+const routeApi = getRouteApi("/_app/settings/account");
+
+const PASSKEY_RESULT: Record<PasskeyStatus, { text: string; tone: string }> = {
+  success: { text: "Passkey added. Next time choose “Sign in with a passkey”.", tone: "text-ok" },
+  cancelled: { text: "No passkey was added.", tone: "muted" },
+  error: { text: "The passkey could not be added. Try again, or use another device.", tone: "text-bad" },
+};
 
 /** `/settings/account`: who is signed in, the signed-in devices, and passkeys (spec 006). */
 export function Account() {
@@ -19,6 +28,9 @@ export function Account() {
   const revokeOthers = useMutation({ mutationFn: authApi.revokeOthers, onSuccess: refresh });
   const others = devices.data?.filter((d) => !d.current).length ?? 0;
   const accountUrl = options.data?.account_url ?? null;
+  // Checked here too: search params from parent routes pass through unvalidated.
+  const search: { passkey?: unknown } = routeApi.useSearch();
+  const passkey = isPasskeyStatus(search.passkey) ? search.passkey : undefined;
 
   return (
     <section aria-labelledby="account-heading" className="stack-lg">
@@ -101,10 +113,19 @@ export function Account() {
         <section aria-labelledby="passkeys-heading" className="card stack-sm">
           <h2 id="passkeys-heading">Passkeys</h2>
           <p className="muted">
-            Add, rename or remove passkeys in the sign-in service's account console (under “Signing in”). A first sign-in always goes
-            through Google or GitHub.
+            A passkey signs you in with your device's fingerprint, face or PIN. Adding one asks you to sign in again with{" "}
+            {METHOD_NAMES[me.data?.sign_in_method ?? ""] ?? "your current method"}, then to confirm on this device. Rename or remove
+            passkeys in the sign-in service's account console (under “Signing in”).
           </p>
-          <div>
+          {passkey && (
+            <p role="status" className={PASSKEY_RESULT[passkey].tone}>
+              {PASSKEY_RESULT[passkey].text}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <a href={ADD_PASSKEY_URL} className="btn btn-primary">
+              Add a passkey
+            </a>
             <a href={accountUrl} className="btn" rel="noopener">
               Manage passkeys
             </a>
