@@ -1,0 +1,65 @@
+[project]
+name = "sahifa-api"
+version = "0.1.0.dev0"
+description = "Sahifa API: connections, scans, reports and findings on top of sahifa-core"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "structlog>=24.1",
+    "python-multipart>=0.0.9",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "psycopg[binary,pool]>=3.2",
+    "alembic>=1.14",
+    "anyio>=4.4",
+    "sahifa-core",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "asgi-lifespan>=2.1",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.uv.sources]
+sahifa-core = { path = "../core", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sahifa"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "N", "ASYNC", "T20", "SIM", "RUF"]
+ignore = ["S101", "B008"]  # B008: FastAPI dependencies are declared in argument defaults
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "T20"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["sahifa"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["duckdb", "duckdb.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

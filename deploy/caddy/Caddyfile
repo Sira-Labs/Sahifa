@@ -1,0 +1,27 @@
+# Edge of the web image (web/Dockerfile), used by the compose bundle and CapRover alike.
+# TLS is terminated here when SAHIFA_DOMAIN is set (Caddy obtains certificates automatically);
+# otherwise it serves plain HTTP on :80 behind your own load balancer or CapRover's nginx.
+{$SAHIFA_DOMAIN::80} {
+	encode zstd gzip
+
+	header {
+		# Strict, hash-free CSP: the SPA has no inline scripts and self-hosts its fonts.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+
+	@api path /api/* /healthz
+	handle @api {
+		reverse_proxy {$SAHIFA_API_UPSTREAM:api:8000}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
