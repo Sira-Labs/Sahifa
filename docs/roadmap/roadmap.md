@@ -94,3 +94,4 @@ site/            product page for siralabs.org
 | 2026-10-02 | R0 complete: docs, ADRs, catalogue, specs 001–005, product page; sprint 1 started |
 | 2026-10-02 | SAP data added to the plan (ADR-0014): HANA connector and SAP rule pack in R2 |
 | 2026-10-02 | Sprint 1 merged (PR #1): engine, API, web; images on GHCR |
+| 2026-10-02 | Spec 006 done (PRs #2, #3): staging signs in through Keycloak with Google, GitHub and passkeys |

@@ -72,7 +72,7 @@ gantt
 | Sprint | Topic | Forecast end | Actual | PRs |
 |---|---|---|---|---|
 | 1 | first scan end to end | 2–3 Oct | done 2 Oct | #1 |
-| 2 | sign-in, checks lifecycle, worker, history | 4–6 Oct | | |
+| 2 | sign-in, checks lifecycle, worker, history | 4–6 Oct | S2-0 done 2 Oct | #2, #3 |
 | 3 | hardening, staging, release 0.1 | 7–10 Oct | | |
 | 4 | tenants, RBAC (sign-in moved to sprint 2) | 9–13 Oct | | |
 | 5 | metric history, anomalies, drift | 12–17 Oct | | |
@@ -96,7 +96,7 @@ gantt
 | S2 (~3 Oct) | Worker app | `sahifa-worker-stg` with its app token (`CAPROVER_APP_TOKEN_WORKER`) |
 | S3 (~6 Oct) | Performance run | a Postgres with ~1,000 tables (the TPC-DS or a copy of a real schema without personal data) |
 | S3 (~6 Oct) | ISO/IEC 25024 | buy the standard text so the catalogue can cite measure identifiers |
-| S2 (now) | Sign-in | Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`; Google and GitHub OAuth clients (`deploy/caprover.md`, section 4a) |
+| S2 (done 2 Oct) | Sign-in | Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`; Google and GitHub OAuth clients (`deploy/caprover.md`, section 4a) |
 | S6 (~14 Oct) | Tabayyun wheel | publish `tabayyun_core` wheels (Tabayyun release job) so Sahifa can depend on it |
 | S7 (~16 Oct) | Warehouses | Snowflake and BigQuery test accounts (trial or sandbox) |
 | S7 (~16 Oct) | SAP | a HANA Cloud trial (or a HANA/Datasphere instance) with a read-only user; for the SAP pack, read access to `DD03L`, `DD08L`, `TCURC`, `T006`; ideally an anonymised S/4HANA sample (ADR-0014) |
