@@ -1,0 +1,98 @@
+# Sahifa — CapRover one-click template: db, api and web (the worker follows with spec 007).
+#
+# Use: CapRover → Apps → One-Click Apps/Databases → ">> TEMPLATE <<" → paste this file →
+#      app name "sahifa-stg" on the staging server (or "sahifa" on production) → Deploy.
+# Creates: <name>-db, <name>-api, <name>-web.
+# Images are built by .github/workflows/release.yml and published publicly on GHCR.
+# Runbook: deploy/caprover.md
+captainVersion: 4
+services:
+  $$cap_appname-db:
+    image: postgres:$$cap_pg_tag
+    restart: always
+    volumes:
+      - $$cap_appname-pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: sahifa
+      POSTGRES_DB: sahifa
+      POSTGRES_PASSWORD: $$cap_db_password
+    caproverExtra:
+      notExposeAsWebApp: 'true'
+
+  # Runs the schema migrations on start, then serves /healthz and /api/* on port 8000.
+  # Not exposed as a web app: CapRover's default address would get round the basic auth.
+  $$cap_appname-api:
+    image: ghcr.io/sira-labs/sahifa-api:$$cap_tag
+    restart: always
+    depends_on:
+      - $$cap_appname-db
+    volumes:
+      - $$cap_appname-data:/data
+    environment:
+      SAHIFA_ENV: prod
+      SAHIFA_PUBLIC_URL: https://$$cap_domain
+      SAHIFA_DATABASE_URL: postgresql+psycopg://sahifa:$$cap_db_password@srv-captain--$$cap_appname-db:5432/sahifa
+      SAHIFA_DATA_DIR: /data
+      # Required in prod until sign-in arrives (ADR-0010): enable HTTP basic auth on the web app first.
+      SAHIFA_ACCESS_GATE: basic-auth-at-proxy
+      SAHIFA_SAMPLE_ROWS: '100000'
+      SAHIFA_MAX_UPLOAD_MB: '200'
+      # Optional: a database to assess, as a URL with a read-only login (deploy/caprover.md section 6).
+      SAHIFA_CONN_DEMO: $$cap_demo_source
+    caproverExtra:
+      containerHttpPort: '8000'
+      notExposeAsWebApp: 'true'
+
+  $$cap_appname-web:
+    image: ghcr.io/sira-labs/sahifa-web:$$cap_tag
+    restart: always
+    depends_on:
+      - $$cap_appname-api
+    environment:
+      SAHIFA_API_UPSTREAM: srv-captain--$$cap_appname-api:8000
+    caproverExtra:
+      containerHttpPort: '80'
+
+caproverOneClickApp:
+  variables:
+    - id: $$cap_domain
+      label: Public domain
+      defaultValue: sahifa-stg.siralabs.org
+      description: The domain you will connect to the web app.
+      validRegex: /^[a-z0-9.-]+$/
+    - id: $$cap_tag
+      label: Image tag
+      defaultValue: latest
+      description: latest follows main. CI redeploys with immutable sha-<short> tags; production runs promoted digests.
+      validRegex: /^[A-Za-z0-9._-]+$/
+    - id: $$cap_pg_tag
+      label: Postgres image tag
+      defaultValue: '17'
+      description: Postgres 17. For production pin a minor release such as 17.6 and upgrade deliberately after a pg_dump.
+      validRegex: /^[A-Za-z0-9._-]+$/
+    - id: $$cap_db_password
+      label: Database password
+      defaultValue: $$cap_gen_random_hex(24)
+      description: Generated. Hex is safe inside a database URL. Set once; changing it later needs ALTER ROLE.
+      validRegex: /^[A-Za-z0-9]{16,}$/
+    - id: $$cap_demo_source
+      label: Database to assess (optional)
+      defaultValue: ''
+      description: 'e.g. postgresql://sahifa_reader:<password>@host:5432/shop?schemas=public . Leave empty to start with uploads only.'
+  instructions:
+    start: >-
+      Deploys Sahifa: Postgres 17, the api (migrations on start, uploads on a volume) and the
+      web app (Caddy). Use the app name "sahifa-stg" on the staging server so the apps are
+      called sahifa-stg-db, sahifa-stg-api and sahifa-stg-web, or "sahifa" on production.
+    end: >-
+      Done. Next: (1) $$cap_appname-web → HTTP Settings → connect $$cap_domain, Enable HTTPS,
+      Force HTTPS, and Password protect (basic auth): the api refuses to start in prod until
+      SAHIFA_ACCESS_GATE is set, and it is set here, so turn the password on now.
+      (2) Open https://$$cap_domain/healthz → "status":"ok", then the app, and upload a CSV.
+      (3) For automatic deploys, enable App Tokens on api and web and put them on the GitHub
+      environment (deploy/caprover.md section 5), with CAPROVER_APP_API=$$cap_appname-api and
+      CAPROVER_APP_WEB=$$cap_appname-web.
+  displayName: Sahifa
+  isOfficial: false
+  description: Self-hosted data quality for whole data stores (صحيفة) — database, api and web.
+  documentation: https://github.com/Sira-Labs/Sahifa/blob/main/deploy/caprover.md

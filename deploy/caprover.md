@@ -10,6 +10,27 @@ network. The API reads the sources it assesses with a read-only login.
 Internet ──▶ CapRover nginx (TLS, basic auth) ──▶ sahifa-web (Caddy :80) ──/api──▶ sahifa-api (:8000) ──▶ sahifa-db
 ```
 
+## Quick start: one-click template
+
+`deploy/caprover/one-click/sahifa.yml` creates the three apps in one step, the way Suffa's
+templates do. In CapRover: **Apps → One-Click Apps/Databases → `>> TEMPLATE <<`**, paste the
+file, enter the app name, fill in the variables, Deploy.
+
+| App name you enter | Creates | Server |
+|---|---|---|
+| `sahifa-stg` | `sahifa-stg-db`, `sahifa-stg-api`, `sahifa-stg-web` | staging (current server) |
+| `sahifa` | `sahifa-db`, `sahifa-api`, `sahifa-web` | production |
+
+The template generates the database password, gives the api a volume for uploads at
+`/data`, hides the api from the internet ("Do not expose as web-app"), points the web app's
+Caddy at the api, and sets `SAHIFA_ACCESS_GATE=basic-auth-at-proxy`. After deploying, do the
+template's closing steps: connect the domain with HTTPS, **turn on Password protect on the web
+app**, check `/healthz`, enable app tokens. The GitHub `staging` environment then needs
+`CAPROVER_APP_API=sahifa-stg-api` and `CAPROVER_APP_WEB=sahifa-stg-web` (these names differ
+from the hand-made `-stg` suffix of sections 1–4: the template puts the suffix before the role).
+
+The template is optional: sections 1–4 set up the same apps by hand.
+
 ## Checklist for the owner (first deploy)
 
 Sahifa has no install yet, so the first deploy is a clean setup of staging on the current
@@ -17,7 +38,8 @@ server. Production follows later (section 5, "Production, later").
 
 1. **DNS:** an `A` record `sahifa-stg.siralabs.org` → the staging server (the current
    CapRover server).
-2. **Apps** on the staging server, as in sections 1, 2 and 4 with the `-stg` names and the
+2. **Apps** on the staging server: either the one-click template above with the app name
+   `sahifa-stg`, or by hand as in sections 1, 2 and 4 with the `-stg` names and the
    staging column of the table below: `sahifa-db-stg` (Has Persistent Data), `sahifa-api-stg`
    (Has Persistent Data), `sahifa-web-stg` with the domain `sahifa-stg.siralabs.org`,
    Enable HTTPS and Force HTTPS.
