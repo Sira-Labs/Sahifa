@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv-cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+build/
+*.whl
+
+# Node / frontend
+node_modules/
+.pnpm-store/
+.vite/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Data: local uploads, scan output and DuckDB databases. Test fixtures are the exception.
+data/
+*.duckdb
+*.duckdb.wal
+!**/tests/fixtures/**/*.duckdb
