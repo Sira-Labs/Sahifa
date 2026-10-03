@@ -97,7 +97,21 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         the reopen lookup; a blank note is stored as null.
       - Web: `/findings` with a single status select ("Needs attention" default), cards updated in
         place, "Show history" panel and `/findings/$id`; mute end is a date (end of that local day).
-- [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
+- [x] **010 Scheduled scans per connection** — `docs/specs/010-scheduled-scans.md` (S3 sources follow in R2, sprint 7)
+      - Pending: the owner's staging check (a nightly schedule produces a scan the next morning).
+      - DST follows the wall clock: croniter walks naive local times, zoneinfo maps them with
+        fold=0 (a repeated time fires once, a skipped one after the jump); stored in UTC.
+      - Minimum interval = smallest gap of the next 50 UTC fire times (nightly is 23 h in March).
+      - `jobs.start_scan` is the one hand-off (runner or defer) for manual, uploaded and scheduled
+        scans; `run_due_schedules` lives in `jobs.py` beside `reap` and takes `now` and the runner.
+      - Due run: lock (`SKIP LOCKED`, 20), insert scans, move `next_run_at` past now, commit, then
+        start; a failed defer sets `failed_to_queue` afterwards. Runs do not bump `version`.
+      - Inline mode runs the due job at the start of every minute in the API (`main.py`).
+      - `PUT` without `version` on an existing schedule (or with one when none exists) is 409.
+      - croniter is typed `Any` (mypy override, no stubs); `tzdata` added so zoneinfo never
+        depends on the image's `/usr/share/zoneinfo`.
+      - Web: schedule in an expandable row per connection, a Schedule column, "scheduled" tag in
+        the scans list; sample rows are not editable in the web (null keeps the setting).
 - [ ] 011 Score history per asset and store.
 
 ## Owner

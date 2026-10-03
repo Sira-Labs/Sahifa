@@ -110,26 +110,26 @@ Each run does the following:
 
 ## Acceptance criteria
 
-- [ ] A connection gets a schedule through the API.
+- [x] A connection gets a schedule through the API.
   - `next_run_at` and `next_runs` are correct in the given time zone, including across a
     daylight-saving change (test with `Europe/Zurich` around the last Sunday of October).
-- [ ] Running the due-schedule function with time moved past `next_run_at` creates one scan with
+- [x] Running the due-schedule function with time moved past `next_run_at` creates one scan with
       `trigger = schedule`. The scan completes, and `next_run_at` moves to the next slot after
       now.
-- [ ] With a scan of the connection still running, a due schedule records `skipped_running` and
+- [x] With a scan of the connection still running, a due schedule records `skipped_running` and
       starts nothing.
-- [ ] After a simulated three-day outage, one run happens, not three.
-- [ ] Two concurrent runs of the due-schedule function start exactly one scan.
-- [ ] Invalid cron, an unknown time zone, an interval below the minimum and an upload connection
+- [x] After a simulated three-day outage, one run happens, not three.
+- [x] Two concurrent runs of the due-schedule function start exactly one scan.
+- [x] Invalid cron, an unknown time zone, an interval below the minimum and an upload connection
       each return 422. A stale `version` returns 409.
-- [ ] Migration 0006 upgrades and downgrades, and `alembic check` is clean.
-- [ ] Web:
+- [x] Migration 0006 upgrades and downgrades, and `alembic check` is clean.
+- [x] Web:
   - the schedule section saves, shows the next runs and removes;
   - API errors appear next to the field;
   - the scans list shows the "scheduled" badge.
 - [ ] Staging: a nightly schedule on a connection produces a scan the next morning. This is the
       owner's check, done after deploy.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -153,6 +153,26 @@ Each run does the following:
   - the next runs are shown;
   - removing;
   - the badge in the scans list.
+
+## Implementation notes
+
+- Daylight saving follows the wall clock: a repeated time fires once (its first occurrence), a
+  skipped time fires after the jump (02:30 → 03:30 summer time), so nightly runs are 23 or 25
+  hours apart on those days; croniter walks naive wall times, zoneinfo maps them to UTC.
+- A due run inserts the scans and updates the schedules in one transaction, then starts the
+  scans after the commit through `jobs.start_scan`, the function `POST /api/scans` and uploads
+  use; a failed defer then turns `last_outcome` from `queued` into `failed_to_queue`.
+- The due job does not bump `version` (only saves by people do), so a run never makes an open
+  form stale. A `PUT` without `version` while a schedule exists, or with one when none
+  exists, is 409 `stale_version` (`version` is the current one or null).
+- `next_runs` starts at the stored `next_run_at` (which may be due already), then the two after
+  it; 422 bodies are `{"detail", "field", "message"}`, `too_frequent` adds
+  `min_interval_minutes` and `interval_minutes`; `GET /api/connections/{id}` carries `schedule` too.
+- croniter's random (`R`) and hashed (`H`) fields and crons that never fire are `invalid_cron`.
+- The `tzdata` package (Apache-2.0) is a dependency, so zoneinfo knows every IANA name whatever
+  the image ships.
+- Web: the schedule opens in a row below its connection ("Schedule" button), and the table
+  gains a Schedule column; the next runs shown are the saved schedule's, computed by the API.
 
 ## Out of scope
 
