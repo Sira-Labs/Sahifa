@@ -5,7 +5,7 @@ sessions), spec 008 (worker), ADR-0006 (read-only sources, credentials), ADR-000
 Packages: `api/` (middleware, settings, upload checks), `deploy/caddy/` (headers, proxies),
 `.github/workflows/ci.yml` and `scripts/` (audits), `docs/security/`.
 
-Status: draft, awaiting the owner's approval.
+Status: approved 2026-10-03 by the owner; psycopg's LGPL-3.0 allowed by ADR-0015.
 
 ## Goal
 
@@ -117,7 +117,8 @@ buckets live in one API process; several API replicas each count on their own (d
   production dependencies (`pnpm licenses list --prod --json`). It fails on any licence
   outside the allowlist in `security/licences.toml`: MIT, MIT-0, BSD-2/3-Clause, Apache-2.0,
   ISC, PSF-2.0, MPL-2.0, 0BSD, Unlicense, and OFL-1.1 for fonts. Exceptions are listed per
-  package with a reason. It runs in a new `licences` job.
+  package with a reason; psycopg, psycopg-binary and psycopg-pool (LGPL-3.0) are allowed by
+  ADR-0015. It runs in a new `licences` job.
 
 ### Docs
 
