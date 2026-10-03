@@ -5,12 +5,13 @@ import { isPasskeyStatus, type PasskeyStatus } from "./auth";
 import { AssetReport } from "./pages/AssetReport";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
+import { FindingPage, FindingsAcross } from "./pages/FindingsAcross";
 import { Layout } from "./pages/Layout";
 import { Login } from "./pages/Login";
 import { NewScan } from "./pages/NewScan";
 import { Report } from "./pages/Report";
 import { ScansList } from "./pages/ScansList";
-import { parseFindingFilters, parseNewScanSearch } from "./search";
+import { parseFindingFilters, parseFindingsSearch, parseNewScanSearch } from "./search";
 
 /** Fallback for unknown paths. */
 function NotFound() {
@@ -57,6 +58,16 @@ const findingsRoute = createRoute({
   component: Findings,
 });
 
+// Findings across scans (spec 009).
+const findingsAcrossRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/findings",
+  validateSearch: parseFindingsSearch,
+  component: FindingsAcross,
+});
+
+const findingRoute = createRoute({ getParentRoute: () => appRoute, path: "/findings/$findingId", component: FindingPage });
+
 const connectionsRoute = createRoute({ getParentRoute: () => appRoute, path: "/connections", component: Connections });
 
 const accountRoute = createRoute({
@@ -76,7 +87,17 @@ const loginRoute = createRoute({
 });
 
 export const routeTree = rootRoute.addChildren([
-  appRoute.addChildren([scansRoute, newScanRoute, reportRoute, assetRoute, findingsRoute, connectionsRoute, accountRoute]),
+  appRoute.addChildren([
+    scansRoute,
+    newScanRoute,
+    reportRoute,
+    assetRoute,
+    findingsRoute,
+    findingsAcrossRoute,
+    findingRoute,
+    connectionsRoute,
+    accountRoute,
+  ]),
   loginRoute,
 ]);
 

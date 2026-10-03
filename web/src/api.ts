@@ -1,4 +1,4 @@
-// Thin fetch wrapper with one typed function per route of specs 004 and 007. Every non-2xx answer
+// Thin fetch wrapper with one typed function per route of specs 004, 007 and 009. Every non-2xx answer
 // becomes an ApiError carrying the API's `detail` as its message. Every request carries the
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
@@ -8,13 +8,18 @@ import type {
   ConnectionCreate,
   ConnectionTest,
   Finding,
+  FindingAction,
+  FindingChange,
   FindingFilters,
+  FindingsSearch,
   Health,
   Page,
   Scan,
   ScanCreate,
   ScanReport,
   StoredCheck,
+  StoredFinding,
+  StoredFindingDetail,
   ValueCount,
   Version,
 } from "./types";
@@ -155,6 +160,8 @@ export function normalizeFinding(raw: RawFinding): Finding {
   const checkType = raw.check_type ?? "";
   return {
     id: raw.id,
+    finding_id: raw.finding_id ?? null,
+    finding_status: raw.finding_status ?? null,
     check_id: raw.check_id ?? evidence.check_id ?? checkType,
     check_type: checkType,
     title: raw.title ?? evidence.title ?? checkType,
@@ -172,6 +179,22 @@ export function normalizeFinding(raw: RawFinding): Finding {
     examples: raw.examples ?? evidence.examples ?? [],
     sql: raw.sql ?? evidence.sql ?? null,
   };
+}
+
+const ALL_FINDING_STATUSES = ["open", "acknowledged", "resolved", "muted"] as const;
+
+/** Query string of `GET /api/findings`. The default view sends no status: the API's default is
+ * the findings needing attention (open, acknowledged, muted). */
+export function findingsQuery(search: FindingsSearch, cursor?: string, limit = 50): string {
+  const q = new URLSearchParams();
+  const view = search.status ?? "attention";
+  if (view === "all") for (const s of ALL_FINDING_STATUSES) q.append("status", s);
+  else if (view !== "attention") q.append("status", view);
+  if (search.severity) q.append("severity", search.severity);
+  if (search.connection) q.append("connection_id", search.connection);
+  q.append("limit", String(limit));
+  if (cursor) q.append("cursor", cursor);
+  return `?${q.toString()}`;
 }
 
 /** Multipart body of an upload scan. */
@@ -220,4 +243,10 @@ export const api = {
   listChecks: (assetId: string) => apiGet<StoredCheck[]>(`/api/checks${query({ asset_id: assetId })}`),
   changeCheck: (check: Pick<StoredCheck, "id" | "version">, action: CheckAction) =>
     apiSend<StoredCheck>("POST", `/api/checks/${enc(check.id)}/${action}`, { version: check.version }),
+
+  listStoredFindings: (search: FindingsSearch, cursor?: string, limit = 50) =>
+    apiGet<Page<StoredFinding>>(`/api/findings${findingsQuery(search, cursor, limit)}`),
+  getStoredFinding: (id: string) => apiGet<StoredFindingDetail>(`/api/findings/${enc(id)}`),
+  changeFinding: (finding: Pick<StoredFinding, "id" | "version">, action: FindingAction, change: FindingChange = {}) =>
+    apiSend<StoredFinding>("POST", `/api/findings/${enc(finding.id)}/${action}`, { version: finding.version, ...change }),
 };

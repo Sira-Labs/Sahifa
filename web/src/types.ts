@@ -138,6 +138,9 @@ export type CheckResult = {
 export type Finding = {
   /** Present on rows from `GET /api/scans/{id}/findings`. */
   id?: string;
+  /** The finding across scans this occurrence belongs to (spec 009); null before migration 0005. */
+  finding_id?: string | null;
+  finding_status?: FindingStatus | null;
   check_id: string;
   check_type: string;
   title: string;
@@ -259,3 +262,68 @@ export type StoredCheck = {
 };
 
 export type CheckAction = "approve" | "reject" | "lock" | "unlock" | "retire" | "restore";
+
+// --- Findings across scans (spec 009) ------------------------------------------------------
+
+export type FindingStatus = "open" | "acknowledged" | "resolved" | "muted";
+export type FindingAction = "acknowledge" | "resolve" | "mute" | "unmute" | "reopen";
+
+/** One finding per failing check across scans, with its latest occurrence. */
+export type StoredFinding = {
+  id: string;
+  status: FindingStatus;
+  severity: Severity;
+  occurrences: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  muted_until: string | null;
+  version: number;
+  check: { id: string; key: string; type: string; title: string; status: CheckStatus; column: string | null };
+  asset: { id: string; label: string; connection_id: string };
+  latest: {
+    scan_id: string;
+    summary: string;
+    failed: number;
+    evaluated: number;
+    ratio: number;
+    low: number;
+    high: number;
+    dimension: Dimension;
+  } | null;
+};
+
+/** One scan in which the finding's check failed, with its evidence. */
+export type FindingOccurrence = {
+  scan_id: string;
+  at: string;
+  failed: number;
+  evaluated: number;
+  ratio: number;
+  low: number;
+  high: number;
+  summary: string;
+  examples: ValueCount[];
+  sql: string | null;
+  next_step: string;
+};
+
+export type FindingEvent = {
+  at: string;
+  actor: string;
+  action: "opened" | "recurred" | "auto_resolved" | "reopened" | "unmuted" | FindingAction;
+  from_status: FindingStatus | null;
+  to_status: FindingStatus;
+  note: string | null;
+};
+
+export type StoredFindingDetail = StoredFinding & { occurrences_list: FindingOccurrence[]; events: FindingEvent[] };
+
+/** Which statuses the findings page shows: those needing attention (open, acknowledged, muted:
+ * the API's default), one status, or all of them. */
+export type FindingsView = "attention" | FindingStatus | "all";
+
+/** Search params of `/findings`. */
+export type FindingsSearch = { status?: FindingsView; severity?: Severity; connection?: string };
+
+/** Body of `POST /api/findings/{id}/{action}`. */
+export type FindingChange = { note?: string; until?: string };
