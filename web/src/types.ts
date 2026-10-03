@@ -162,6 +162,8 @@ export type CheckResult = {
   examples: ValueCount[];
   sql: string | null;
   truncated: boolean;
+  /** Spec 013: no example query, past the per-table cap of failing checks. */
+  examples_skipped?: boolean;
 };
 
 export type Finding = {
@@ -186,6 +188,8 @@ export type Finding = {
   next_step: string;
   examples: ValueCount[];
   sql: string | null;
+  /** Spec 013: no example query, past the per-table cap of failing checks. */
+  examples_skipped?: boolean;
 };
 
 export type HealthItem = { type: string; asset: string; column: string | null; summary: string };

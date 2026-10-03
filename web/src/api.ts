@@ -155,7 +155,13 @@ const enc = encodeURIComponent;
 
 type RawFinding = Partial<Finding> & {
   column_name?: string | null;
-  evidence?: { examples?: ValueCount[]; sql?: string | null; check_id?: string; title?: string } | null;
+  evidence?: {
+    examples?: ValueCount[];
+    sql?: string | null;
+    check_id?: string;
+    title?: string;
+    examples_skipped?: boolean;
+  } | null;
 };
 
 /** A finding row as the page expects it. The findings table stores `column_name` and an
@@ -183,6 +189,7 @@ export function normalizeFinding(raw: RawFinding): Finding {
     next_step: raw.next_step ?? "",
     examples: raw.examples ?? evidence.examples ?? [],
     sql: raw.sql ?? evidence.sql ?? null,
+    examples_skipped: raw.examples_skipped ?? evidence.examples_skipped ?? false,
   };
 }
 

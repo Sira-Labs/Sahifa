@@ -42,7 +42,7 @@ export function FindingCard({ finding, scanId }: { finding: Finding; scanId: str
           </dd>
         </div>
       </dl>
-      <Examples items={finding.examples} />
+      <Examples items={finding.examples} skipped={finding.examples_skipped} />
       {finding.sql && <SqlBlock sql={finding.sql} />}
       {finding.next_step && (
         <p className="next-step">
