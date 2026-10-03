@@ -126,7 +126,8 @@ The core alone needs no infrastructure: `sahifa scan <dir>` runs on DuckDB in me
   migrates: it waits up to 5 minutes for the api to migrate, then exits with code 3. It runs
   the scans, a reaper every 5 minutes (scans of a worker silent for
   `SAHIFA_REAPER_STALE_MINUTES`, default 10, fail with "interrupted: the worker stopped";
-  scans left queued without a job are queued again) and the hourly upload clean-up. Api and
+  scans left queued without a job are queued again), the hourly upload clean-up and, every
+  minute, the due schedules of connections (spec 010; inline, the api runs them). Api and
   worker must share the uploads volume (`/data`).
 
 The worker names its database connections `sahifa-worker/<commit>`, and `GET /healthz` on the

@@ -24,7 +24,32 @@ export type Connection = {
   secret_ref: string | null;
   available: boolean;
   created_at: string;
+  /** The connection's schedule (spec 010), or null. */
+  schedule?: ScheduleSummary | null;
 };
+
+// --- Schedules (spec 010) ---------------------------------------------------------------
+
+export type ScheduleOutcome = "queued" | "skipped_running" | "failed_to_queue" | "invalid_schedule";
+
+/** A schedule as `GET /api/connections` lists it. */
+export type ScheduleSummary = { cron: string; timezone: string; enabled: boolean; next_run_at: string | null };
+
+/** `GET/PUT /api/connections/{id}/schedule`. Times are ISO strings in UTC; `next_runs` is empty
+ * while the schedule is disabled. */
+export type Schedule = ScheduleSummary & {
+  sample_rows: number | null;
+  next_runs: string[];
+  last_run_at: string | null;
+  last_scan_id: string | null;
+  last_outcome: ScheduleOutcome | null;
+  version: number;
+  updated_at: string;
+  updated_by: string;
+};
+
+/** The body of `PUT /api/connections/{id}/schedule`; `version` once a schedule exists. */
+export type ScheduleSave = { cron: string; timezone: string; enabled: boolean; sample_rows: number | null; version?: number };
 
 export type ConnectionCreate = {
   name: string;
@@ -38,11 +63,15 @@ export type ConnectionTest = { ok: boolean; assets: number | string[] | null; er
 
 export type FindingCounts = Record<Severity, number>;
 
+export type ScanTrigger = "manual" | "schedule";
+
 export type Scan = {
   id: string;
   connection_id: string;
   connection_name: string;
   status: ScanStatus;
+  /** Who started it (spec 010); absent from APIs before it. */
+  trigger?: ScanTrigger;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;

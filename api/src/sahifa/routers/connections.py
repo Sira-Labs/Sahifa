@@ -7,13 +7,14 @@ import uuid
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import Connection
+from ..db.models import Connection, ScanSchedule
 from ..deps import session, settings
 from ..logging import get_logger
-from ..schemas import ConnectionIn, ConnectionOut, ConnectionTest, Items
+from ..schemas import ConnectionIn, ConnectionOut, ConnectionTest, Items, ScheduleSummary
 from ..services.connections import list_visible, public_config, resolve
 from ..settings import CONNECTION_PREFIX, Settings
 
@@ -21,8 +22,18 @@ router = APIRouter(prefix="/api/connections", tags=["connections"])
 log = get_logger("sahifa.connections")
 
 
-def to_out(conn: Connection) -> ConnectionOut:
+def to_out(conn: Connection, schedule: ScanSchedule | None = None) -> ConnectionOut:
     available = resolve(conn) is not None
+    summary = (
+        ScheduleSummary(
+            cron=schedule.cron,
+            timezone=schedule.timezone,
+            enabled=schedule.enabled,
+            next_run_at=schedule.next_run_at,
+        )
+        if schedule
+        else None
+    )
     return ConnectionOut(
         id=conn.id,
         name=conn.name,
@@ -31,12 +42,23 @@ def to_out(conn: Connection) -> ConnectionOut:
         secret_ref=conn.secret_ref,
         available=available,
         created_at=conn.created_at,
+        schedule=summary,
     )
+
+
+async def schedules_of(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, ScanSchedule]:
+    """The schedules of these connections (spec 010), by connection id."""
+    if not ids:
+        return {}
+    rows = await db.scalars(select(ScanSchedule).where(ScanSchedule.connection_id.in_(ids)))
+    return {s.connection_id: s for s in rows}
 
 
 @router.get("", response_model=Items[ConnectionOut])
 async def list_connections(db: AsyncSession = Depends(session)) -> Items[ConnectionOut]:
-    return Items[ConnectionOut](items=[to_out(c) for c in await list_visible(db)])
+    conns = await list_visible(db)
+    schedules = await schedules_of(db, [c.id for c in conns])
+    return Items[ConnectionOut](items=[to_out(c, schedules.get(c.id)) for c in conns])
 
 
 @router.post("", response_model=ConnectionOut, status_code=status.HTTP_201_CREATED)
@@ -66,7 +88,8 @@ async def _get(db: AsyncSession, connection_id: uuid.UUID) -> Connection:
 
 @router.get("/{connection_id}", response_model=ConnectionOut)
 async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(session)) -> ConnectionOut:
-    return to_out(await _get(db, connection_id))
+    conn = await _get(db, connection_id)
+    return to_out(conn, (await schedules_of(db, [conn.id])).get(conn.id))
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTest)

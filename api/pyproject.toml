@@ -20,6 +20,10 @@ dependencies = [
     "sahifa-core",
     # Pinned: a new version may change its schema, which then needs a new migration (spec 008).
     "procrastinate==3.10.0",
+    # Schedules (spec 010): cron parsing (MIT), and IANA time zones for zoneinfo whatever the
+    # image ships (Apache-2.0).
+    "croniter>=6.2.4",
+    "tzdata>=2026.4",
 ]
 
 [project.optional-dependencies]
@@ -61,7 +65,7 @@ packages = ["sahifa"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["duckdb", "duckdb.*"]
+module = ["duckdb", "duckdb.*", "croniter", "croniter.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

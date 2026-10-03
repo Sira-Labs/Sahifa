@@ -44,6 +44,13 @@ All notable changes to this project are documented here. The format follows
   recorded. New `/findings` page and `/api/findings`; the scan findings page shows each
   finding's status. Migration 0005 renames the per-scan `findings` table to
   `finding_occurrences`.
+- Scheduled scans (spec 010): a connection gets a schedule, a preset ("Nightly at 02:00",
+  "Every 6 hours", "Weekly on Monday at 06:00") or a 5-field cron in an IANA time zone,
+  daylight saving included. The worker (or, inline, the API) starts due scans every minute,
+  never while the connection's previous scan is queued or running, and runs a missed slot
+  once after an outage. Scheduled scans are marked "scheduled" in the scans list.
+  `/api/connections/{id}/schedule`, `scans.trigger`, `SAHIFA_SCHEDULE_MIN_INTERVAL_MINUTES`
+  (default 60), migration 0006.
 
 ### Fixed
 - Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now

@@ -63,14 +63,16 @@ core in a worker thread (`SAHIFA_SCAN_EXECUTION=inline`, the default) or through
 Procrastinate queue on the same Postgres (`queue`, spec 008, ADR-0009). In queue mode the
 `sahifa-worker` process (`python -m sahifa.worker`) runs the `scans` and `maintenance`
 queues: `run_scan`, the reaper every 5 minutes (scans of stalled workers fail with
-"interrupted", scans left queued without a job are re-queued) and the hourly upload clean-up.
-Both modes run one shared `execute_scan`.
+"interrupted", scans left queued without a job are re-queued), the hourly upload clean-up
+and, every minute, the due schedules (spec 010), which the API itself runs in inline mode.
+Both modes run one shared `execute_scan`, and every scan, manual, uploaded or scheduled,
+starts through one `start_scan`.
 
 | Route group | R1 |
 |---|---|
 | `/healthz`, `/api/version` | liveness, version, commit, schema revision |
-| `/api/connections` | list, create (non-secret config plus `secret_ref`), read, test |
-| `/api/scans` | create on a connection, create from uploaded files, list, read, report, findings (occurrences, with their finding's id and status) |
+| `/api/connections` | list (each with its schedule summary), create (non-secret config plus `secret_ref`), read, test; `/{id}/schedule`: read, create or replace (cron, time zone, enabled; `version`), delete (spec 010) |
+| `/api/scans` | create on a connection, create from uploaded files, list, read (with `trigger`: `manual` or `schedule`), report, findings (occurrences, with their finding's id and status) |
 | `/api/assets` | assets stored per connection by scans, with columns and check counts (spec 007) |
 | `/api/checks` | list per asset, approve, reject, lock, unlock, retire, restore, events (spec 007) |
 | `/api/findings` | findings across scans: list (filter by status, severity, connection, asset; cursor), read with occurrences and events, acknowledge, resolve, mute, unmute, reopen (spec 009) |

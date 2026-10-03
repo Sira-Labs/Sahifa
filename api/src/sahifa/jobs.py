@@ -5,11 +5,15 @@
 | `run_scan(scan_id)` | `scans` | deferred by the API in queue mode, and by the reaper |
 | `reap()` | `maintenance` | every 5 minutes |
 | `clean_uploads()` | `maintenance` | hourly |
+| `run_due_schedules()` | `maintenance` | every minute (spec 010) |
 
 The app is defined at import, so the tasks can be declared on it; `opened()` gives it a
 connection pool for one process, with the connections named `sahifa-<role>/<commit>` so that
 `/healthz` can list the workers. The jobs get the settings and the session factory through the
 worker's context (`Runtime`).
+
+Every scan starts through `start_scan`, in either mode: `POST /api/scans`, uploads and due
+schedules. In inline mode the API runs `run_due_schedules` itself every minute (`sahifa.main`).
 """
 
 from __future__ import annotations
@@ -22,17 +26,21 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfoNotFoundError
 
+from croniter import CroniterError
 from procrastinate import App, JobContext, PsycopgConnector
 from procrastinate.exceptions import AlreadyEnqueued
 from procrastinate.jobs import Status
 from psycopg_pool import AsyncConnectionPool
 from sqlalchemy import Text, cast, column, exists, or_, select, table, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .db.models import Scan
+from .db.models import Connection, Scan, ScanSchedule
 from .logging import get_logger
-from .services.scans import execute_scan
+from .services.scans import ScanRunner, execute_scan
+from .services.schedules import next_run
 from .services.uploads import clean_uploads as clean_upload_folders
 from .settings import Settings
 
@@ -43,7 +51,10 @@ MAINTENANCE = "maintenance"
 QUEUES = (SCANS, MAINTENANCE)
 RUN_SCAN = "run_scan"
 INTERRUPTED = "interrupted: the worker stopped"
+NOT_STARTED = "failed to start: the scheduled scan could not be handed to the runner"
 RUNTIME = "sahifa"
+# Due schedules handled per run of `run_due_schedules`; the rest wait for the next minute.
+DUE_BATCH = 20
 Role = Literal["api", "worker"]
 
 # Procrastinate's jobs table, for the reaper's "queued without a live job" query; it is not a
@@ -111,6 +122,130 @@ async def enqueue_scan(db: AsyncSession, scan: Scan) -> None:
         scan.status, scan.error, scan.finished_at = "failed", message, datetime.now(UTC)
     await db.commit()
     await db.refresh(scan)
+
+
+async def start_scan(
+    db: AsyncSession, scan: Scan, settings: Settings, runner: ScanRunner | None, *, connection: str
+) -> None:
+    """Hand a committed `queued` scan to the inline runner or, in queue mode, defer its job
+    (spec 008). Manual scans, uploads and due schedules (spec 010) all start here; a failure to
+    defer leaves the scan failed with its error."""
+    if settings.scan_execution == "queue":
+        await enqueue_scan(db, scan)
+        if scan.job_id is not None:
+            log.info("scan.queued", scan_id=str(scan.id), connection=connection, job_id=scan.job_id)
+        return
+    if runner is None:
+        raise RuntimeError("inline scan execution needs the API's scan runner")
+    runner.submit(scan.id)
+    log.info("scan.queued", scan_id=str(scan.id), connection=connection)
+
+
+@dataclass
+class ScheduleRun:
+    """One due schedule handled by `run_due_schedules`."""
+
+    connection_id: uuid.UUID
+    outcome: str
+    scan_id: uuid.UUID | None
+    next_run_at: datetime | None
+
+
+async def run_due_schedules(
+    sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+    now: datetime | None = None,
+    *,
+    runner: ScanRunner | None = None,
+) -> list[ScheduleRun]:
+    """Start the scans of the schedules due at `now` (spec 010).
+
+    One transaction locks at most `DUE_BATCH` due schedules (`SKIP LOCKED`: a second worker or
+    the API's loop passes them by), inserts their scans and records each run with its next time
+    after `now`; once it commits, the scans start through `start_scan` like manual ones. A
+    connection with a scan still queued or running is skipped, and a schedule whose next time
+    cannot be computed is disabled. After an outage `next_run_at` jumps past `now`, so the
+    missed slots run once."""
+    now = now or datetime.now(UTC)
+    runs: list[ScheduleRun] = []
+    queued: list[tuple[ScheduleRun, Scan, uuid.UUID, str]] = []
+    async with sessions() as db:
+        due = await db.scalars(
+            select(ScanSchedule)
+            .where(ScanSchedule.enabled.is_(True), ScanSchedule.next_run_at <= now)
+            .order_by(ScanSchedule.next_run_at)
+            .limit(DUE_BATCH)
+            .with_for_update(skip_locked=True)
+        )
+        for schedule in list(due):
+            conn = await db.get(Connection, schedule.connection_id)
+            if conn is None:  # deleted meanwhile; the cascade takes the schedule
+                continue
+            try:
+                upcoming_run = next_run(schedule.cron, schedule.timezone, now)
+            except (ZoneInfoNotFoundError, CroniterError, ValueError):
+                # Validated on save, so only a tzdata or croniter change gets here: disable the
+                # schedule rather than leave it due, blocking the batch every minute.
+                log.exception("schedule.invalid", schedule_id=str(schedule.id), connection_id=str(conn.id))
+                schedule.enabled = False
+                schedule.next_run_at = None
+                schedule.last_outcome = "invalid_schedule"
+                schedule.last_run_at = now
+                runs.append(ScheduleRun(conn.id, schedule.last_outcome, None, None))
+                continue
+            busy = await db.scalar(
+                select(exists().where(Scan.connection_id == conn.id, Scan.status.in_(("queued", "running"))))
+            )
+            scan: Scan | None = None
+            if not busy:
+                sample = settings.sample_rows if schedule.sample_rows is None else schedule.sample_rows
+                scan = Scan(
+                    connection_id=conn.id,
+                    sample_rows=sample,
+                    options={"assets": None},
+                    status="queued",
+                    trigger="schedule",
+                )
+                db.add(scan)
+                await db.flush()
+                schedule.last_scan_id = scan.id
+            schedule.last_outcome = "skipped_running" if scan is None else "queued"
+            schedule.last_run_at = now
+            schedule.next_run_at = upcoming_run
+            run = ScheduleRun(conn.id, schedule.last_outcome, scan.id if scan else None, upcoming_run)
+            runs.append(run)
+            if scan is not None:
+                queued.append((run, scan, scan.id, conn.name))
+        await db.commit()
+        for run, scan, scan_id, name in queued:
+            try:
+                await db.refresh(scan)
+                await start_scan(db, scan, settings, runner, connection=name)
+                failed = scan.status == "failed"
+            except SQLAlchemyError:
+                # Left queued, the scan would never run inline and its connection would skip
+                # every later slot as busy; fail it and go on with the rest of the batch.
+                log.exception("schedule.start_failed", scan_id=str(scan_id))
+                await db.rollback()
+                await interrupt_scans(sessions, [scan_id], NOT_STARTED)
+                failed = True
+            if failed:
+                run.outcome = "failed_to_queue"
+                await db.execute(
+                    update(ScanSchedule)
+                    .where(ScanSchedule.last_scan_id == scan_id)
+                    .values(last_outcome=run.outcome)
+                )
+                await db.commit()
+    for run in runs:
+        log.info(
+            "schedule.ran",
+            connection_id=str(run.connection_id),
+            outcome=run.outcome,
+            scan_id=str(run.scan_id) if run.scan_id else None,
+            next_run=run.next_run_at.isoformat() if run.next_run_at else None,
+        )
+    return runs
 
 
 async def interrupt_scans(
@@ -220,6 +355,13 @@ async def reap_task(context: JobContext, timestamp: int) -> None:
 async def clean_uploads_task(context: JobContext, timestamp: int) -> None:
     rt = _runtime(context)
     await clean_upload_folders(rt.sessions, rt.settings)
+
+
+@app.periodic(cron="* * * * *")
+@app.task(name="run_due_schedules", queue=MAINTENANCE, pass_context=True, queueing_lock="run_due_schedules")
+async def run_due_schedules_task(context: JobContext, timestamp: int) -> None:
+    rt = _runtime(context)
+    await run_due_schedules(rt.sessions, rt.settings)
 
 
 async def work(

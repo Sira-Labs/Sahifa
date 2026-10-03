@@ -177,6 +177,7 @@ Rules:
     | `SAHIFA_UPLOAD_TTL_DAYS` | `7` | uploaded files are deleted this long after their scan finished (hourly clean-up) |
     | `SAHIFA_SCAN_EXECUTION` | `inline` | `inline`: the api runs scans; `queue`: the worker does (section 3, same value on both apps) |
     | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | scans run at once, by the api or, in queue mode, by the worker (ADR-0009) |
+    | `SAHIFA_SCHEDULE_MIN_INTERVAL_MINUTES` | `60` | a connection's schedule may not run more often (spec 010); due schedules start every minute, by the api or, in queue mode, by the worker |
     | `SAHIFA_DUCKDB_MEMORY` | `1GB` | DuckDB's memory limit per scan |
     | `SAHIFA_STATEMENT_TIMEOUT_S` | `60` | per statement against a source |
     | `SAHIFA_LOG_LEVEL` | `info` | |
@@ -230,7 +231,9 @@ stopped") and re-queues scans that were never queued, and the worker deletes old
    version, then exits with code 3 (and CapRover restarts it). `SAHIFA_MIGRATION_DATABASE_URL`
    is not needed. Optional: `SAHIFA_REAPER_STALE_MINUTES` (default `10`), the time without a
    heartbeat after which a worker's running scans count as interrupted; `SAHIFA_MAX_CONCURRENT_SCANS`
-   is the worker's concurrency; `SAHIFA_UPLOAD_TTL_DAYS` the upload clean-up.
+   is the worker's concurrency; `SAHIFA_UPLOAD_TTL_DAYS` the upload clean-up. In queue mode the
+   worker also starts the due schedules (spec 010), so keep `SAHIFA_SCHEDULE_MIN_INTERVAL_MINUTES`
+   equal on both apps (the api validates it when a schedule is saved).
 3. **Shared uploads.** The api stores uploads under `/data` and the worker reads them, so both
    apps mount the **same** persistent directory: App Configs → Persistent Directories → path in
    app `/data`, **label `sahifa-data`** (`sahifa-stg-data` on staging), exactly the label of
