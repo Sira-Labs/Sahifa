@@ -3,6 +3,7 @@ a realistic column mix, a declared foreign key and a few faults, generated serve
 
 This writes, so it only ever targets a benchmark database the operator names, never a source:
 it creates one schema, and replaces it only when that schema carries this module's marker.
+Each table it creates carries the marker too, and replacement drops only those tables.
 """
 
 from __future__ import annotations
@@ -87,6 +88,7 @@ def create_schema(
             f"FROM generate_series(1, {PARENT_ROWS}) AS g".encode()
         )
         con.execute(f"ALTER TABLE {parent} ADD PRIMARY KEY (id)".encode())
+        con.execute(f"COMMENT ON TABLE {parent} IS {d.literal(MARKER)}".encode())
         tables = [parent]
         n = 0
         started = time.monotonic()
@@ -98,6 +100,7 @@ def create_schema(
                 # NOT VALID keeps the orphans, as in a legacy database whose constraint came late.
                 fk = f"ALTER TABLE {table} ADD FOREIGN KEY (customer_id) REFERENCES {parent} (id) NOT VALID"
                 con.execute(fk.encode())
+                con.execute(f"COMMENT ON TABLE {table} IS {d.literal(MARKER)}".encode())
                 tables.append(table)
                 n += 1
                 if n % 50 == 0:
@@ -108,18 +111,20 @@ def create_schema(
 
 
 def _drop_schema(con: psycopg.Connection[tuple[object, ...]], schema: str) -> None:
-    """Drop a marked benchmark schema without CASCADE: its tables in one restrictive statement
-    (the foreign keys among them go with them), then the empty schema, in one transaction. An
-    object elsewhere that depends on a benchmark table (a view in another schema), or anything
-    else left in the schema, makes it refuse and keep everything as it was."""
+    """Drop a marked benchmark schema without CASCADE: the tables this module created (marked
+    like the schema) in one restrictive statement, so the foreign keys among them go with them,
+    then the empty schema, in one transaction. An object elsewhere that depends on a benchmark
+    table (a view in another schema), or anything left in the schema that this module did not
+    create, makes it refuse and keep everything as it was."""
     d = PostgresDialect()
     s = d.ident(schema)
     names = [
         str(r[0])
         for r in con.execute(
             "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = %s AND c.relkind IN ('r', 'p') ORDER BY c.relname",
-            [schema],
+            "WHERE n.nspname = %s AND c.relkind IN ('r', 'p') "
+            "AND obj_description(c.oid, 'pg_class') = %s ORDER BY c.relname",
+            [schema, MARKER],
         )
     ]
     try:

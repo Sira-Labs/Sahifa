@@ -74,7 +74,9 @@ creates the schema server-side with `generate_series`:
   duplicated emails.
 
 It writes, so it only ever targets a benchmark database named by the operator, never a source.
-It replaces a schema only when that schema carries its marker comment.
+It replaces a schema only when that schema carries its marker comment, and then drops only the
+tables it marked itself, without `CASCADE`: anything else in the schema, or a view elsewhere that
+reads a benchmark table, makes it refuse.
 
 ### Scan options
 

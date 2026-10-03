@@ -204,5 +204,13 @@ def test_bench_schema_refuses_a_schema_it_did_not_create() -> None:
         left = con.execute("SELECT count(*) FROM pg_tables WHERE schemaname = 'sahifa_bench_test'").fetchone()
         assert left == (2,)
         assert con.execute("SELECT count(*) FROM sahifa_not_bench.v").fetchone() == (2000,)
+        con.execute("DROP VIEW sahifa_not_bench.v")
+        # A table someone else put in the benchmark schema is never dropped either.
+        con.execute("CREATE TABLE sahifa_bench_test.keep AS SELECT 1 AS id")
+    with pytest.raises(UsageError, match="did not create"):
+        create_schema(URL, schema="sahifa_bench_test", mix="1x10")
+    with psycopg.connect(URL, autocommit=True) as con:
+        assert con.execute("SELECT count(*) FROM sahifa_bench_test.keep").fetchone() == (1,)
+        assert con.execute("SELECT count(*) FROM sahifa_bench_test.t0000").fetchone() == (2000,)
         con.execute("DROP SCHEMA sahifa_not_bench CASCADE")
         con.execute("DROP SCHEMA sahifa_bench_test CASCADE")
