@@ -84,7 +84,19 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         for both modes, which makes the job idempotent.
       - The worker has its own one-click template (`sahifa-worker.yml`), since a CapRover template
         cannot make an app optional; the worker healthcheck looks for its process in `/proc`.
-- [ ] 009 Findings across scans with deduplication and occurrences.
+- [x] **009 Findings across scans: deduplication, occurrences, status** — `docs/specs/009-findings-across-scans.md`
+      - Migration 0005 renames `findings` to `finding_occurrences` (indexes and constraints too);
+        old occurrences keep `finding_id` null. Model `FindingOccurrence`, new `Finding`, `FindingEvent`.
+      - "Evaluated and passed" comes from the report (a result on an asset without error, scoring,
+        not a finding); retired, unevaluated and dropped checks have no result. No core change.
+      - Linking reuses `persist_checks`' asset ids (new `Persisted.asset_ids`); a check retired
+        during the scan keeps its finding and gets an unlinked occurrence (the person wins).
+      - Concurrency: insert `ON CONFLICT DO NOTHING` on the partial unique index, reopen in a
+        savepoint; either conflict retries as "recur". Every scanner change bumps `version`.
+      - `muted_until` is cleared whenever a finding leaves `muted`; extra index on `check_id` for
+        the reopen lookup; a blank note is stored as null.
+      - Web: `/findings` with a single status select ("Needs attention" default), cards updated in
+        place, "Show history" panel and `/findings/$id`; mute end is a date (end of that local day).
 - [ ] 010 Scheduled scans per connection (S3 sources follow in R2, sprint 7).
 - [ ] 011 Score history per asset and store.
 

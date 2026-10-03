@@ -40,10 +40,13 @@ flowchart TD
     Report --> Findings["/scans/:id/findings<br/>filterable findings"]
     Asset --> Findings
     Conns["/connections<br/>registered connections"] --> New
+    Scans --> Across["/findings<br/>findings across scans, status"]
+    Findings --> Finding["/findings/:id<br/>occurrences and history"]
+    Across --> Finding
 ```
 
-R2 adds sign-in, the workspace switcher, `/findings` across scans, `/assets/:id` history and
-the admin panel; R3 the store health page and contract editor.
+R2 adds sign-in, the workspace switcher, `/findings` across scans (spec 009, in place),
+`/assets/:id` history and the admin panel; R3 the store health page and contract editor.
 
 ## Key screens (R1)
 
@@ -82,7 +85,21 @@ patterns) and its checks with ratio, interval, status chip and summary. Asset-le
 A list ordered by severity then failed share: the summary sentence, the check id, asset and
 column, failed of evaluated with the interval, example values (masked where personal), the
 SQL in a collapsible block with a copy button, and the suggested next step. Filters:
-severity, dimension, asset.
+severity, dimension, asset. Since spec 009 each item also shows its finding's status chip and
+links to the finding across scans.
+
+### Findings across scans (spec 009)
+
+`/findings`, in the main navigation: one card per finding (one per failing check), by default
+those needing attention (open, acknowledged, muted), most severe and most recently seen first,
+with "Load more". Filters: status, severity, connection. A card shows the latest summary, the
+check title, asset and column, severity and status chips, "Seen N times, first … last …", the
+mute end when muted, and the actions the status allows ("Acknowledge", "Resolve", "Mute…",
+"Unmute", "Reopen"). "Mute…" opens a small form with an optional end date and note; "Add a
+note" attaches an optional note to the next action. Actions update the card in place; a 409
+`stale_version` reloads the list with a notice. "Show history" expands the occurrences (examples
+masked where personal, SQL, next step) and the events, notes rendered as text.
+`/findings/:id` shows one finding with its history open.
 
 ## Responsive and mobile
 

@@ -5,7 +5,7 @@ Sprint 2, story S2-3. Depends on: spec 004 (scan persistence, `findings` per sca
 the worker); domain model, "Finding rules". Packages: `api/` (migration 0005, scan
 persistence, `/api/findings`), `web/` (findings across scans, status actions).
 
-Status: approved 2026-10-03 by the owner.
+Status: approved 2026-10-03 by the owner; implemented 2026-10-03.
 
 ## Goal
 
@@ -124,30 +124,30 @@ Allowed transitions for people:
 
 ## Acceptance criteria
 
-- [ ] **A rescan does not duplicate findings** (S2-3's "done when"). Scanning the faulty shop
+- [x] **A rescan does not duplicate findings** (S2-3's "done when"). Scanning the faulty shop
       twice through one connection gives the same number of findings as the first scan. Each
       has `occurrences` 2 and two occurrence rows.
-- [ ] After fixing the data behind one finding and scanning again:
+- [x] After fixing the data behind one finding and scanning again:
   - that finding is `resolved` with an `auto_resolved` event;
   - the others have `occurrences` 3.
-- [ ] Breaking the data again reopens the same finding (same id, `reopened` event); it does not
+- [x] Breaking the data again reopens the same finding (same id, `reopened` event); it does not
       create a new one.
-- [ ] Each person's action works from its allowed statuses and returns 409
+- [x] Each person's action works from its allowed statuses and returns 409
       `invalid_transition` otherwise. A stale `version` returns 409 `stale_version`.
-- [ ] A finding muted with a past `until` (set directly in the test) becomes `open` at the next
+- [x] A finding muted with a past `until` (set directly in the test) becomes `open` at the next
       failing scan, with an `unmuted` event. Without `until` it stays `muted`.
-- [ ] Findings of a retired check, and of a check not evaluated in a scan, are left unchanged
+- [x] Findings of a retired check, and of a check not evaluated in a scan, are left unchanged
       by that scan.
-- [ ] `GET /api/findings` filters by status, severity, connection and asset, pages with a
+- [x] `GET /api/findings` filters by status, severity, connection and asset, pages with a
       cursor, and defaults to open, acknowledged and muted.
-- [ ] Migration 0005 renames `findings` to `finding_occurrences` without losing rows. It
+- [x] Migration 0005 renames `findings` to `finding_occurrences` without losing rows. It
       downgrades back to 0004 with the rows intact, and `alembic check` is clean.
-- [ ] Web:
+- [x] Web:
   - `/findings` lists, filters and pages;
   - each action sends the CSRF header and updates the card;
   - `stale_version` reloads;
   - the scan findings page shows status chips and links.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -181,3 +181,30 @@ Allowed transitions for people:
 - **Score history and sparklines:** spec 011.
 - **Backfilling occurrences from before migration 0005:** not done.
 - **Bulk actions on many findings:** later, if wanted.
+
+## Implementation notes
+
+- "Evaluated and passed" (behaviour 2) is read from the report: the check has a result in
+  `assets[].checks` of an asset without `error`, its spec scores (`active` or `locked`), and it
+  is not a finding (`failed == 0` or `passed`, the inverse of the core's `is_finding`). Retired,
+  unevaluated (`assets[].unevaluated`) and dropped checks have no result. No core change.
+- `persist_checks` now returns each asset label's stored id; findings link through
+  (asset id, `CheckSpec.id`) after it, in the same transaction.
+- A check whose stored status no longer scores when the scan persists (a person retired it
+  while the scan ran) keeps its finding unchanged; its occurrence is stored without a link. The
+  person's newer decision wins, as for checks in spec 007.
+- `muted_until` is cleared whenever a finding leaves `muted` (resolve, auto-resolve, a reopen by
+  the scanner), not only on `unmute` and `reopen`, so it only ever describes a muted finding.
+- Scanner changes use the scan's finish time for `first_seen_at`, `last_seen_at` and
+  `resolved_at`; people's `resolve` uses the transaction time.
+- Extra index `ix_findings_check_id`: reopening looks up a check's resolved findings, which the
+  partial unique index does not cover. The partial unique index is `uq_findings_check_unresolved`.
+- Reopening a resolved finding runs in a savepoint; a unique violation (a concurrent scan
+  opened a finding first) retries as case 1.1, like the insert's `ON CONFLICT DO NOTHING`.
+- `scan.findings_linked` also logs `unmuted` and `unlinked`; a blank note is stored as null.
+- `check.column` in the API is the check's column, or its columns joined with ", " (as the
+  core names multi-column findings).
+- Web: the status filter is one select ("Needs attention", the default, then each status and
+  "All"); the mute end is a date, sent as the end of that day in the browser's time zone.
+  The detail is both an expandable panel ("Show history") and `/findings/$id`, which the scan
+  findings page links to. Actions update the card in place; it leaves the list on the next load.

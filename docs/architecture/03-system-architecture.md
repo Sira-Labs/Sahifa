@@ -70,10 +70,10 @@ Both modes run one shared `execute_scan`.
 |---|---|
 | `/healthz`, `/api/version` | liveness, version, commit, schema revision |
 | `/api/connections` | list, create (non-secret config plus `secret_ref`), read, test |
-| `/api/scans` | create on a connection, create from uploaded files, list, read, report, findings |
+| `/api/scans` | create on a connection, create from uploaded files, list, read, report, findings (occurrences, with their finding's id and status) |
 | `/api/assets` | assets stored per connection by scans, with columns and check counts (spec 007) |
 | `/api/checks` | list per asset, approve, reject, lock, unlock, retire, restore, events (spec 007) |
-| `/api/findings` | list, filter, change status (R2 lifecycle) |
+| `/api/findings` | findings across scans: list (filter by status, severity, connection, asset; cursor), read with occurrences and events, acknowledge, resolve, mute, unmute, reopen (spec 009) |
 | `/api/auth/*` | sign-in through Keycloak, BFF cookie session (spec 006, ADR-0010) |
 
 ### 3. Web (TypeScript, `web/`)

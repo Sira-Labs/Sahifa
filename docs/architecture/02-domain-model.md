@@ -109,8 +109,17 @@ every level is a weighted mean of the level below, and nothing is computed twice
   `max_fail_ratio` parameter (default 0 for keys and declared constraints, set from the
   profile for generated checks; catalogue).
 - Severity is the check's severity. Within a scan, one check yields at most one finding.
-- R1 keeps findings per scan. R2 (spec 009) keeps one open finding per check across scans,
-  counting occurrences, with the Tabayyun lifecycle (open, acknowledged, resolved, muted).
+- R1 kept findings per scan. Since spec 009 each failing result is an **occurrence** (one per
+  check per scan, with its evidence) of the check's **finding**, kept across scans: at most one
+  finding per check is not resolved (open, acknowledged or muted), counting its occurrences.
+  - A failing scan adds an occurrence to that finding, else reopens the check's most recent
+    resolved finding, else opens a new one; a muted finding whose `muted_until` has passed
+    becomes open.
+  - A check evaluated in a scan that passes resolves its finding (`auto_resolved`); a check not
+    evaluated (retired, proposed, unevaluated, dropped, or its asset failed) leaves it as is.
+  - People acknowledge, resolve, mute (optionally until a time) and reopen findings with a note;
+    every change, by a person or the scanner, is an event with its actor. Status never changes
+    a score: scores follow the checks (ADR-0004).
 
 ## Raw data and proposals
 
