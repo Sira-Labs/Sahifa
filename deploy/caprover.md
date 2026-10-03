@@ -356,6 +356,9 @@ sequenceDiagram
    **Pass login_hint**, so Google preselects the signed-in account.
    A first sign-in always goes through Google or GitHub. Passkeys belong to the Keycloak host:
    a new Keycloak host needs new passkeys.
+   Removing a passkey in the account console runs Keycloak's **Delete Credential** required
+   action (Keycloak 24+). The realm export enables it; a realm imported before 2026-10-03
+   needs Authentication → Required actions → **Delete Credential** → Enabled.
 
 **Recovering someone who lost every passkey** (operator step): confirm the person's identity
 out of band. Then in Keycloak → Users → the user → Credentials, delete the passkey (WebAuthn
