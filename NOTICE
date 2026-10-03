@@ -4,3 +4,7 @@ Copyright 2026 Sira Labs
 This product includes software developed as part of the Sahifa project
 (https://github.com/Sira-Labs/Sahifa), licensed under the Apache License,
 Version 2.0.
+
+Third-party software in the Sahifa images is listed with its licence in each package's
+metadata. psycopg, psycopg-binary and psycopg-pool are licensed under the GNU Lesser General
+Public License v3.0; they are used unmodified and can be replaced (see docs/adr/0015).

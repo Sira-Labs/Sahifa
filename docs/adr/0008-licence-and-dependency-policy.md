@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-02
 - **Deciders:** owner
+- **Amended by:** ADR-0015 (LGPL-3.0 allowed for psycopg, used unmodified)
 
 ## Context
 

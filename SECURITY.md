@@ -35,11 +35,20 @@ host or administrator credentials.
 - Sources are read in read-only transactions with statement and lock timeouts. Anything that
   makes Sahifa write to a source, or run SQL built from data or user input as text (SQL
   injection through identifiers, values or uploaded files), is always in scope.
-- Uploads are limited in size, count and extension, stored under random names and deleted
-  after a TTL; path traversal or reading files outside the upload directory is in scope.
+- Uploads are limited in size (per file and per request, enforced while the body streams),
+  count, extension and content, stored under random names with cleaned display names, and
+  deleted after a TTL; path traversal or reading files outside the upload directory is in
+  scope.
 - Example values of personal semantic types (email, phone, IBAN, VAT ID) are masked in
   reports; an unmasked value is in scope.
-- Until sign-in arrives in R2 (ADR-0010) an install is protected by HTTP basic auth at the
-  proxy; the API refuses to start in production unless that gate is declared.
-- Images are built with SBOM and provenance attestations and scanned with Trivy; `pip-audit`
-  and `pnpm audit` run in CI.
+- People sign in through Keycloak (spec 006, ADR-0010): HttpOnly `__Host-` session cookies, a
+  CSRF header on every unsafe request, only the admin and allowed emails get access. Installs
+  without sign-in sit behind HTTP basic auth at the proxy, which production requires to be
+  declared.
+- Requests are rate-limited per session or address, and the API sends its own security
+  headers.
+- Images are built with SBOM and provenance attestations and scanned with Trivy; known
+  vulnerabilities (`pip-audit`, `pnpm audit`) and licences outside ADR-0008 fail CI.
+
+The full list of controls, each with its evidence, is the
+[security baseline](docs/security/baseline.md).

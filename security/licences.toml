@@ -1,0 +1,27 @@
+# Licences allowed in the shipped images (ADR-0008), checked by .github/scripts/security_policy.py
+# in the `licences` CI job for the runtime dependencies of core, api and web.
+allowed = [
+  "MIT", "MIT-0", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC", "PSF-2.0", "MPL-2.0",
+  "0BSD", "Unlicense",
+  # Fonts bundled by the web app (@fontsource/*).
+  "OFL-1.1",
+]
+
+# The project's own packages.
+skip = ["sahifa-core", "sahifa-api"]
+
+# Named exceptions: the package, the licence it is allowed under, and why.
+[[exceptions]]
+package = "psycopg"
+licence = "LGPL-3.0-only"
+reason = "ADR-0015: the Postgres driver, used unmodified"
+
+[[exceptions]]
+package = "psycopg-binary"
+licence = "LGPL-3.0-only"
+reason = "ADR-0015: the Postgres driver, used unmodified"
+
+[[exceptions]]
+package = "psycopg-pool"
+licence = "LGPL-3.0-only"
+reason = "ADR-0015: the Postgres driver, used unmodified"

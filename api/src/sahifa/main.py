@@ -20,6 +20,15 @@ from .db import Database
 from .db.migrate import head_revision
 from .logging import configure, get_logger
 from .routers import assets, auth, checks, connections, findings, health, history, scans, schedules
+from .security import (
+    MB,
+    UPLOAD_PATH,
+    BodyLimitMiddleware,
+    RateLimiter,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    default_buckets,
+)
 from .services.connections import register_from_env
 from .services.scans import ScanRunner, mark_interrupted
 from .services.uploads import clean_uploads
@@ -113,19 +122,38 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
         raise SystemExit(f"refusing to start in prod: {problems}")
     oidc = oidc or build_oidc(settings)
     settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+    docs = settings.docs_enabled
     app = FastAPI(
         title="Sahifa",
         version=__version__,
         lifespan=lifespan,
-        docs_url="/api/docs",
-        openapi_url="/api/openapi.json",
+        docs_url="/api/docs" if docs else None,
+        openapi_url="/api/openapi.json" if docs else None,
         redoc_url=None,
     )
     app.state.settings = settings
     app.state.oidc = oidc
+    # Outermost last (spec 012): headers on every answer, then size and disk, then rate limits,
+    # then the CSRF guard, all before FastAPI parses a body.
     app.add_middleware(
         CsrfMiddleware, public_url=settings.public_url, exempt_paths=frozenset({auth.BACKCHANNEL_PATH})
     )
+    if settings.rate_limits:
+        app.state.limiter = RateLimiter(default_buckets(settings.rate_scans_per_hour))
+        app.add_middleware(
+            RateLimitMiddleware,
+            limiter=app.state.limiter,
+            exempt=frozenset({"/healthz", "/api/version", auth.BACKCHANNEL_PATH}),
+        )
+    app.add_middleware(
+        BodyLimitMiddleware,
+        default_bytes=MB,
+        limits={UPLOAD_PATH: settings.max_upload_total_mb * MB},
+        disk_dir=settings.uploads_dir,
+        disk_paths=frozenset({UPLOAD_PATH}),
+        min_free_bytes=settings.min_free_disk_mb * MB,
+    )
+    app.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs)
 
     @app.exception_handler(NoAccessError)
     async def no_access(request: Request, exc: NoAccessError) -> JSONResponse:

@@ -1,4 +1,4 @@
-"""Deleting old upload folders (spec 008).
+"""Uploaded files: checking what arrives (spec 012) and deleting old upload folders (spec 008).
 
 An upload lives in `uploads_dir/<batch>/` and belongs to the connection `upload-<batch>`
 (`routers/scans.py`). A folder goes once every scan of its connection has finished more than
@@ -28,6 +28,40 @@ from ..logging import get_logger
 from ..settings import Settings
 
 log = get_logger("sahifa.uploads")
+
+NAME_MAX = 200
+SNIFF_BYTES = 8192
+PARQUET_MAGIC = b"PAR1"
+# Bidirectional controls can make "csv.exe" display as "exe.csv"; they go with the C0/C1 ones.
+BIDI_CONTROLS = frozenset("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+
+
+def clean_file_name(raw: str | None) -> str:
+    """A browser-sent file name made safe to store and show: the base name only, without
+    non-printable (control, format) or bidirectional characters, at most `NAME_MAX` characters
+    with its extension kept; `file` when nothing is left."""
+    base = (raw or "").replace("\\", "/").rsplit("/", 1)[-1]
+    text = "".join(ch for ch in base if ch.isprintable() and ch not in BIDI_CONTROLS).strip()
+    if len(text) > NAME_MAX:
+        suffix = Path(text).suffix[:16]
+        text = text[: NAME_MAX - len(suffix)] + suffix
+    return text or "file"
+
+
+def content_matches(path: Path, suffix: str) -> bool:
+    """Whether a stored upload looks like its extension: Parquet starts and ends with `PAR1`;
+    the text formats (CSV, TSV, JSON lines) have no NUL byte in their first `SNIFF_BYTES`,
+    which also refuses UTF-16 text, which the reader does not take."""
+    with path.open("rb") as f:
+        head = f.read(SNIFF_BYTES)
+        if suffix == ".parquet":
+            if len(head) < 2 * len(PARQUET_MAGIC) or not head.startswith(PARQUET_MAGIC):
+                return False
+            f.seek(-len(PARQUET_MAGIC), os.SEEK_END)
+            return f.read(len(PARQUET_MAGIC)) == PARQUET_MAGIC
+    return b"\x00" not in head
+
+
 UPLOAD_PREFIX = "upload-"
 ACTIVE = ("queued", "running")
 

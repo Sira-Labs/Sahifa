@@ -37,6 +37,21 @@ describe("error mapping", () => {
     expect(statusMessage(418, "I'm a teapot")).toBe("418 I'm a teapot");
   });
 
+  it("shows the security limits' own sentences (spec 012)", async () => {
+    const limited = { detail: "rate_limited", retry_after: 30, message: "Too many requests, try again in 30 s." };
+    stubFetch(() => json(limited, 429));
+    const err = await failure(api.createScan({ connection_id: "c" }));
+    expect(err.status).toBe(429);
+    expect(err.message).toBe("Too many requests, try again in 30 s.");
+    stubFetch(() => json({ detail: { code: "content_mismatch", file: "a.parquet", message: "a.parquet does not look like a PARQUET file. Text files must be UTF-8." } }, 415));
+    expect((await failure(api.uploadScan([new File(["x"], "a.parquet")]))).message).toMatch(/does not look like a PARQUET file/);
+    stubFetch(() => json({ detail: "too_large", limit_mb: 1024, message: "The request is larger than 1024 MB." }, 413));
+    expect((await failure(api.uploadScan([new File(["x"], "a.csv")]))).message).toBe("The request is larger than 1024 MB.");
+    // Without a usable body, as from a proxy in front.
+    expect(statusMessage(429)).toBe("Too many requests; wait a moment and try again (429)");
+    expect(statusMessage(507)).toBe("The server is low on disk space (507)");
+  });
+
   it("maps a network failure to status 0", async () => {
     stubFetch(() => {
       throw new TypeError("Failed to fetch");

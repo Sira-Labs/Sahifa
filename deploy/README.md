@@ -138,8 +138,11 @@ that to wait until the worker runs the new commit. CapRover: `caprover.md` secti
 
 Uploaded files are stored under random names in `SAHIFA_DATA_DIR/uploads/<batch>/` (the
 image default is `/data`; the compose bundle mounts the `data` volume there), limited by
-`SAHIFA_MAX_UPLOAD_MB` (200), `SAHIFA_MAX_UPLOAD_FILES` (20) and the extensions `.csv`,
-`.tsv`, `.parquet`, `.json`, `.jsonl`, `.ndjson`, and deleted `SAHIFA_UPLOAD_TTL_DAYS` (7)
+`SAHIFA_MAX_UPLOAD_MB` (200) per file, `SAHIFA_MAX_UPLOAD_TOTAL_MB` (1024) per request,
+`SAHIFA_MAX_UPLOAD_FILES` (20) and the extensions `.csv`, `.tsv`, `.parquet`, `.json`,
+`.jsonl`, `.ndjson` (the content must match: Parquet's magic bytes, text without NUL bytes).
+An upload that would leave less than `SAHIFA_MIN_FREE_DISK_MB` (1024) free is refused with
+507. They are deleted `SAHIFA_UPLOAD_TTL_DAYS` (7)
 days after their scan finished, by an hourly clean-up (in the worker, or in the api in inline
 mode); folders of queued or running scans are kept. They are disposable working copies: the scan report keeps what was found, so the volume
 needs no backup.

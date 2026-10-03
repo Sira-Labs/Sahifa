@@ -26,7 +26,10 @@ fi
 case "$role" in
   api)
     python -m sahifa.db.migrate upgrade head
-    exec uvicorn sahifa.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips "*"
+    # X-Forwarded-For is trusted from private networks only (the web container, CapRover's
+    # nginx), so a client reaching the api directly cannot pick its own address (spec 012).
+    exec uvicorn sahifa.main:app --host 0.0.0.0 --port 8000 --proxy-headers \
+      --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}"
     ;;
   worker)
     exec python -m sahifa.worker

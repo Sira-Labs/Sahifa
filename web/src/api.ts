@@ -84,10 +84,12 @@ const STATUS_TEXT: Record<number, string> = {
   413: "The upload is too large",
   415: "This file type is not accepted",
   422: "The request was not valid",
+  429: "Too many requests; wait a moment and try again",
   500: "The API failed while answering",
   502: "The API is not reachable behind the proxy",
   503: "The API is unavailable",
   504: "The API took too long to answer",
+  507: "The server is low on disk space",
 };
 
 /** Fallback message for a status without a usable body. */

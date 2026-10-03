@@ -123,6 +123,24 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Web: y-axis fitted to the scores shown (≥ 4 points, within 0–100) instead of 0–100,
         where scores at 98–99 were a flat line; points are HTML links over the SVG.
 
+## Sprint 3 — hardening, staging, release 0.1
+
+- [x] **012 Security baseline** — `docs/specs/012-security-baseline.md`, checklist in
+      `docs/security/baseline.md`
+      - The licence job found psycopg (LGPL-3.0): allowed by ADR-0015 (owner, 2026-10-03).
+      - Rate limits key on the hashed session cookie, not the user id: they run before FastAPI
+        reads an upload, where the user is unknown without a database lookup.
+      - The size middleware replaces FastAPI's 400 for a cut-off body with its own 413.
+      - uvicorn and Caddy trust `X-Forwarded-For` from private ranges only; before, the api saw
+        CapRover's nginx as every client.
+      - Follow-ups in the baseline: secret scanning and Caddy as non-root (sprint 4), limits
+        shared across replicas (R3), signature check at deploy (R2).
+      - Owner: raise `client_max_body_size` on `sahifa-web` to the upload limit (deploy/caprover.md).
+- [ ] S3-2 Performance run on a 1,000-table schema.
+- [ ] S3-3 Staging live, promote dry run to production.
+- [ ] S3-4 Accuracy benchmark per check.
+- [ ] S3-5 Release 0.1.
+
 ## Owner
 
 - [x] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment
