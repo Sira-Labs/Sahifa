@@ -16,7 +16,7 @@ import pytest
 from sahifa_core import scan as scan_module
 from sahifa_core.bench import create_schema, parse_mix
 from sahifa_core.checks import BY_TYPE
-from sahifa_core.errors import UsageError
+from sahifa_core.errors import SahifaError, UsageError
 from sahifa_core.models import ScanReport
 from sahifa_core.scan import EXAMPLES_PER_ASSET, ScanOptions, run_scan
 
@@ -161,6 +161,27 @@ def test_two_workers_give_the_serial_report(fk_schema: str) -> None:
 
 
 @needs_pg
+def test_a_failing_worker_connect_closes_the_sessions_already_open(
+    fk_schema: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[Any] = []
+    real = scan_module.open_source
+
+    def open_source(*args: Any, **kwargs: Any) -> Any:
+        if kwargs["application_name"].endswith("/2"):
+            raise SahifaError("too many connections")
+        con = real(*args, **kwargs)
+        opened.append(con)
+        return con
+
+    monkeypatch.setattr(scan_module, "open_source", open_source)
+    with pytest.raises(SahifaError, match="too many connections"):
+        run_scan(fk_schema, ScanOptions(sample_rows=0, workers=3))
+    assert len(opened) == 2
+    assert all(con.con.closed for con in opened)
+
+
+@needs_pg
 def test_bench_schema_refuses_a_schema_it_did_not_create() -> None:
     assert URL
     with psycopg.connect(URL, autocommit=True) as con:
@@ -174,6 +195,14 @@ def test_bench_schema_refuses_a_schema_it_did_not_create() -> None:
     report = run_scan(schema_url("sahifa_bench_test"), ScanOptions(sample_rows=0))
     assert {a.ref.name for a in report.assets} == {"customers", "t0000"}
     assert any(f.check_type == "sah.foreign_key" for f in report.findings)
+    # A view elsewhere that reads a benchmark table is never dropped with it.
     with psycopg.connect(URL, autocommit=True) as con:
+        con.execute("CREATE VIEW sahifa_not_bench.v AS SELECT id FROM sahifa_bench_test.t0000")
+    with pytest.raises(UsageError, match="depend on it"):
+        create_schema(URL, schema="sahifa_bench_test", mix="1x10")
+    with psycopg.connect(URL, autocommit=True) as con:
+        left = con.execute("SELECT count(*) FROM pg_tables WHERE schemaname = 'sahifa_bench_test'").fetchone()
+        assert left == (2,)
+        assert con.execute("SELECT count(*) FROM sahifa_not_bench.v").fetchone() == (2000,)
         con.execute("DROP SCHEMA sahifa_not_bench CASCADE")
         con.execute("DROP SCHEMA sahifa_bench_test CASCADE")

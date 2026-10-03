@@ -78,7 +78,7 @@ def create_schema(
         if existing is not None:
             if existing[0] != MARKER:
                 raise UsageError(f"schema {schema!r} exists and is not a Sahifa benchmark schema; refusing")
-            con.execute(f"DROP SCHEMA {s} CASCADE".encode())
+            _drop_schema(con, schema)
         con.execute(f"CREATE SCHEMA {s}".encode())
         con.execute(f"COMMENT ON SCHEMA {s} IS {d.literal(MARKER)}".encode())
         parent = f"{s}.{d.ident('customers')}"
@@ -87,6 +87,7 @@ def create_schema(
             f"FROM generate_series(1, {PARENT_ROWS}) AS g".encode()
         )
         con.execute(f"ALTER TABLE {parent} ADD PRIMARY KEY (id)".encode())
+        tables = [parent]
         n = 0
         started = time.monotonic()
         for tier in tiers:
@@ -97,8 +98,38 @@ def create_schema(
                 # NOT VALID keeps the orphans, as in a legacy database whose constraint came late.
                 fk = f"ALTER TABLE {table} ADD FOREIGN KEY (customer_id) REFERENCES {parent} (id) NOT VALID"
                 con.execute(fk.encode())
+                tables.append(table)
                 n += 1
                 if n % 50 == 0:
                     say(f"{n} tables, {time.monotonic() - started:.0f} s")
-        con.execute(b"ANALYZE")
+        # Only the generated tables: a bare ANALYZE would also reach every other schema.
+        con.execute(f"ANALYZE {', '.join(tables)}".encode())
     return n + 1
+
+
+def _drop_schema(con: psycopg.Connection[tuple[object, ...]], schema: str) -> None:
+    """Drop a marked benchmark schema without CASCADE: its tables in one restrictive statement
+    (the foreign keys among them go with them), then the empty schema, in one transaction. An
+    object elsewhere that depends on a benchmark table (a view in another schema), or anything
+    else left in the schema, makes it refuse and keep everything as it was."""
+    d = PostgresDialect()
+    s = d.ident(schema)
+    names = [
+        str(r[0])
+        for r in con.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = %s AND c.relkind IN ('r', 'p') ORDER BY c.relname",
+            [schema],
+        )
+    ]
+    try:
+        with con.transaction():
+            if names:
+                tables = ", ".join(f"{s}.{d.ident(name)}" for name in names)
+                con.execute(f"DROP TABLE {tables} RESTRICT".encode())
+            con.execute(f"DROP SCHEMA {s} RESTRICT".encode())
+    except psycopg.errors.DependentObjectsStillExist as e:
+        raise UsageError(
+            f"benchmark schema {schema!r} has objects that depend on it or that it did not create; "
+            f"refusing to drop it ({e.diag.message_primary})"
+        ) from e

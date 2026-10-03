@@ -145,9 +145,13 @@ def run_scan(
         )
 
     with connect(0) as src:
-        extra = [connect(i) for i in range(1, max(1, options.workers))] if src.kind == "postgres" else []
-        pool = _Pool(src, extra)
+        extra: list[Connector] = []
         try:
+            # One at a time inside the guard, so a failing connect closes the ones already open.
+            if src.kind == "postgres":
+                for i in range(1, max(1, options.workers)):
+                    extra.append(connect(i))
+            pool = _Pool(src, extra)
             refs = src.list_assets()
             if options.assets:
                 wanted = set(options.assets)
