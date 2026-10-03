@@ -37,6 +37,15 @@
       "defaultAction": false,
       "priority": 80,
       "config": {}
+    },
+    {
+      "alias": "delete_credential",
+      "name": "Delete Credential",
+      "providerId": "delete_credential",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 100,
+      "config": {}
     }
   ],
   "clients": [
