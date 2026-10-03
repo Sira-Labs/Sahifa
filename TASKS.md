@@ -112,7 +112,16 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         depends on the image's `/usr/share/zoneinfo`.
       - Web: schedule in an expandable row per connection, a Schedule column, "scheduled" tag in
         the scans list; sample rows are not editable in the web (null keeps the setting).
-- [ ] 011 Score history per asset and store.
+- [x] **011 Score history per asset and store** — `docs/specs/011-score-history.md`
+      - Pending: the owner's staging check (the store page of a connection with several scans).
+      - One `scores` row per scan and level (store, or one asset) with the dimensions as JSON,
+        not one per dimension (owner, 2026-10-03; domain model updated); no column level.
+      - Written in `_succeed`'s transaction; `connection_id` and `measured_at` copied from the
+        scan so a history is one index range; order (`measured_at`, `scan_id`), cut by `scan_id`.
+      - Migration 0007 backfills from `scans.report` in SQL; report tables without an asset
+        row are skipped.
+      - Web: y-axis fitted to the scores shown (≥ 4 points, within 0–100) instead of 0–100,
+        where scores at 98–99 were a flat line; points are HTML links over the SVG.
 
 ## Owner
 

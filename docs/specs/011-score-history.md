@@ -98,15 +98,15 @@ Each point has the fields `scan_id`, `finished_at`, `trigger`, `overall`, `low`,
 
 ## Acceptance criteria
 
-- [ ] A successful scan writes one store row and one row per table, with the report's values.
+- [x] A successful scan writes one store row and one row per table, with the report's values.
       A failed scan writes none.
-- [ ] `GET /api/connections/{id}/history` returns the last 30 successful scans, oldest first.
+- [x] `GET /api/connections/{id}/history` returns the last 30 successful scans, oldest first.
   - `limit` and `scan_id` cut the list as described.
   - It returns 404 for unknown ids and `scan_not_in_history`, and 422 for a bad `limit`.
-- [ ] `GET /api/assets/{id}/history` does the same for a table.
-- [ ] Migration 0007 fills `scores` from existing reports, upgrades and downgrades, and
+- [x] `GET /api/assets/{id}/history` does the same for a table.
+- [x] Migration 0007 fills `scores` from existing reports, upgrades and downgrades, and
       `alembic check` is clean.
-- [ ] Web, store and table report:
+- [x] Web, store and table report:
   - the sparkline shows the points with the band;
   - the change since the previous scan, with the "within the interval" note;
   - points that link to their scans;
@@ -114,7 +114,7 @@ Each point has the fields `scan_id`, `finished_at`, `trigger`, `overall`, `low`,
   - the single-scan state.
 - [ ] Staging: the store page of a connection with several scans shows its history. This is
       the owner's check after deploy.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
