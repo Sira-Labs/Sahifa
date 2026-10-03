@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { formatCount, formatNumber, formatPercent, titleCase, worstDimension } from "../format";
+import { formatCount, formatNumber, formatPercent, titleCase, worstDimension, type ReadKind } from "../format";
 import type { CheckResult, ColumnProfile, ColumnReport } from "../types";
 import { CheckList } from "./CheckList";
 import { ScoreText } from "./ScoreText";
@@ -60,7 +60,7 @@ function ValueList({ title, items, truncated }: { title: string; items: ColumnPr
 }
 
 /** One column of the asset report: a summary row and, expanded, its profile and checks. */
-export function ColumnRow({ column, checks }: { column: ColumnReport; checks: CheckResult[] }) {
+export function ColumnRow({ column, checks, read }: { column: ColumnReport; checks: CheckResult[]; read: ReadKind }) {
   const [open, setOpen] = useState(false);
   const detailId = useId();
   const p = column.profile;
@@ -89,7 +89,7 @@ export function ColumnRow({ column, checks }: { column: ColumnReport; checks: Ch
           {formatCount(p.distinct)}
         </td>
         <td data-label="Score">
-          <ScoreText value={column.score.overall} low={column.score.low} high={column.score.high} />
+          <ScoreText value={column.score.overall} low={column.score.low} high={column.score.high} read={read} />
         </td>
         <td data-label="Worst dimension">
           {worst ? (

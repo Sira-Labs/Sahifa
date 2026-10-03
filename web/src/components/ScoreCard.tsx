@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { DIMENSIONS } from "../constants";
-import { describeScore, formatIntervalRange, formatScore, titleCase } from "../format";
+import { describeScore, formatIntervalRange, formatScore, titleCase, type ReadKind } from "../format";
 import type { Score } from "../types";
 import { Axis, IntervalBar } from "./IntervalBar";
 
@@ -12,12 +12,14 @@ type Props = {
   caption?: ReactNode;
   /** Extra facts beside the score, e.g. table and row counts. */
   meta?: ReactNode;
+  /** Whether every row was read: only then is a zero-width interval called a full read. */
+  read: ReadKind;
 };
 
 /** Overall score with its interval and the six dimensions as interval bars on a 0–100 axis. */
-export function ScoreCard({ title, score, caption, meta }: Props) {
+export function ScoreCard({ title, score, caption, meta, read }: Props) {
   const titleId = useId();
-  const range = formatIntervalRange(score.low, score.high);
+  const range = formatIntervalRange(score.low, score.high, read);
   const hasScore = score.overall !== null && score.overall !== undefined;
   return (
     <section className="card score-card" aria-labelledby={titleId}>
@@ -25,7 +27,7 @@ export function ScoreCard({ title, score, caption, meta }: Props) {
         {title}
       </h2>
       <div className="score-row">
-        <p className="score-big num" aria-label={`${title}: ${describeScore(score.overall, score.low, score.high)}`}>
+        <p className="score-big num" aria-label={`${title}: ${describeScore(score.overall, score.low, score.high, read)}`}>
           {formatScore(score.overall)}
           <small> / 100</small>
         </p>
@@ -50,6 +52,7 @@ export function ScoreCard({ title, score, caption, meta }: Props) {
                 value={d?.value}
                 low={d?.low}
                 high={d?.high}
+                read={read}
                 note={d ? `${d.checks} ${d.checks === 1 ? "check" : "checks"}` : undefined}
               />
             </div>

@@ -82,29 +82,45 @@ export function formatScore(v: number | null | undefined): string {
 // Two bounds count as equal when they agree to well below the displayed precision.
 const SAME = 1e-9;
 
-/** Whether an interval has zero width: every row was read. */
+/** Whether an interval has zero width. For a check's share this means every row was read; a
+ * score's bounds are rounded to one decimal, so a sampled score can have zero width too. */
 export function isFullRead(low: number, high: number): boolean {
   return Math.abs(high - low) < SAME;
 }
 
-/** The interval part of a score: `92.3–93.1`, or `full read` when it has zero width. */
-export function formatIntervalRange(low: number | null | undefined, high: number | null | undefined): string {
+/** How a score's rows were read, where the caller knows it: every row (`full`) or a sample.
+ * Unknown means the interval is shown as it is, never as a full read. */
+export type ReadKind = "full" | "sampled";
+
+/** Whether to call this interval a full read: zero width and known to be a full read. */
+function fullRead(low: number, high: number, read: ReadKind | undefined): boolean {
+  return read === "full" && isFullRead(low, high);
+}
+
+/** The interval part of a score: `92.3–93.1`, or `full read` when every row was read. A sampled
+ * interval narrower than the rounding reads `99.0–99.0`. */
+export function formatIntervalRange(low: number | null | undefined, high: number | null | undefined, read?: ReadKind): string {
   if (low === null || low === undefined || high === null || high === undefined) return "";
-  return isFullRead(low, high) ? "full read" : `${low.toFixed(1)}–${high.toFixed(1)}`;
+  return fullRead(low, high, read) ? "full read" : `${low.toFixed(1)}–${high.toFixed(1)}`;
 }
 
 /** `92.7 · 92.3–93.1`, `92.7 · full read`, or `—` without a value. */
-export function formatScoreInterval(value: number | null | undefined, low?: number | null, high?: number | null): string {
+export function formatScoreInterval(
+  value: number | null | undefined,
+  low?: number | null,
+  high?: number | null,
+  read?: ReadKind,
+): string {
   if (value === null || value === undefined) return "—";
-  const range = formatIntervalRange(low, high);
+  const range = formatIntervalRange(low, high, read);
   return range ? `${formatScore(value)} · ${range}` : formatScore(value);
 }
 
 /** Spoken form for `aria-label`s: `92.7, 95 % interval 92.3 to 93.1`. */
-export function describeScore(value: number | null | undefined, low?: number | null, high?: number | null): string {
+export function describeScore(value: number | null | undefined, low?: number | null, high?: number | null, read?: ReadKind): string {
   if (value === null || value === undefined) return "no score, no active checks";
   if (low === null || low === undefined || high === null || high === undefined) return formatScore(value);
-  if (isFullRead(low, high)) return `${formatScore(value)}, every row read, no sampling interval`;
+  if (fullRead(low, high, read)) return `${formatScore(value)}, every row read, no sampling interval`;
   return `${formatScore(value)}, 95 % interval ${low.toFixed(1)} to ${high.toFixed(1)}`;
 }
 

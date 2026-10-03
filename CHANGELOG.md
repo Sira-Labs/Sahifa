@@ -53,6 +53,10 @@ All notable changes to this project are documented here. The format follows
   (default 60), migration 0006.
 
 ### Fixed
+- Reports no longer call a sampled score a "full read": scores are rounded to one decimal, so
+  a narrow sampled interval can show equal bounds. "Full read" and "every row read" now appear
+  only for a table read in full, or a store with no sampled table; otherwise the interval is
+  shown (`99.0–99.0`).
 - Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now
   uses `assets/favicon.svg`), Tabayyun is linked at tabayyun-stg.siralabs.org, and the page links
   the running preview at sahifa-stg.siralabs.org.
