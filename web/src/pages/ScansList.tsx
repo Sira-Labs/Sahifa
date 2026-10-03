@@ -87,7 +87,17 @@ export function ScansList() {
                       {formatLocalTime(scan.created_at)}
                     </Link>
                   </td>
-                  <td data-label="Source">{scanSource(scan)}</td>
+                  <td data-label="Source">
+                    {scanSource(scan)}
+                    {scan.trigger === "schedule" && (
+                      <>
+                        {" "}
+                        <span className="tag" title="Started by the connection's schedule">
+                          scheduled
+                        </span>
+                      </>
+                    )}
+                  </td>
                   <td data-label="Status">
                     <StatusChip status={scan.status} />
                   </td>

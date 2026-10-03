@@ -1,4 +1,4 @@
-// Thin fetch wrapper with one typed function per route of specs 004, 007 and 009. Every non-2xx answer
+// Thin fetch wrapper with one typed function per route of specs 004, 007, 009 and 010. Every non-2xx answer
 // becomes an ApiError carrying the API's `detail` as its message. Every request carries the
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
@@ -17,6 +17,8 @@ import type {
   Scan,
   ScanCreate,
   ScanReport,
+  Schedule,
+  ScheduleSave,
   StoredCheck,
   StoredFinding,
   StoredFindingDetail,
@@ -213,6 +215,19 @@ export const api = {
   getConnection: (id: string) => apiGet<Connection>(`/api/connections/${enc(id)}`),
   createConnection: (body: ConnectionCreate) => apiSend<Connection>("POST", "/api/connections", body),
   testConnection: (id: string) => apiSend<ConnectionTest>("POST", `/api/connections/${enc(id)}/test`),
+  /** The connection's schedule, or null when it has none (404 `no_schedule`). */
+  getSchedule: async (connectionId: string): Promise<Schedule | null> => {
+    try {
+      return await apiGet<Schedule>(`/api/connections/${enc(connectionId)}/schedule`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && (error.body as { detail?: unknown } | null)?.detail === "no_schedule")
+        return null;
+      throw error;
+    }
+  },
+  saveSchedule: (connectionId: string, body: ScheduleSave) =>
+    apiSend<Schedule>("PUT", `/api/connections/${enc(connectionId)}/schedule`, body),
+  deleteSchedule: (connectionId: string) => apiSend<void>("DELETE", `/api/connections/${enc(connectionId)}/schedule`),
 
   createScan: (body: ScanCreate) => apiSend<Scan>("POST", "/api/scans", body),
   uploadScan: (files: File[], sampleRows?: number) =>
