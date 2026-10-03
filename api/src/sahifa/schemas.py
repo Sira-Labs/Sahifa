@@ -1,4 +1,4 @@
-"""Response and request models of the HTTP API (specs 004, 007 and 009)."""
+"""Response and request models of the HTTP API (specs 004, 007, 009 and 010)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,15 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 
+class ScheduleSummary(BaseModel):
+    """A connection's schedule in the connections list (spec 010)."""
+
+    cron: str
+    timezone: str
+    enabled: bool
+    next_run_at: datetime | None
+
+
 class ConnectionOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -19,6 +28,33 @@ class ConnectionOut(BaseModel):
     secret_ref: str | None
     available: bool
     created_at: datetime
+    schedule: ScheduleSummary | None = None
+
+
+class ScheduleIn(BaseModel):
+    """`PUT /api/connections/{id}/schedule`; `version` is required once a schedule exists."""
+
+    cron: str = Field(min_length=1, max_length=200)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
+    enabled: bool = True
+    sample_rows: int | None = Field(default=None, ge=0)
+    version: int | None = Field(default=None, ge=1)
+
+
+class ScheduleOut(BaseModel):
+    cron: str
+    timezone: str
+    enabled: bool
+    sample_rows: int | None
+    next_run_at: datetime | None
+    # The stored next run, then the two after it (UTC); empty while disabled.
+    next_runs: list[datetime]
+    last_run_at: datetime | None
+    last_scan_id: uuid.UUID | None
+    last_outcome: str | None
+    version: int
+    updated_at: datetime
+    updated_by: str
 
 
 class ConnectionIn(BaseModel):
@@ -46,6 +82,8 @@ class ScanOut(BaseModel):
     connection_name: str
     connection_kind: str
     status: str
+    # `manual` or `schedule` (spec 010).
+    trigger: str
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None

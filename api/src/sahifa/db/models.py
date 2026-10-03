@@ -1,5 +1,5 @@
-"""Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008) and
-0005 (spec 009).
+"""Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008), 0005
+(spec 009) and 0006 (spec 010).
 
 Procrastinate's own tables (migration 0004) are not mapped here; Alembic ignores them.
 """
@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -32,6 +33,8 @@ from . import Base
 
 CONNECTION_KINDS = ("postgres", "duckdb", "upload")
 SCAN_STATUSES = ("queued", "running", "succeeded", "failed")
+SCAN_TRIGGERS = ("manual", "schedule")
+SCHEDULE_OUTCOMES = ("queued", "skipped_running", "failed_to_queue")
 SIGN_IN_METHODS = ("google", "github", "passkey")
 ASSET_KINDS = ("table", "view", "file")
 CHECK_KINDS = ("rule", "baseline", "manual")
@@ -71,6 +74,7 @@ class Scan(Base):
     __tablename__ = "scans"
     __table_args__ = (
         CheckConstraint(f"status IN {SCAN_STATUSES}", name="ck_scans_status"),
+        CheckConstraint(f"trigger IN {SCAN_TRIGGERS}", name="ck_scans_trigger"),
         Index("ix_scans_created", text("created_at DESC"), "id"),
     )
 
@@ -91,6 +95,39 @@ class Scan(Base):
     # The Procrastinate job that runs the scan in queue mode (spec 008); no foreign key, since
     # Procrastinate owns its table and may delete finished jobs.
     job_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Who started it: a person (`manual`) or the connection's schedule (spec 010).
+    trigger: Mapped[str] = mapped_column(String(20), server_default="manual")
+
+
+class ScanSchedule(Base):
+    """A connection's schedule (spec 010): a 5-field cron read in an IANA time zone.
+
+    `next_run_at` (UTC) is null while the schedule is disabled. `version` grows by one on every
+    save by a person; the due-schedule job only moves `next_run_at` and the `last_*` columns."""
+
+    __tablename__ = "scan_schedules"
+    __table_args__ = (
+        UniqueConstraint("connection_id", name="uq_scan_schedules_connection_id"),
+        CheckConstraint(f"last_outcome IN {SCHEDULE_OUTCOMES}", name="ck_scan_schedules_last_outcome"),
+        Index("ix_scan_schedules_enabled_next_run_at", "enabled", "next_run_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
+    cron: Mapped[str] = mapped_column(Text)
+    timezone: Mapped[str] = mapped_column(Text, server_default="UTC")
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Null: the `SAHIFA_SAMPLE_ROWS` default at the time of each run.
+    sample_rows: Mapped[int | None] = mapped_column(Integer)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_scan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
+    last_outcome: Mapped[str | None] = mapped_column(String(20))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Who saved it last: the email, `dev` or `proxy` (spec 007's actor).
+    updated_by: Mapped[str] = mapped_column(Text)
 
 
 class FindingOccurrence(Base):

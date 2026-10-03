@@ -1,10 +1,11 @@
 """FastAPI application: lifespan (schema guard, interrupted scans, env connections, the job
-queue or the inline upload clean-up), the sign-in (spec 006) and routes."""
+queue or the inline upload clean-up and due schedules), the sign-in (spec 006) and routes."""
 
 from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -18,7 +19,7 @@ from .auth import CsrfMiddleware, NoAccessError, OidcClient, build_oidc, current
 from .db import Database
 from .db.migrate import head_revision
 from .logging import configure, get_logger
-from .routers import assets, auth, checks, connections, findings, health, scans
+from .routers import assets, auth, checks, connections, findings, health, scans, schedules
 from .services.connections import register_from_env
 from .services.scans import ScanRunner, mark_interrupted
 from .services.uploads import clean_uploads
@@ -27,6 +28,7 @@ from .settings import Settings, get_settings, prod_problems
 log = get_logger("sahifa")
 CLEAN_FIRST_S = 60
 CLEAN_EVERY_S = 3600
+SCHEDULES_EVERY_S = 60.0
 
 
 async def clean_uploads_hourly(db: Database, settings: Settings) -> None:
@@ -38,6 +40,17 @@ async def clean_uploads_hourly(db: Database, settings: Settings) -> None:
         except Exception as e:
             log.error("uploads.clean_failed", error=str(e)[:300])
         await asyncio.sleep(CLEAN_EVERY_S)
+
+
+async def run_schedules_every_minute(db: Database, settings: Settings, runner: ScanRunner) -> None:
+    """Inline mode: the due-schedule job the worker runs every minute in queue mode (spec 010),
+    at the start of each minute."""
+    while True:
+        await asyncio.sleep(SCHEDULES_EVERY_S - time.time() % SCHEDULES_EVERY_S)
+        try:
+            await jobs.run_due_schedules(db.sessions, settings, runner=runner)
+        except Exception as e:
+            log.error("schedule.run_failed", error=str(e)[:300])
 
 
 @asynccontextmanager
@@ -79,6 +92,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         else:
             cleaner = asyncio.create_task(clean_uploads_hourly(db, settings))
             stack.callback(cleaner.cancel)
+            scheduler = asyncio.create_task(run_schedules_every_minute(db, settings, app.state.runner))
+            stack.callback(scheduler.cancel)
         yield
         await app.state.runner.drain()
     oidc: OidcClient | None = app.state.oidc
@@ -122,6 +137,7 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     app.include_router(auth.router)
     protected = [Depends(current_user)]
     app.include_router(connections.router, dependencies=protected)
+    app.include_router(schedules.router, dependencies=protected)
     app.include_router(scans.router, dependencies=protected)
     app.include_router(assets.router, dependencies=protected)
     app.include_router(checks.router, dependencies=protected)

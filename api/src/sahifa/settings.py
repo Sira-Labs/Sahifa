@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     upload_ttl_days: int = Field(default=7, ge=1)
     max_concurrent_scans: int = Field(default=2, ge=1)
     reaper_stale_minutes: int = Field(default=10, ge=1)
+    # Spec 010: a schedule whose runs come closer than this is refused.
+    schedule_min_interval_minutes: int = Field(default=60, ge=1)
     duckdb_memory: str = "1GB"
     statement_timeout_s: int = Field(default=60, ge=1)
     log_level: str = "info"
