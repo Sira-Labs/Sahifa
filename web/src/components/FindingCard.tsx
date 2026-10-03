@@ -1,12 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { assetColumn, formatCount, formatFailedShare, titleCase } from "../format";
 import type { Finding } from "../types";
-import { SeverityChip } from "./Chips";
+import { SeverityChip, StatusChip } from "./Chips";
 import { Examples } from "./Examples";
 import { SqlBlock } from "./SqlBlock";
 
 /** One finding: what is wrong, where, how much (failed of evaluated with the interval), example
- * values, the SQL and the next step. */
+ * values, the SQL and the next step; on the scan findings page also its status across scans
+ * with a link to it (spec 009). */
 export function FindingCard({ finding, scanId }: { finding: Finding; scanId: string }) {
   const where = assetColumn(finding.asset, finding.column);
   return (
@@ -15,6 +16,7 @@ export function FindingCard({ finding, scanId }: { finding: Finding; scanId: str
         <SeverityChip severity={finding.severity} />
         <span className="tag">{titleCase(finding.dimension)}</span>
         {finding.title && finding.title !== finding.check_type && <span className="muted text-sm">{finding.title}</span>}
+        {finding.finding_status && <StatusChip status={finding.finding_status} />}
       </div>
       <h3 className="finding-summary">{finding.summary}</h3>
       <dl className="facts">
@@ -46,6 +48,13 @@ export function FindingCard({ finding, scanId }: { finding: Finding; scanId: str
         <p className="next-step">
           <strong>Next step: </strong>
           {finding.next_step}
+        </p>
+      )}
+      {finding.finding_id && (
+        <p className="text-sm">
+          <Link to="/findings/$findingId" params={{ findingId: finding.finding_id }}>
+            Status and history of this finding across scans
+          </Link>
         </p>
       )}
     </article>

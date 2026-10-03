@@ -37,6 +37,13 @@ All notable changes to this project are documented here. The format follows
   `SAHIFA_UPLOAD_TTL_DAYS` (also in the default inline mode). `/healthz` lists connected
   workers by commit. Migration 0004; the compose bundle gains a `worker` service, CapRover a
   worker app and a one-click template for it.
+- Findings across scans (spec 009): each failing check has one finding that is not resolved,
+  and every scan that finds the problem again adds an occurrence. A check that passes again
+  resolves its finding; failing later reopens the same one. Signed-in users acknowledge,
+  resolve, mute (optionally until a date) and reopen findings with a note, and every change is
+  recorded. New `/findings` page and `/api/findings`; the scan findings page shows each
+  finding's status. Migration 0005 renames the per-scan `findings` table to
+  `finding_occurrences`.
 
 ### Fixed
 - Product page: the favicon loads (the inline data URL was cut off by unescaped quotes; it now

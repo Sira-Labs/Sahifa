@@ -1083,6 +1083,36 @@ summary {
   border-top: 0;
   padding-top: 4px;
 }
+/* Findings across scans (spec 009): occurrences, history, notes and the mute form. */
+.history-list {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.history-list > li {
+  padding-block: 10px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.history-list > li:first-child {
+  border-top: 0;
+  padding-top: 4px;
+}
+.note {
+  white-space: pre-wrap;
+  border-left: 3px solid var(--line);
+  padding-left: 10px;
+  margin-top: 4px;
+}
+.note-input {
+  min-height: 64px;
+  resize: vertical;
+}
+.action-form {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
 .check-type {
   font-size: 13px;
   overflow-wrap: anywhere;

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import Connection, Finding, Scan
+from ..db.models import Connection, Finding, FindingOccurrence, Scan
 from ..deps import session, settings
 from ..jobs import enqueue_scan
 from ..logging import get_logger
@@ -202,23 +202,30 @@ async def list_findings(
     db: AsyncSession = Depends(session),
 ) -> Items[dict[str, Any]]:
     await _scan(db, scan_id)
-    stmt = select(Finding).where(Finding.scan_id == scan_id)
+    # Each occurrence with its finding's status (spec 009); null before migration 0005.
+    stmt = (
+        select(FindingOccurrence, Finding.status)
+        .outerjoin(Finding, Finding.id == FindingOccurrence.finding_id)
+        .where(FindingOccurrence.scan_id == scan_id)
+    )
     if severity:
         if severity not in SEVERITIES:
             raise HTTPException(422, f"severity must be one of {', '.join(SEVERITIES)}")
-        stmt = stmt.where(Finding.severity == severity)
+        stmt = stmt.where(FindingOccurrence.severity == severity)
     if dimension:
         if dimension not in DIMENSIONS:
             raise HTTPException(422, f"dimension must be one of {', '.join(DIMENSIONS)}")
-        stmt = stmt.where(Finding.dimension == dimension)
+        stmt = stmt.where(FindingOccurrence.dimension == dimension)
     if asset:
-        stmt = stmt.where(Finding.asset == asset)
+        stmt = stmt.where(FindingOccurrence.asset == asset)
     rank = {s: i for i, s in enumerate(SEVERITIES)}
-    rows = sorted(await db.scalars(stmt), key=lambda f: (rank.get(f.severity, 9), f.ratio))
+    rows = sorted((await db.execute(stmt)).all(), key=lambda r: (rank.get(r[0].severity, 9), r[0].ratio))
     return Items[dict[str, Any]](
         items=[
             {
                 "id": str(f.id),
+                "finding_id": str(f.finding_id) if f.finding_id else None,
+                "finding_status": finding_status,
                 "check_id": f.evidence.get("check_id"),
                 "check_type": f.check_type,
                 "title": f.evidence.get("title"),
@@ -236,6 +243,6 @@ async def list_findings(
                 "examples": f.evidence.get("examples", []),
                 "sql": f.evidence.get("sql"),
             }
-            for f in rows
+            for f, finding_status in rows
         ]
     )

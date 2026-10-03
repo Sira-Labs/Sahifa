@@ -44,6 +44,9 @@ export function Layout({ children }: { children?: React.ReactNode }) {
             <Link to="/" activeOptions={{ exact: true }} className="nav-link" activeProps={activeProps}>
               Scans
             </Link>
+            <Link to="/findings" className="nav-link" activeProps={activeProps}>
+              Findings
+            </Link>
             <Link to="/scans/new" className="nav-link" activeProps={activeProps}>
               New scan
             </Link>
