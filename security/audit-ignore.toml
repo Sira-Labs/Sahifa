@@ -1,0 +1,8 @@
+# Known vulnerabilities accepted for a while, by advisory id (GHSA, PYSEC, CVE or npm id).
+# Each entry needs a reason and an expiry date; an expired entry fails CI (spec 012).
+#
+# [[ignore]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# reason = "not reachable: we never call the affected function; fix pending upstream"
+# expires = 2026-12-31
+ignore = []

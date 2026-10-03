@@ -29,6 +29,11 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest -q
+      # Known vulnerabilities fail the job unless accepted in security/audit-ignore.toml (spec 012).
+      - name: pip-audit
+        run: |
+          uv run --with pip-audit pip-audit -f json --skip-editable > "$RUNNER_TEMP/audit.json" || true
+          python3 ../.github/scripts/security_policy.py --ignores ../security/audit-ignore.toml audit pip < "$RUNNER_TEMP/audit.json"
       # End to end on DuckDB: a synthetic shop with injected faults must produce findings.
       - name: smoke scan of a synthetic shop
         run: |
@@ -69,7 +74,11 @@ jobs:
       - run: uv run pytest -q
       # Models and migrations must agree; the tests leave the schema at head.
       - run: uv run alembic upgrade head && uv run alembic check
-      - run: uv run --with pip-audit pip-audit --skip-editable || true
+      # Known vulnerabilities fail the job unless accepted in security/audit-ignore.toml (spec 012).
+      - name: pip-audit
+        run: |
+          uv run --with pip-audit pip-audit -f json --skip-editable > "$RUNNER_TEMP/audit.json" || true
+          python3 ../.github/scripts/security_policy.py --ignores ../security/audit-ignore.toml audit pip < "$RUNNER_TEMP/audit.json"
 
   web:
     name: web
@@ -86,4 +95,43 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm test
-      - run: pnpm audit --audit-level high || true
+      # High and critical advisories in production dependencies fail the job (spec 012).
+      - name: pnpm audit
+        run: |
+          pnpm audit --prod --json > "$RUNNER_TEMP/audit.json" || true
+          python3 ../.github/scripts/security_policy.py --ignores ../security/audit-ignore.toml audit pnpm < "$RUNNER_TEMP/audit.json"
+      # The web image's edge config must parse (headers, proxies, cache rules).
+      - name: caddy validate
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  # Runtime dependencies of core, api and web against ADR-0008 and ADR-0015 (spec 012).
+  licences:
+    name: licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with: { enable-cache: true }
+      - run: uv python install 3.12
+      # Runtime only: no dev extras, so test and lint tools are not counted.
+      - name: core
+        working-directory: core
+        run: |
+          uv sync --locked
+          uv run --no-sync python ../.github/scripts/security_policy.py --policy ../security/licences.toml licences python
+      - name: api
+        working-directory: api
+        run: |
+          uv sync --locked
+          uv run --no-sync python ../.github/scripts/security_policy.py --policy ../security/licences.toml licences python
+      - uses: pnpm/action-setup@v6
+        with: { package_json_file: web/package.json }
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - name: web
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile --prod
+          pnpm licenses list --prod --json | python3 ../.github/scripts/security_policy.py --policy ../security/licences.toml licences pnpm
