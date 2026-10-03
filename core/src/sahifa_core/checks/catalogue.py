@@ -463,13 +463,19 @@ class ForeignKey(Check):
                     break
         return out
 
+    own_query = True
+
     def fail(self, spec: CheckSpec, ctx: Context) -> str:
+        """No parent row with this key. Compared natively when both columns have the same
+        logical type, so the parent's index (or a hash join) applies; as text otherwise."""
         parent = ctx.assets[spec.params["parent"]]
         pk = f"p.{ctx.d.ident(spec.params['parent_column'])}"
-        return (
-            f"NOT EXISTS (SELECT 1 FROM {ctx.src.full_ref(parent.ref)} AS p "
-            f"WHERE {ctx.d.as_text(pk)} = {ctx.d.as_text(ctx.q(spec.column or ''))})"
-        )
+        fk = ctx.q(spec.column or "")
+        child_col = ctx.asset.column(spec.column or "")
+        parent_col = parent.column(spec.params["parent_column"])
+        if not (child_col and parent_col and child_col.logical_type == parent_col.logical_type):
+            pk, fk = ctx.d.as_text(pk), ctx.d.as_text(fk)
+        return f"NOT EXISTS (SELECT 1 FROM {ctx.src.full_ref(parent.ref)} AS p WHERE {pk} = {fk})"
 
     def accept(self, spec: CheckSpec, n: int, k: int) -> bool:
         # An inferred reference is kept only when most values are found: mined constraints are

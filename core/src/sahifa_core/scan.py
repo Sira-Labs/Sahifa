@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import logging
+import queue
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeVar
 
 from . import semantics
 from .checks import BY_TYPE, CATALOGUE, Check, Context
 from .checks.base import pct
 from .checks.lifecycle import keeps_saved, reconcile
-from .connectors import Relation, open_source
+from .connectors import Connector, Relation, open_source
 from .errors import SahifaError
 from .models import (
     AssetProfile,
+    AssetRef,
     AssetReport,
     CheckResult,
     CheckSpec,
@@ -47,6 +50,8 @@ from .score import (
 )
 
 log = logging.getLogger("sahifa_core.scan")
+T = TypeVar("T")
+R = TypeVar("R")
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,56 @@ class ScanOptions:
     assets: tuple[str, ...] | None = None
     memory_limit: str = "1GB"
     statement_timeout_s: int = 60
+    # Assets scanned at once, each on its own read-only session (spec 013). Postgres only: a
+    # DuckDB source keeps its samples as temporary tables of one connection and parallelises
+    # each query itself.
+    workers: int = 2
+
+
+@dataclass
+class _Scanned:
+    """What phase one keeps of an asset: its profile and, unless it failed, its sample."""
+
+    profile: AssetProfile
+    relation: Relation | None = None
+
+
+@dataclass
+class _Evaluated:
+    report: AssetReport
+    dims: dict[Dimension, Estimate] | None
+    results: list[CheckResult]
+    specs: list[CheckSpec]
+
+
+class _Pool:
+    """The scan's source sessions: the first one opened by the caller, `workers - 1` more for a
+    Postgres source. Each task borrows one, so no session is used by two threads at once."""
+
+    def __init__(self, first: Connector, extra: list[Connector]) -> None:
+        self.all = [first, *extra]
+        self.free: queue.Queue[Connector] = queue.Queue()
+        for c in self.all:
+            self.free.put(c)
+
+    def map(self, fn: Callable[[Connector, T], R], items: list[T]) -> list[R]:
+        """`fn(session, item)` for every item, on as many sessions as there are, in order."""
+
+        def run(item: T) -> R:
+            con = self.free.get()
+            try:
+                return fn(con, item)
+            finally:
+                self.free.put(con)
+
+        if len(self.all) == 1:
+            return [run(i) for i in items]
+        with ThreadPoolExecutor(max_workers=len(self.all), thread_name_prefix="sahifa-scan") as ex:
+            return list(ex.map(run, items))
+
+    @property
+    def queries(self) -> int:
+        return sum(c.queries for c in self.all)
 
 
 def run_scan(
@@ -70,43 +125,58 @@ def run_scan(
     source cannot be opened; a failing asset is recorded in the report and the scan goes on.
 
     `saved` holds the stored checks per asset label (spec 007); they are reconciled with the
-    generated ones. Without it every check is generated afresh."""
+    generated ones. Without it every check is generated afresh.
+
+    Phase one profiles every asset; phase two evaluates the checks, which may look at other
+    assets' profiles (foreign keys). Each phase runs on `options.workers` sessions (spec 013);
+    the report is the same whatever their number."""
     options = options or ScanOptions()
     scan_id = scan_id or str(uuid.uuid4())
     started = datetime.now(UTC).replace(microsecond=0)
     t0 = time.monotonic()
-    with open_source(
-        source,
-        names=names,
-        memory_limit=options.memory_limit,
-        statement_timeout_s=options.statement_timeout_s,
-        application_name=f"sahifa/{scan_id}",
-    ) as src:
-        refs = src.list_assets()
-        if options.assets:
-            wanted = set(options.assets)
-            refs = [r for r in refs if r.label in wanted or r.name in wanted]
-        profiles: dict[str, AssetProfile] = {}
-        relations: dict[str, Relation] = {}
-        for ref in refs:
-            try:
-                info = src.describe(ref)
-                population, exact = src.count_rows(ref, info)
-                rel = src.sample(ref, options.sample_rows, options.seed, population)
-                profiles[ref.label] = profile_asset(src, info, rel, population, exact, started)
-                relations[ref.label] = rel
-            except SahifaError as e:
-                log.warning("asset.failed %s: %s", ref.label, e)
-                profiles[ref.label] = AssetProfile(ref=ref, error=str(e))
 
-        assets: list[AssetReport] = []
-        asset_dims: list[tuple[AssetReport, dict[Dimension, Estimate]]] = []
-        results_all: list[CheckResult] = []
-        specs_all: list[CheckSpec] = []
-        for label, prof in profiles.items():
-            if prof.error or label not in relations:
-                assets.append(
-                    AssetReport(
+    def connect(worker: int) -> Connector:
+        return open_source(
+            source,
+            names=names,
+            memory_limit=options.memory_limit,
+            statement_timeout_s=options.statement_timeout_s,
+            application_name=f"sahifa/{scan_id}" + (f"/{worker}" if worker else ""),
+        )
+
+    with connect(0) as src:
+        extra = [connect(i) for i in range(1, max(1, options.workers))] if src.kind == "postgres" else []
+        pool = _Pool(src, extra)
+        try:
+            refs = src.list_assets()
+            if options.assets:
+                wanted = set(options.assets)
+                refs = [r for r in refs if r.label in wanted or r.name in wanted]
+
+            def scan_one(con: Connector, ref: AssetRef) -> _Scanned:
+                t = time.monotonic()
+                before = con.queries
+                try:
+                    info = con.describe(ref)
+                    population, exact = con.count_rows(ref, info)
+                    rel = con.sample(ref, options.sample_rows, options.seed, population)
+                    out = _Scanned(profile_asset(con, info, rel, population, exact, started), rel)
+                except SahifaError as e:
+                    log.warning("asset.failed %s: %s", ref.label, e)
+                    out = _Scanned(AssetProfile(ref=ref, error=str(e)))
+                _timing[ref.label] = [time.monotonic() - t, con.queries - before]
+                return out
+
+            _timing: dict[str, list[float]] = {}
+            scanned = dict(zip((r.label for r in refs), pool.map(scan_one, refs), strict=True))
+            profiles = {label: s.profile for label, s in scanned.items()}
+
+            def evaluate_one(con: Connector, label: str) -> _Evaluated:
+                t = time.monotonic()
+                before = con.queries
+                prof, rel = profiles[label], scanned[label].relation
+                if prof.error or rel is None:
+                    report = AssetReport(
                         ref=prof.ref,
                         population=0,
                         population_exact=False,
@@ -115,31 +185,45 @@ def run_scan(
                         score=to_score({}),
                         error=prof.error,
                     )
-                )
-                continue
-            ctx = Context(asset=prof, assets=profiles, src=src, rel=relations[label], scan_time=started)
-            try:
-                evaluation = evaluate_asset(ctx, (saved or {}).get(label))
-            except SahifaError as e:
-                log.warning("asset.checks_failed %s: %s", label, e)
-                prof.error = str(e)
-                evaluation = AssetEvaluation()
-            finally:
-                src.release(relations[label])
-            results = evaluation.results
-            results_all += results
-            specs_all += evaluation.specs
-            report, dims = asset_report(prof, results)
-            report.unevaluated = evaluation.unevaluated
-            assets.append(report)
-            asset_dims.append((report, dims))
+                    return _Evaluated(report, None, [], [])
+                ctx = Context(asset=prof, assets=profiles, src=con, rel=rel, scan_time=started)
+                try:
+                    evaluation = evaluate_asset(ctx, (saved or {}).get(label))
+                except SahifaError as e:
+                    log.warning("asset.checks_failed %s: %s", label, e)
+                    prof.error = str(e)
+                    evaluation = AssetEvaluation()
+                finally:
+                    con.release(rel)
+                report, dims = asset_report(prof, evaluation.results)
+                report.unevaluated = evaluation.unevaluated
+                seconds, queries = _timing[label]
+                seconds += time.monotonic() - t
+                queries += con.queries - before
+                _timing[label] = [seconds, queries]
+                report.duration_s, report.queries = round(seconds, 3), int(queries)
+                log.info("asset.scanned %s: %.2f s, %d queries", label, seconds, queries)
+                return _Evaluated(report, dims, evaluation.results, evaluation.specs)
+
+            evaluated = pool.map(evaluate_one, list(profiles))
+        finally:
+            for con in extra:
+                con.close()
+        assets = [e.report for e in evaluated]
+        asset_dims = [(e.report, e.dims) for e in evaluated if e.dims is not None]
+        results_all = [r for e in evaluated for r in e.results]
+        specs_all = [s for e in evaluated for s in e.specs]
+        per_asset = [int(q) for _s, q in _timing.values()]
         stats = ScanStats(
             assets=len(profiles),
             assets_failed=sum(1 for p in profiles.values() if p.error),
             columns=sum(len(p.columns) for p in profiles.values()),
             checks_active=sum(1 for r in results_all if r.spec.status.scores),
             checks_proposed=sum(1 for r in results_all if not r.spec.status.scores),
-            queries=src.queries,
+            queries=pool.queries,
+            queries_per_asset_max=max(per_asset, default=0),
+            queries_per_asset_mean=round(sum(per_asset) / len(per_asset), 1) if per_asset else 0.0,
+            workers=len(pool.all),
         )
         kind, label = src.kind, src.label
 
@@ -149,6 +233,7 @@ def run_scan(
         key=lambda f: (list(SEVERITY_ORDER).index(f.severity), f.ratio),
     )
     stats.duration_s = round(time.monotonic() - t0, 2)
+    log.info("scan.stats %s", stats.model_dump_json())
     return ScanReport(
         scan_id=scan_id,
         started_at=started,
@@ -166,6 +251,8 @@ def run_scan(
 
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
+# Spec 013: example queries per asset; failing checks past this many get none.
+EXAMPLES_PER_ASSET = 10
 
 
 @dataclass
@@ -211,10 +298,11 @@ def evaluate_asset(ctx: Context, saved: list[CheckSpec] | None = None) -> AssetE
     counts: dict[str, tuple[int, int, list[tuple[str, int]]]] = {}
     sql_specs = [(c, s) for c, s in specs if c.evaluation == "sql"]
     if sql_specs:
-        exprs = [f"{c.n_expr(s, ctx)}, {c.k_expr(s, ctx)}" for c, s in sql_specs]
+        exprs = [f"{c.n_expr(s, ctx)}, {'0' if c.own_query else c.k_expr(s, ctx)}" for c, s in sql_specs]
         row = ctx.src.query(ctx.rel.query(f"SELECT {', '.join(exprs)} FROM {ctx.rel.ref} AS s"))[0]
-        for i, (_, s) in enumerate(sql_specs):
-            counts[s.id] = (int(row[2 * i] or 0), int(row[2 * i + 1] or 0), [])
+        for i, (c, s) in enumerate(sql_specs):
+            k = int(ctx.src.query(c.k_query(s, ctx))[0][0] or 0) if c.own_query else int(row[2 * i + 1] or 0)
+            counts[s.id] = (int(row[2 * i] or 0), k, [])
     py_specs = [(c, s) for c, s in specs if c.evaluation == "python"]
     values_cache: dict[str, list[tuple[str, int]]] = {}
     for c, s in py_specs:
@@ -227,17 +315,30 @@ def evaluate_asset(ctx: Context, saved: list[CheckSpec] | None = None) -> AssetE
             counts[s.id] = c.evaluate_profile(s, ctx)
 
     dropped: set[str] = set()
+    kept = []
     for c, s in specs:
-        n, k, examples = counts[s.id]
+        n, k, _examples = counts[s.id]
         # Weak evidence drops a generated candidate; a locked or manual one is the owner's call.
         if not keeps_saved(s) and not c.accept(s, n, k):
             dropped.add(s.id)
             continue
+        kept.append((c, s))
+    # Examples for at most EXAMPLES_PER_ASSET failing SQL checks: those that score (findings)
+    # before proposals, the most severe first.
+    wants = [(c, s) for c, s in kept if counts[s.id][1] > 0 and c.evaluation == "sql" and not counts[s.id][2]]
+    wants.sort(key=lambda cs: (not cs[1].status.scores, list(SEVERITY_ORDER).index(cs[1].severity)))
+    fetch = {s.id for _c, s in wants[:EXAMPLES_PER_ASSET]}
+    for c, s in kept:
+        n, k, examples = counts[s.id]
+        skipped = False
         if k > 0 and c.evaluation == "sql" and not examples:
-            sql = c.examples_sql(s, ctx)
+            sql = c.examples_sql(s, ctx) if s.id in fetch else None
             if sql:
                 examples = [(str(v), int(m)) for v, m in ctx.src.query(sql)]
-        out.results.append(result_of(c, s, n, k, examples, ctx))
+            skipped = s.id not in fetch
+        result = result_of(c, s, n, k, examples, ctx)
+        result.examples_skipped = skipped
+        out.results.append(result)
     out.specs = [s for s in out.specs if s.id not in dropped]
     return out
 
@@ -319,6 +420,7 @@ def finding_of(r: CheckResult) -> Finding:
         next_step=r.next_step,
         examples=r.examples,
         sql=r.sql,
+        examples_skipped=r.examples_skipped,
     )
 
 

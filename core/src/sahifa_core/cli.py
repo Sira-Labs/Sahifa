@@ -55,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     scan.add_argument("--sample-rows", type=int, default=100_000)
     scan.add_argument("--all-rows", action="store_true", help="read every row (no sampling)")
     scan.add_argument("--seed", type=int, default=42)
+    scan.add_argument(
+        "--workers", type=int, default=2, help="Postgres sessions scanning assets at once (default 2)"
+    )
     out = scan.add_mutually_exclusive_group()
     out.add_argument("--json", action="store_true", help="print the report as JSON")
     out.add_argument("--pretty", action="store_true", help="print a summary (default)")
@@ -68,6 +71,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("checks", help="list the check catalogue")
 
+    bench = sub.add_parser(
+        "bench-schema", help="create the wide Postgres schema of the performance run (spec 013)"
+    )
+    bench.add_argument("url", help="postgresql:// URL of a benchmark database, never a source")
+    bench.add_argument("--schema", default="bench")
+    bench.add_argument(
+        "--mix", default=None, help="tiers as TABLESxROWS,...; default 700x10000,270x100000,30x1000000"
+    )
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -78,6 +90,16 @@ def main(argv: list[str] | None = None) -> int:
 
         for p in write_shop(args.directory, clean=args.clean, rows=args.rows, seed=args.seed):
             print(p)
+        return 0
+    if args.command == "bench-schema":
+        from .bench import DEFAULT_MIX, create_schema
+
+        try:
+            n = create_schema(args.url, schema=args.schema, mix=args.mix or DEFAULT_MIX, progress=print)
+        except UsageError as e:
+            print(f"sahifa: {e}", file=sys.stderr)
+            return 2
+        print(f"{n} tables in schema {args.schema}")
         return 0
     if args.command == "checks":
         from .checks import CATALOGUE
@@ -91,7 +113,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = run_scan(
             args.source if len(args.source) > 1 else args.source[0],
-            ScanOptions(sample_rows=0 if args.all_rows else args.sample_rows, seed=args.seed),
+            ScanOptions(
+                sample_rows=0 if args.all_rows else args.sample_rows,
+                seed=args.seed,
+                workers=max(1, args.workers),
+            ),
         )
     except UsageError as e:
         print(f"sahifa: {e}", file=sys.stderr)
