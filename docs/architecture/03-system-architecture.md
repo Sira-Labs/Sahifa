@@ -163,7 +163,9 @@ a failure to connect fails the scan with the error message (credentials are neve
   (ADR-0012) from R2.
 - **Performance budget (R1):** a 1,000-table Postgres schema with a 100k-row sample per
   table in under 10 minutes on 2 vCPU; one aggregate query plus one check query per asset,
-  plus one grouped query per text column with a semantic candidate.
+  plus one grouped query per text column with a semantic candidate. Met by spec 013: 8 min 13 s
+  with two worker sessions (`SAHIFA_SCAN_WORKERS`), at most 15 queries per asset; the method
+  and numbers are in `performance.md`.
 - **Testing:** core unit tests on DuckDB in memory; Postgres integration tests when
   `SAHIFA_TEST_DATABASE_URL` is set (CI provides one); every check has a synthetic-fault
   test that it fires and a clean-data test that it does not.

@@ -5,7 +5,7 @@ spec 004 (scan runner), ADR-0001 (SQL pushdown), ADR-0006 (read-only sources).
 Packages: `core/` (scan, checks, Postgres connector, benchmark generator, CLI), `api/`
 (settings), `docs/`.
 
-Status: draft, awaiting the owner's approval.
+Status: approved 2026-10-03 by the owner.
 
 ## Goal
 
@@ -99,14 +99,15 @@ Per asset, at most:
 | 1 per foreign-key check | Its own anti-join query |
 | 1 per column with Python-evaluated checks | Grouped values |
 | 1 | Freshness: the newest timestamp |
-| 1 per failing SQL check, at most 5 per asset | Examples |
+| 1 per failing SQL check, at most 10 per asset | Examples |
 
 The first eight lines are the fixed part. The last line is capped so that a table full of
 failures does not add a query per check.
 
-`ScanStats` gains `queries_per_asset` (max and mean). A test on the synthetic shop asserts the
-budget. The examples cap is new: past five, failing checks get no examples, and the finding says
-so.
+`ScanStats` gains `queries_per_asset_max`, `queries_per_asset_mean` and `workers`; each asset in
+the report gains `duration_s` and `queries`. A test on the synthetic shop asserts the budget.
+The examples cap is new: past ten, failing checks get no examples (`examples_skipped`), findings
+and the most severe first, and the finding says so.
 
 ## Behaviour
 
@@ -118,12 +119,11 @@ so.
    sessions. Phase two (checks) needs all profiles for the cross-table checks; it starts when
    phase one is done and runs on the same sessions. A failing asset is recorded as today;
    the other workers go on.
-3. **Cheaper profile.** Five regexes are evaluated on every row of a text column for its share
-   of whitespace, non-printing, numeric-like, date-like and leading-zero values. Each regex
-   gets a cheap guard first (for example, the numeric regex only where the first character is
-   a digit or sign), so most rows never reach it. Only if the benchmark still misses the budget
-   do the shares move from every row to the grouped distinct values with their counts, on
-   columns with few distinct values; the profile's numbers stay exact either way.
+3. **Profile unchanged.** Measured on 100,000 rows, the five regexes on four text columns cost
+   0.18 s, and cheap guards in front of them would save about 0.05 s (3 % of a 100,000-row
+   table's time). A guard can also differ from the regex where Postgres's `\s` matches more
+   than `ltrim` strips. The benchmark meets the budget without them, so the profile query stays
+   as it was (see the implementation notes).
 4. **Large tables.** Above 10 × the sample size, the sample stays `BERNOULLI`, because block
    sampling skews clustered tables. The count stays the planner's estimate above 10 million
    rows. The benchmark's 1-million-row tables show the cost of re-reading; the result is
@@ -133,18 +133,18 @@ so.
 
 ## Acceptance criteria
 
-- [ ] `sahifa bench-schema` creates the default schema of 1,000 tables plus a parent, and
+- [x] `sahifa bench-schema` creates the default schema of 1,000 tables plus a parent, and
       refuses to replace a schema without its marker.
-- [ ] The default benchmark scans in under 10 minutes with `workers = 2`, with the scan process
+- [x] The default benchmark scans in under 10 minutes with `workers = 2`, with the scan process
       and Postgres pinned to 2 CPUs (`taskset`). The before-and-after numbers are in the PR and
       in `docs/architecture/performance.md`: total time, time per tier, queries per asset, and
       database against Python time.
-- [ ] The foreign-key check takes linear time. A test with a parent of 50,000 rows and no
+- [x] The foreign-key check takes linear time. A test with a parent of 50,000 rows and no
       index finishes in seconds, and its results equal the old check's on the synthetic shop.
-- [ ] `workers = 2` gives the same report as `workers = 1` on the synthetic shop and on a
+- [x] `workers = 2` gives the same report as `workers = 1` on the synthetic shop and on a
       small Postgres schema, apart from the timings.
-- [ ] The query budget holds on the synthetic shop, by test, including the examples cap.
-- [ ] `make lint` and `make test` pass. The full benchmark runs locally; it is not part of CI.
+- [x] The query budget holds on the synthetic shop, by test, including the examples cap.
+- [x] `make lint` and `make test` pass. The full benchmark runs locally; it is not part of CI.
 
 ## Test cases
 
@@ -154,12 +154,31 @@ so.
     `k` as before;
   - the parallel scan equals the serial scan;
   - the query budget;
-  - the examples cap;
-  - each regex guard gives the same profile on the synthetic shop.
+  - the examples cap.
 - **Core, Postgres (`SAHIFA_TEST_SOURCE_URL`):**
   - the foreign-key check against an unindexed parent of 50,000 rows, in seconds;
   - two workers on a 20-table schema.
 - **API:** `SAHIFA_SCAN_WORKERS` reaches the runner.
+
+## Implementation notes
+
+- **Benchmark result:** 8 min 13 s with two workers and 15 min 47 s with one, on Postgres 16 and
+  the scan pinned to 2 CPUs. The tables are in `docs/architecture/performance.md`.
+- **Regex guards not done.** They would save about 3 % and could differ from Postgres's `\s`;
+  behaviour 3 was edited, with this reason.
+- **Examples cap at 10, not 5.** The synthetic shop already has six findings on two tables, so 5
+  would have taken examples from the demo report. Findings come before proposals, then
+  severity.
+- **Parallel sessions on Postgres only.** DuckDB keeps each sample as a temporary table of its
+  one connection, and runs each query on all its own threads.
+- **Same report whatever the number of workers,** apart from values measured against the scan's
+  start time: freshness age and future dates. A test on a small schema runs both within
+  seconds, so they match exactly.
+- **Native foreign-key comparison** when both columns share a logical type; otherwise both
+  sides are cast to text. Either way the check is its own anti-join query, linear in the
+  sample plus the parent.
+- **Per-asset cost.** Each asset in the report has `duration_s` and `queries`, so slow tables
+  are visible; `scan.stats` and `asset.scanned` log lines carry the same numbers.
 
 ## Out of scope
 
