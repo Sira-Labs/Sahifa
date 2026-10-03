@@ -246,6 +246,7 @@ async def list_findings(
                 "next_step": f.next_step,
                 "examples": f.evidence.get("examples", []),
                 "sql": f.evidence.get("sql"),
+                "examples_skipped": bool(f.evidence.get("examples_skipped")),
             }
             for f, finding_status in rows
         ]

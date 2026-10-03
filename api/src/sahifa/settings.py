@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # Spec 010: a schedule whose runs come closer than this is refused.
     schedule_min_interval_minutes: int = Field(default=60, ge=1)
     duckdb_memory: str = "1GB"
+    # Spec 013: Postgres sessions one scan uses to scan assets at once.
+    scan_workers: int = Field(default=2, ge=1, le=8)
     statement_timeout_s: int = Field(default=60, ge=1)
     log_level: str = "info"
     commit: str = "unknown"

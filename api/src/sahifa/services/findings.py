@@ -71,6 +71,8 @@ def occurrence_of(scan_id: uuid.UUID, f: dict[str, Any], finding_id: uuid.UUID |
             "title": f.get("title"),
             "examples": f.get("examples", []),
             "sql": f.get("sql"),
+            # Spec 013: past the per-asset cap, a failing check gets no example query.
+            "examples_skipped": bool(f.get("examples_skipped")),
         },
     )
 

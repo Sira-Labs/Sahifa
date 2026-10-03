@@ -183,6 +183,7 @@ def _execute(
         seed=uuid.UUID(str(scan_id)).int % 2_147_483_647,
         memory_limit=settings.duckdb_memory,
         statement_timeout_s=settings.statement_timeout_s,
+        workers=settings.scan_workers,
     )
     report = run_scan(source, options, scan_id=str(scan_id), names=names, saved=saved)
     data: dict[str, Any] = report.model_dump(mode="json")
