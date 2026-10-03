@@ -313,3 +313,31 @@ async def test_scans_per_hour_and_the_off_switch(tmp_path: Path, upgraded: None)
     async with life, c:
         missing = {"connection_id": "00000000-0000-4000-8000-000000000000"}
         assert [(await c.post("/api/scans", json=missing)).status_code for _ in range(3)] == [404, 404, 404]
+
+
+# --- The web image's Caddyfile ------------------------------------------------------------
+
+CADDYFILE = Path(__file__).resolve().parents[2] / "deploy" / "caddy" / "Caddyfile"
+
+
+def test_caddyfile_sends_the_baseline_headers() -> None:
+    text = CADDYFILE.read_text()
+    for header in (
+        "Content-Security-Policy \"default-src 'self';",
+        "frame-ancestors 'none'",
+        'X-Content-Type-Options "nosniff"',
+        'Referrer-Policy "strict-origin-when-cross-origin"',
+        'Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"',
+        'Cross-Origin-Opener-Policy "same-origin"',
+        'Cross-Origin-Resource-Policy "same-origin"',
+        'X-Frame-Options "DENY"',
+        'Strict-Transport-Security "max-age=31536000"',
+        "-Server",
+        'header @assets Cache-Control "public, max-age=31536000, immutable"',
+        'header @html Cache-Control "no-cache"',
+        "trusted_proxies static private_ranges",
+    ):
+        assert header in text, header
+    # The CSP allows no inline or remote scripts.
+    csp = text.split('Content-Security-Policy "', 1)[1].split('"', 1)[0]
+    assert "script-src 'self';" in csp and "unsafe-eval" not in csp and "http" not in csp

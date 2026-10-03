@@ -1,6 +1,15 @@
 # Edge of the web image (web/Dockerfile), used by the compose bundle and CapRover alike.
 # TLS is terminated here when SAHIFA_DOMAIN is set (Caddy obtains certificates automatically);
 # otherwise it serves plain HTTP on :80 behind your own load balancer or CapRover's nginx.
+{
+	servers {
+		# CapRover's nginx (or another proxy on a private network) passes the client address in
+		# X-Forwarded-For; trust it from private ranges only, so the api logs and rate-limits the
+		# real client instead of the proxy (spec 012).
+		trusted_proxies static private_ranges
+	}
+}
+
 {$SAHIFA_DOMAIN::80} {
 	encode zstd gzip
 
@@ -9,10 +18,21 @@
 		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		# Legacy browsers; the CSP's frame-ancestors covers current ones.
+		X-Frame-Options "DENY"
+		# Ignored by browsers over plain HTTP, honoured once TLS is in front (spec 012).
+		Strict-Transport-Security "max-age=31536000"
 		-Server
 	}
+
+	# Vite names its assets by content hash, so they never change; the HTML always revalidates.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html not path /assets/* /api/* /healthz
+	header @html Cache-Control "no-cache"
 
 	@api path /api/* /healthz
 	handle @api {
