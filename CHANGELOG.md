@@ -51,6 +51,11 @@ All notable changes to this project are documented here. The format follows
   once after an outage. Scheduled scans are marked "scheduled" in the scans list.
   `/api/connections/{id}/schedule`, `scans.trigger`, `SAHIFA_SCHEDULE_MIN_INTERVAL_MINUTES`
   (default 60), migration 0006.
+- Score history (spec 011): every successful scan stores its store score and each table's, with
+  the interval and dimensions. The store and table reports show the last 30 scans as a line
+  with its 95 % band, the change since the previous scan (marked when within the interval),
+  each point linked to its scan, and a table view. `/api/connections/{id}/history`,
+  `/api/assets/{id}/history`, migration 0007, which fills the history from stored reports.
 
 ### Fixed
 - Reports no longer call a sampled score a "full read": scores are rounded to one decimal, so

@@ -36,6 +36,10 @@ erDiagram
 Not in R1: org, workspace and membership (R2, the Tabayyun authz model, ADR-0010),
 contract (R2, ODCS, ADR-0013), lineage edge (R3).
 
+Storage of **Score** (spec 011): one `scores` row per scan and level (the store, or one
+asset), holding `overall`, `low`, `high`, the checks evaluated and the dimensions together as
+JSON, rather than one row per dimension. Column-level scores stay in the report only.
+
 ## Profile
 
 Computed per column by one aggregate query per asset (spec 002), on the scan's sample:

@@ -13,6 +13,7 @@ import type {
   FindingFilters,
   FindingsSearch,
   Health,
+  HistoryPoint,
   Page,
   Scan,
   ScanCreate,
@@ -207,6 +208,16 @@ export function uploadForm(files: File[], sampleRows?: number): FormData {
   return form;
 }
 
+async function historyOrNull(path: string): Promise<HistoryPoint[] | null> {
+  try {
+    return (await apiGet<{ points: HistoryPoint[] }>(path)).points;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404 && (error.body as { detail?: unknown } | null)?.detail === "scan_not_in_history")
+      return null;
+    throw error;
+  }
+}
+
 export const api = {
   health: () => apiGet<Health>("/healthz"),
   version: () => apiGet<Version>("/api/version"),
@@ -255,6 +266,13 @@ export const api = {
     } while (cursor);
     return null;
   },
+  /** The store's score history ending at `scanId` (spec 011), or null when that scan has no
+   * store score (404 `scan_not_in_history`). */
+  storeHistory: (connectionId: string, scanId: string) =>
+    historyOrNull(`/api/connections/${enc(connectionId)}/history${query({ scan_id: scanId })}`),
+  /** A table's score history ending at `scanId`, or null when that scan has no score for it. */
+  assetHistory: (assetId: string, scanId: string) =>
+    historyOrNull(`/api/assets/${enc(assetId)}/history${query({ scan_id: scanId })}`),
   listChecks: (assetId: string) => apiGet<StoredCheck[]>(`/api/checks${query({ asset_id: assetId })}`),
   changeCheck: (check: Pick<StoredCheck, "id" | "version">, action: CheckAction) =>
     apiSend<StoredCheck>("POST", `/api/checks/${enc(check.id)}/${action}`, { version: check.version }),

@@ -356,3 +356,15 @@ export type FindingsSearch = { status?: FindingsView; severity?: Severity; conne
 
 /** Body of `POST /api/findings/{id}/{action}`. */
 export type FindingChange = { note?: string; until?: string };
+
+/** One successful scan's score at one level, from `GET …/history` (spec 011). */
+export type HistoryPoint = {
+  scan_id: string;
+  finished_at: string;
+  trigger: ScanTrigger;
+  overall: number | null;
+  low: number | null;
+  high: number | null;
+  checks: number;
+  dimensions: Partial<Record<Dimension, DimensionScore>>;
+};

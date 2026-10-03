@@ -1293,3 +1293,153 @@ details > .health-list {
   font-size: 14px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Score history (spec 011): a 0–100 line with its band; points are links ---------- */
+.history {
+  display: grid;
+  gap: 14px;
+}
+.history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 18px;
+}
+.history-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.history-summary b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.history-plot {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  gap: 10px;
+  padding-block: 10px;
+}
+.history-axis {
+  position: relative;
+  font-size: 11px;
+  color: var(--muted);
+}
+.history-axis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+.history-area {
+  position: relative;
+  height: 112px;
+  margin-inline: 10px;
+}
+.history-area svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.history-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.history-band {
+  fill: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+.history-line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.history-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history-points li {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+/* A 24 px hit target around an 8 px dot with a surface ring; the viewed scan is accented. */
+.history-point {
+  position: absolute;
+  left: -12px;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.history-point::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.history-point:hover::after,
+.history-point:focus-visible::after {
+  inset: 5px;
+}
+.history-point.is-current::after {
+  inset: 5px;
+  background: var(--accent);
+}
+.history-point.is-empty::after {
+  background: var(--surface);
+  border: 2px solid var(--muted);
+}
+.history-tip {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, calc(-100% - 14px));
+  display: grid;
+  gap: 2px;
+  min-width: 11em;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.history-tip.is-start {
+  transform: translate(-12px, calc(-100% - 14px));
+}
+.history-tip.is-end {
+  transform: translate(calc(-100% + 12px), calc(-100% - 14px));
+}
+/* A point in the upper half shows its numbers below it, clear of the heading. */
+.history-tip.is-below {
+  transform: translate(-50%, 14px);
+}
+.history-tip.is-start.is-below {
+  transform: translate(-12px, 14px);
+}
+.history-tip.is-end.is-below {
+  transform: translate(calc(-100% + 12px), 14px);
+}
+.history-tip b {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 15px;
+}
+.history-table > summary {
+  font-size: 14px;
+  color: var(--muted);
+}
+.history-table[open] > summary {
+  margin-bottom: 8px;
+}

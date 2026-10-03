@@ -82,6 +82,7 @@ function serve(onPost?: (id: string, action: string, body: { version: number }) 
     if (url === SCAN_URL) return makeScan();
     if (url === REPORT_URL) return makeReport();
     if (url.startsWith("/api/assets?")) return { items: [{ ...ASSET, label: "customers", id: "other" }, ASSET], next_cursor: null };
+    if (url.startsWith(`/api/assets/${ASSET_ID}/history`)) return { points: [] };
     if (url === CHECKS_URL) {
       listCalls += 1;
       return checks;

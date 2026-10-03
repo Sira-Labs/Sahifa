@@ -1,5 +1,5 @@
 """Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008), 0005
-(spec 009) and 0006 (spec 010).
+(spec 009), 0006 (spec 010) and 0007 (spec 011).
 
 Procrastinate's own tables (migration 0004) are not mapped here; Alembic ignores them.
 """
@@ -375,3 +375,44 @@ class FindingEvent(Base):
     from_status: Mapped[str | None] = mapped_column(String(20))
     to_status: Mapped[str] = mapped_column(String(20))
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class ScoreRecord(Base):
+    """A scan's score at one level (spec 011): the store (`asset_id` null) or one table.
+
+    One row per level rather than per dimension: the history reads whole points, and a
+    1,000-table scan writes 1,001 rows instead of seven times that. `connection_id` and
+    `measured_at` (the scan's `finished_at`) are copied from the scan so that a history is one
+    index range."""
+
+    __tablename__ = "scores"
+    __table_args__ = (
+        Index("uq_scores_scan_store", "scan_id", unique=True, postgresql_where=text("asset_id IS NULL")),
+        Index(
+            "uq_scores_scan_asset",
+            "scan_id",
+            "asset_id",
+            unique=True,
+            postgresql_where=text("asset_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_scores_store_history",
+            "connection_id",
+            text("measured_at DESC"),
+            postgresql_where=text("asset_id IS NULL"),
+        ),
+        Index("ix_scores_asset_history", "asset_id", text("measured_at DESC")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
+    connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
+    asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # 0-100; null when the level had nothing to evaluate.
+    overall: Mapped[float | None] = mapped_column(Float)
+    low: Mapped[float | None] = mapped_column(Float)
+    high: Mapped[float | None] = mapped_column(Float)
+    checks: Mapped[int] = mapped_column(Integer)
+    # {dimension: {value, low, high, checks}}, as in the report's `Score.dimensions`.
+    dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB)

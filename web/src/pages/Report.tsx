@@ -3,6 +3,7 @@ import { SeverityChip, StatusChip } from "../components/Chips";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { FindingCard } from "../components/FindingCard";
 import { ScoreCard } from "../components/ScoreCard";
+import { StoreHistory } from "../components/ScoreHistory";
 import { ScoreText } from "../components/ScoreText";
 import { SEVERITIES, TOP_FINDINGS } from "../constants";
 import {
@@ -295,6 +296,7 @@ export function Report() {
             meta={<span>{samplePolicy(report.data.options.sample_rows)}</span>}
             read={storeRead(report.data)}
           />
+          <StoreHistory connectionId={s.connection_id} scanId={scanId} />
           <FindingsSummary report={report.data} scanId={scanId} />
           <AssetsTable report={report.data} scanId={scanId} />
           <div className="grid-2">
