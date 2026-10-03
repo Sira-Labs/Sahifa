@@ -77,7 +77,7 @@ export function AssetReport() {
           {a.error}
         </p>
       )}
-      <ScoreCard title="Table score" score={a.score} caption={caption(a)} />
+      <ScoreCard title="Table score" score={a.score} caption={caption(a)} read={a.sampled ? "sampled" : "full"} />
       <AssetHistory scanId={scanId} label={asset} />
 
       <section aria-labelledby="asset-checks-heading" className="card stack-sm">
@@ -104,7 +104,12 @@ export function AssetReport() {
             </thead>
             <tbody>
               {a.columns.map((c) => (
-                <ColumnRow key={c.profile.name} column={c} checks={a.checks.filter((k) => k.spec.column === c.profile.name)} />
+                <ColumnRow
+                  key={c.profile.name}
+                  column={c}
+                  checks={a.checks.filter((k) => k.spec.column === c.profile.name)}
+                  read={a.sampled ? "sampled" : "full"}
+                />
               ))}
             </tbody>
           </table>

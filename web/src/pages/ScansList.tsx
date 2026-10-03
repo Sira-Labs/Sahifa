@@ -102,7 +102,12 @@ export function ScansList() {
                     <StatusChip status={scan.status} />
                   </td>
                   <td data-label="Score">
-                    {scan.score ? <ScoreText value={scan.score.overall} low={scan.score.low} high={scan.score.high} /> : <span className="muted">—</span>}
+                    {scan.score ? <ScoreText
+                        value={scan.score.overall}
+                        low={scan.score.low}
+                        high={scan.score.high}
+                        read={scan.sample_rows === 0 ? "full" : undefined}
+                      /> : <span className="muted">—</span>}
                   </td>
                   <td data-label="Findings">
                     <FindingCounts scan={scan} />

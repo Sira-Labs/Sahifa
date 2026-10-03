@@ -19,12 +19,18 @@ import {
   sortFindings,
   titleCase,
   worstDimension,
+  type ReadKind,
 } from "../format";
 import { useReport } from "../hooks/useReport";
 import { useScanPolling } from "../hooks/useScanPolling";
 import type { AssetReport, Scan, ScanReport } from "../types";
 
 const routeApi = getRouteApi("/_app/scans/$scanId");
+
+/** How the store was read: in full only when no table was sampled. */
+export function storeRead(report: ScanReport): ReadKind {
+  return report.assets.some((a) => a.sampled) ? "sampled" : "full";
+}
 
 /** The sentence under the score card: what the interval covers. */
 export function intervalCaption(report: ScanReport): string {
@@ -174,7 +180,7 @@ function AssetsTable({ report, scanId }: { report: ScanReport; scanId: string })
                     {assetRows(a)}
                   </td>
                   <td data-label="Score">
-                    <ScoreText value={a.score.overall} low={a.score.low} high={a.score.high} />
+                    <ScoreText value={a.score.overall} low={a.score.low} high={a.score.high} read={a.sampled ? "sampled" : "full"} />
                   </td>
                   <td data-label="Worst dimension">
                     {worst ? (
@@ -288,6 +294,7 @@ export function Report() {
             score={report.data.score}
             caption={intervalCaption(report.data)}
             meta={<span>{samplePolicy(report.data.options.sample_rows)}</span>}
+            read={storeRead(report.data)}
           />
           <StoreHistory connectionId={s.connection_id} scanId={scanId} />
           <FindingsSummary report={report.data} scanId={scanId} />
