@@ -1,4 +1,4 @@
-import { describeScore, formatIntervalRange, formatScore } from "../format";
+import { describeScore, formatIntervalRange, formatScore, type ReadKind } from "../format";
 
 type Scale = { min?: number; max?: number };
 
@@ -14,19 +14,21 @@ type Props = Scale & {
   high?: number | null;
   /** Shown after the label for screen readers and on hover, e.g. "4 checks". */
   note?: string;
+  /** Whether every row was read, where known; only then is a zero-width interval a full read. */
+  read?: ReadKind;
 };
 
 /** One labelled bar: a light fill to the score, the 95 % interval as a solid segment and a tick
  * at the value; the numbers beside it read "92.7 · 92.3–93.1". A missing score reads "—" with
  * "no active checks". */
-export function IntervalBar({ label, value, low, high, note, min = 0, max = 100 }: Props) {
+export function IntervalBar({ label, value, low, high, note, read, min = 0, max = 100 }: Props) {
   const has = value !== null && value !== undefined;
   const hasInterval = has && low !== null && low !== undefined && high !== null && high !== undefined;
-  const range = formatIntervalRange(low, high);
+  const range = formatIntervalRange(low, high, read);
   return (
     <div className="dim-row" title={note}>
       <span className="dim-name">{label}</span>
-      <span className="track" role="img" aria-label={`${label}: ${describeScore(value, low, high)}${note ? `, ${note}` : ""}`}>
+      <span className="track" role="img" aria-label={`${label}: ${describeScore(value, low, high, read)}${note ? `, ${note}` : ""}`}>
         {has && <span className="track-fill" style={{ width: `${position(value, min, max)}%` }} />}
         {hasInterval && (
           <span

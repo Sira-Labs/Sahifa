@@ -16,7 +16,9 @@ describe("ScansList", () => {
           items: [
             scan(1),
             scan(2, { status: "failed", score: null, findings: null, error: "boom" }),
-            scan(3, { score: { overall: 99.0, low: 99.0, high: 99.0 }, findings: { critical: 0, high: 0, medium: 0, low: 0 } }),
+            scan(3, { sample_rows: 0, score: { overall: 99.0, low: 99.0, high: 99.0 }, findings: { critical: 0, high: 0, medium: 0, low: 0 } }),
+            // Sampled, with bounds that round to the same value: not a full read.
+            scan(4, { score: { overall: 98.5, low: 98.5, high: 98.5 } }),
           ],
           next_cursor: null,
         };
@@ -26,7 +28,7 @@ describe("ScansList", () => {
 
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
 
     const first = rows[0]!;
     expect(within(first).getByText("source-1")).toBeTruthy();
@@ -41,6 +43,9 @@ describe("ScansList", () => {
     expect(within(rows[1]!).getByText("Failed")).toBeTruthy();
     expect(rows[2]!.textContent).toContain("99.0 · full read");
     expect(rows[2]!.textContent).toContain("none");
+    expect(rows[3]!.textContent).toContain("98.5 · 98.5–98.5");
+    expect(rows[3]!.textContent).not.toContain("full read");
+    expect(within(rows[3]!).getByLabelText("98.5, 95 % interval 98.5 to 98.5")).toBeTruthy();
   });
 
   it("invites a first scan when there are none", async () => {
