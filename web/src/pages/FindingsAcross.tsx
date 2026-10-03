@@ -87,6 +87,9 @@ export function FindingsAcross() {
   function changed(updated: StoredFinding) {
     setNotice(null);
     client.setQueryData<InfiniteData<Page<StoredFinding>>>(key, (data) => replaceIn(data, updated));
+    // Other cached views (another status filter) still hold the old version; drop them so they
+    // refetch instead of offering an action that would fail with stale_version.
+    client.removeQueries({ queryKey: ["stored-findings"], type: "inactive" });
     void client.invalidateQueries({ queryKey: ["finding", updated.id] });
   }
 
