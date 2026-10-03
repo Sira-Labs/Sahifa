@@ -1,4 +1,4 @@
-"""Response and request models of the HTTP API (specs 004 and 007)."""
+"""Response and request models of the HTTP API (specs 004, 007 and 009)."""
 
 from __future__ import annotations
 
@@ -135,3 +135,80 @@ class CheckEventOut(BaseModel):
     to_status: str
     params_before: dict[str, Any] | None
     params_after: dict[str, Any] | None
+
+
+class FindingCheck(BaseModel):
+    id: uuid.UUID
+    key: str
+    type: str
+    title: str
+    status: str
+    column: str | None
+
+
+class FindingAsset(BaseModel):
+    id: uuid.UUID
+    label: str
+    connection_id: uuid.UUID
+
+
+class FindingLatest(BaseModel):
+    """The finding's most recent occurrence."""
+
+    scan_id: uuid.UUID
+    summary: str
+    failed: int
+    evaluated: int
+    ratio: float
+    low: float
+    high: float
+    dimension: str
+
+
+class FindingOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    severity: str
+    occurrences: int
+    first_seen_at: datetime
+    last_seen_at: datetime
+    muted_until: datetime | None
+    version: int
+    check: FindingCheck
+    asset: FindingAsset
+    latest: FindingLatest | None
+
+
+class OccurrenceOut(BaseModel):
+    scan_id: uuid.UUID
+    at: datetime
+    failed: int
+    evaluated: int
+    ratio: float
+    low: float
+    high: float
+    summary: str
+    examples: list[dict[str, Any]]
+    sql: str | None
+    next_step: str
+
+
+class FindingEventOut(BaseModel):
+    at: datetime
+    actor: str
+    action: str
+    from_status: str | None
+    to_status: str
+    note: str | None
+
+
+class FindingDetail(FindingOut):
+    occurrences_list: list[OccurrenceOut]
+    events: list[FindingEventOut]
+
+
+class FindingActionIn(BaseModel):
+    version: int = Field(ge=1)
+    # Plain text, stored as is and rendered as text; the table enforces the same limit.
+    note: str | None = Field(default=None, max_length=1000)
+    until: datetime | None = None

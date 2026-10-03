@@ -16,7 +16,7 @@ async def test_health_and_version(client: AsyncClient) -> None:
     h = (await client.get("/healthz")).json()
     assert h["status"] == "ok" and h["database"] == "ok" and h["workers"] == []
     v = (await client.get("/api/version")).json()
-    assert v["commit"] == "test" and v["schema_revision"] == "0004"
+    assert v["commit"] == "test" and v["schema_revision"] == "0005"
 
 
 @needs_db

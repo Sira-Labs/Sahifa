@@ -151,7 +151,7 @@ async def test_job_is_idempotent(
     await jobs.work(settings, db.sessions, queues=(jobs.SCANS,), wait=False)
     before = sql(owner, "SELECT status, started_at, finished_at, report FROM scans WHERE id = :s", s=sid)
     assert before[0][0] == "succeeded"
-    findings = sql(owner, "SELECT count(*) FROM findings WHERE scan_id = :s", s=sid)
+    findings = sql(owner, "SELECT count(*) FROM finding_occurrences WHERE scan_id = :s", s=sid)
 
     # A second job for the same scan, and a direct call, change nothing.
     second = await jobs._defer_scan(uuid.UUID(sid))
@@ -163,7 +163,7 @@ async def test_job_is_idempotent(
     assert sql(owner, "SELECT status::text FROM procrastinate_jobs WHERE id = :j", j=second) == [
         ("succeeded",)
     ]
-    assert sql(owner, "SELECT count(*) FROM findings WHERE scan_id = :s", s=sid) == findings
+    assert sql(owner, "SELECT count(*) FROM finding_occurrences WHERE scan_id = :s", s=sid) == findings
 
 
 @needs_db

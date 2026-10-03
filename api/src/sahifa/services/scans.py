@@ -19,11 +19,12 @@ import anyio
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ..db.models import Connection, Finding, Scan
+from ..db.models import Connection, Scan
 from ..logging import get_logger
 from ..settings import Settings
 from .checks import Saved, load_saved, persist_checks
 from .connections import resolve
+from .findings import record_findings
 
 if TYPE_CHECKING:
     from sahifa_core.models import CheckSpec
@@ -108,44 +109,22 @@ async def _succeed(
     report: dict[str, Any],
     saved: Saved | None = None,
 ) -> None:
-    """Store the report, its findings and (spec 007) its assets, columns and checks in one
-    transaction."""
+    """Store the report, its assets, columns and checks (spec 007) and its findings with their
+    occurrences (spec 009) in one transaction."""
     async with sessions() as db:
         scan = await db.get(Scan, scan_id)
         if scan is None:
             return
         score = report.get("score") or {}
+        finished = datetime.now(UTC)
         scan.status = "succeeded"
-        scan.finished_at = datetime.now(UTC)
+        scan.finished_at = finished
         scan.report = report
         scan.report_version = report.get("report_version")
         scan.score = {k: score.get(k) for k in ("overall", "low", "high")}
         counts = {s: 0 for s in ("critical", "high", "medium", "low")}
         for f in report.get("findings", []):
             counts[f["severity"]] = counts.get(f["severity"], 0) + 1
-            db.add(
-                Finding(
-                    scan_id=scan_id,
-                    check_type=f["check_type"],
-                    asset=f["asset"],
-                    column_name=f.get("column"),
-                    dimension=f["dimension"],
-                    severity=f["severity"],
-                    evaluated=f["evaluated"],
-                    failed=f["failed"],
-                    ratio=f["ratio"],
-                    low=f["low"],
-                    high=f["high"],
-                    summary=f["summary"],
-                    next_step=f["next_step"],
-                    evidence={
-                        "check_id": f["check_id"],
-                        "title": f.get("title"),
-                        "examples": f.get("examples", []),
-                        "sql": f.get("sql"),
-                    },
-                )
-            )
         scan.finding_counts = counts
         scan.assets_count = len(report.get("assets", []))
         persisted = await persist_checks(
@@ -155,6 +134,9 @@ async def _succeed(
             report=report,
             versions=saved.versions if saved else {},
         )
+        linked = await record_findings(
+            db, scan_id=scan_id, seen_at=finished, report=report, asset_ids=persisted.asset_ids
+        )
         await db.commit()
     log.info(
         "scan.checks_persisted",
@@ -162,6 +144,16 @@ async def _succeed(
         inserted=persisted.inserted,
         regenerated=persisted.regenerated,
         skipped=persisted.skipped,
+    )
+    log.info(
+        "scan.findings_linked",
+        scan_id=str(scan_id),
+        opened=linked.opened,
+        recurred=linked.recurred,
+        reopened=linked.reopened,
+        unmuted=linked.unmuted,
+        auto_resolved=linked.auto_resolved,
+        unlinked=linked.unlinked,
     )
 
 

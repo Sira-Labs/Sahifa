@@ -1,4 +1,5 @@
-"""Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007) and 0004 (spec 008).
+"""Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008) and
+0005 (spec 009).
 
 Procrastinate's own tables (migration 0004) are not mapped here; Alembic ignores them.
 """
@@ -37,6 +38,21 @@ CHECK_KINDS = ("rule", "baseline", "manual")
 CHECK_ORIGINS = ("generated", "manual", "suggested", "declared")
 CHECK_STATUSES = ("proposed", "active", "locked", "retired")
 CHECK_ACTIONS = ("created", "regenerated", "approve", "reject", "lock", "unlock", "retire", "restore")
+FINDING_STATUSES = ("open", "acknowledged", "resolved", "muted")
+# The scanner's actions (past tense), then people's (imperative), as for check events.
+FINDING_ACTIONS = (
+    "opened",
+    "recurred",
+    "auto_resolved",
+    "reopened",
+    "unmuted",
+    "acknowledge",
+    "resolve",
+    "mute",
+    "unmute",
+    "reopen",
+)
+NOTE_MAX = 1000
 
 
 class Connection(Base):
@@ -77,15 +93,20 @@ class Scan(Base):
     job_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
-class Finding(Base):
-    __tablename__ = "findings"
+class FindingOccurrence(Base):
+    """One failing check in one scan, with its evidence (spec 004's per-scan findings, renamed by
+    spec 009). `finding_id` links it to the finding across scans; null before migration 0005."""
+
+    __tablename__ = "finding_occurrences"
     __table_args__ = (
-        Index("ix_findings_scan_severity", "scan_id", "severity"),
-        Index("ix_findings_check_type", "check_type"),
+        Index("ix_finding_occurrences_scan_severity", "scan_id", "severity"),
+        Index("ix_finding_occurrences_check_type", "check_type"),
+        Index("ix_finding_occurrences_finding_scan", "finding_id", "scan_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
+    finding_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("findings.id", ondelete="SET NULL"))
     check_type: Mapped[str] = mapped_column(String(100))
     asset: Mapped[str] = mapped_column(Text)
     column_name: Mapped[str | None] = mapped_column(Text)
@@ -258,3 +279,62 @@ class CheckEvent(Base):
     to_status: Mapped[str] = mapped_column(String(20))
     params_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     params_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class Finding(Base):
+    """A failing check across scans (spec 009): at most one per check that is not resolved.
+
+    `version` grows by one on every change, by a person or the scanner, like a check's."""
+
+    __tablename__ = "findings"
+    __table_args__ = (
+        CheckConstraint(f"status IN {FINDING_STATUSES}", name="ck_findings_status"),
+        Index(
+            "uq_findings_check_unresolved",
+            "check_id",
+            unique=True,
+            postgresql_where=text("status <> 'resolved'"),
+        ),
+        Index("ix_findings_check_id", "check_id"),
+        Index("ix_findings_status_severity", "status", "severity"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    check_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("checks.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str] = mapped_column(String(20))
+    occurrences: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    first_scan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
+    last_scan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_scan_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
+    muted_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FindingEvent(Base):
+    """One change of a finding: by the scanner (no user) or a person's action, with a note.
+
+    Rows are only ever inserted; `actor` keeps who it was after the user is deleted."""
+
+    __tablename__ = "finding_events"
+    __table_args__ = (
+        CheckConstraint(f"action IN {FINDING_ACTIONS}", name="ck_finding_events_action"),
+        CheckConstraint(f"char_length(note) <= {NOTE_MAX}", name="ck_finding_events_note_length"),
+        Index("ix_finding_events_finding_at", "finding_id", "at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    # Who, as text that outlives the user row: the email at the time, `scanner`, `dev` or `proxy`.
+    actor: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(String(20))
+    from_status: Mapped[str | None] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20))
+    note: Mapped[str | None] = mapped_column(Text)

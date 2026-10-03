@@ -8,7 +8,7 @@ parameters; parameter values are never logged, because they can hold values from
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, select, update
@@ -92,6 +92,8 @@ class Persisted:
     inserted: int = 0
     regenerated: int = 0
     skipped: int = 0
+    # Each asset label of the report → its stored id (spec 009 links findings through it).
+    asset_ids: dict[str, uuid.UUID] = field(default_factory=dict)
 
 
 def _generated(spec: dict[str, Any]) -> dict[str, Any]:
@@ -161,7 +163,9 @@ async def persist_checks(
     for asset in report.get("assets", []):
         ref = asset["ref"]
         asset_id = await _upsert_asset(db, connection_id, scan_id, asset)
-        specs = by_label.get(label_of(ref.get("namespace", ""), ref["name"]), [])
+        label = label_of(ref.get("namespace", ""), ref["name"])
+        out.asset_ids[label] = asset_id
+        specs = by_label.get(label, [])
         if not specs:
             continue
         existing = {
