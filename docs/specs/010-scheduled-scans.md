@@ -173,6 +173,9 @@ Each run does the following:
   cron a newer croniter refuses) is disabled with `last_outcome = invalid_schedule` and logged
   as `schedule.invalid`, before any scan is created, so it cannot hold up the rest of the batch
   every minute (review of PR #10).
+- A scheduled scan that cannot be handed to the runner after the batch commits (a database
+  error) is failed with "failed to start" and its schedule records `failed_to_queue`; left
+  queued, an inline scan would never run and its connection would skip every later slot.
 - The `tzdata` package (Apache-2.0) is a dependency, so zoneinfo knows every IANA name whatever
   the image ships.
 - Web: the schedule opens in a row below its connection ("Schedule" button), and the table

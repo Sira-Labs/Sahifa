@@ -17,6 +17,7 @@ from httpx import ASGITransport, AsyncClient
 from sahifa_core.synth import write_shop
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 
 from sahifa import jobs, main
 from sahifa.db import Database
@@ -473,6 +474,46 @@ async def test_a_schedule_that_no_longer_resolves_is_disabled(
     )
     assert (enabled, next_at, outcome) == (False, None, "invalid_schedule")
     assert (await client.get(f"/api/connections/{bad}/schedule")).json()["next_runs"] == []
+    assert (await finished(client, sid))["status"] == "succeeded"
+
+
+@needs_db
+async def test_a_scan_that_cannot_start_fails_and_the_batch_goes_on(
+    client: AsyncClient, owner: Engine, db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lost = await connect(client, monkeypatch, tmp_path / "lost")
+    good = await connect(client, monkeypatch, tmp_path / "good")
+    due = parse((await put(client, good))["next_run_at"])
+    await put(client, lost)
+    sql(
+        owner,
+        "UPDATE scan_schedules SET next_run_at = :t WHERE connection_id = :c",
+        t=due - timedelta(hours=1),
+        c=lost,
+    )
+    start = jobs.start_scan
+    calls = 0
+
+    async def flaky(*args: Any, **kwargs: Any) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # the first scan of the batch: the database drops away mid-hand-off
+            raise OperationalError("SELECT 1", None, Exception("connection lost"))
+        await start(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, "start_scan", flaky)
+    settings = settings_for(tmp_path)
+    runs = await jobs.run_due_schedules(
+        db.sessions, settings, due + timedelta(minutes=5), runner=ScanRunner(db.sessions, settings)
+    )
+    outcomes = {str(r.connection_id): r.outcome for r in runs}
+    assert outcomes == {lost: "failed_to_queue", good: "queued"}
+    [(lost_scan, status, _)] = scans_of(owner, lost)
+    assert status == "failed"
+    assert schedule_row(owner, lost)["last_outcome"] == "failed_to_queue"
+    [(error,)] = sql(owner, "SELECT error FROM scans WHERE id = :s", s=lost_scan)
+    assert error == jobs.NOT_STARTED
+    [(sid, _, _)] = scans_of(owner, good)
     assert (await finished(client, sid))["status"] == "succeeded"
 
 

@@ -34,6 +34,7 @@ from procrastinate.exceptions import AlreadyEnqueued
 from procrastinate.jobs import Status
 from psycopg_pool import AsyncConnectionPool
 from sqlalchemy import Text, cast, column, exists, or_, select, table, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from .db.models import Connection, Scan, ScanSchedule
@@ -50,6 +51,7 @@ MAINTENANCE = "maintenance"
 QUEUES = (SCANS, MAINTENANCE)
 RUN_SCAN = "run_scan"
 INTERRUPTED = "interrupted: the worker stopped"
+NOT_STARTED = "failed to start: the scheduled scan could not be handed to the runner"
 RUNTIME = "sahifa"
 # Due schedules handled per run of `run_due_schedules`; the rest wait for the next minute.
 DUE_BATCH = 20
@@ -166,7 +168,7 @@ async def run_due_schedules(
     missed slots run once."""
     now = now or datetime.now(UTC)
     runs: list[ScheduleRun] = []
-    queued: list[tuple[ScheduleRun, Scan, str]] = []
+    queued: list[tuple[ScheduleRun, Scan, uuid.UUID, str]] = []
     async with sessions() as db:
         due = await db.scalars(
             select(ScanSchedule)
@@ -213,16 +215,25 @@ async def run_due_schedules(
             run = ScheduleRun(conn.id, schedule.last_outcome, scan.id if scan else None, upcoming_run)
             runs.append(run)
             if scan is not None:
-                queued.append((run, scan, conn.name))
+                queued.append((run, scan, scan.id, conn.name))
         await db.commit()
-        for run, scan, name in queued:
-            await db.refresh(scan)
-            await start_scan(db, scan, settings, runner, connection=name)
-            if scan.status == "failed":
+        for run, scan, scan_id, name in queued:
+            try:
+                await db.refresh(scan)
+                await start_scan(db, scan, settings, runner, connection=name)
+                failed = scan.status == "failed"
+            except SQLAlchemyError:
+                # Left queued, the scan would never run inline and its connection would skip
+                # every later slot as busy; fail it and go on with the rest of the batch.
+                log.exception("schedule.start_failed", scan_id=str(scan_id))
+                await db.rollback()
+                await interrupt_scans(sessions, [scan_id], NOT_STARTED)
+                failed = True
+            if failed:
                 run.outcome = "failed_to_queue"
                 await db.execute(
                     update(ScanSchedule)
-                    .where(ScanSchedule.last_scan_id == scan.id)
+                    .where(ScanSchedule.last_scan_id == scan_id)
                     .values(last_outcome=run.outcome)
                 )
                 await db.commit()
