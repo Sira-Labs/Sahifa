@@ -4,6 +4,7 @@ import { ChecksPanel } from "../components/ChecksPanel";
 import { ColumnRow } from "../components/ColumnRow";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { ScoreCard } from "../components/ScoreCard";
+import { AssetHistory } from "../components/ScoreHistory";
 import { assetLabel, formatCompact, formatCount } from "../format";
 import { useReport } from "../hooks/useReport";
 import type { AssetReport as Asset } from "../types";
@@ -77,6 +78,7 @@ export function AssetReport() {
         </p>
       )}
       <ScoreCard title="Table score" score={a.score} caption={caption(a)} />
+      <AssetHistory scanId={scanId} label={asset} />
 
       <section aria-labelledby="asset-checks-heading" className="card stack-sm">
         <h2 id="asset-checks-heading">Table-level checks</h2>

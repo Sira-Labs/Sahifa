@@ -64,8 +64,9 @@ Each point has the fields `scan_id`, `finished_at`, `trigger`, `overall`, `low`,
 ### Web
 
 - **Store report** (`/scans/$scanId`): a "Score history" panel below the store score.
-  - **Sparkline.** The overall score on a 0–100 axis, with the interval as a band. The viewed
-    scan is the last point and is accented. A scan with no score leaves a gap.
+  - **Sparkline.** The overall score with the interval as a band, on a y-axis fitted to the
+    scores shown: whole-number bounds, at least 4 points tall, within 0–100, labelled. The
+    viewed scan is the last point and is accented. A scan with no score leaves a gap.
   - **Headline.** "Last 30 scans" (or fewer), plus the change since the previous scan, for
     example "+2.4 since 1 Oct". When the two intervals overlap, the change is marked "within
     the interval".
@@ -133,6 +134,20 @@ Each point has the fields `scan_id`, `finished_at`, `trigger`, `overall`, `low`,
   - the table view;
   - the single-scan state;
   - the asset page asks for the asset's history.
+
+## Implementation notes
+
+- The y-axis is fitted to the scores shown instead of the fixed 0–100 axis this spec first
+  named: on the demo shop every store score sat between 98.9 and 99.1, a flat line along the
+  top of a 0–100 axis. The 4-point minimum height keeps sampling noise small, and the band
+  shows when a change is within the interval.
+- `checks` is the sum of the dimensions' checks; a backfilled table whose report row has no
+  asset row (scans before spec 007) is skipped.
+- The table report finds the asset as the checks panel does (connection and label), sharing
+  its cached queries. A history request answered `scan_not_in_history` hides the panel; any
+  other failure shows a one-line message and leaves the report in place.
+- Points are HTML links placed over an SVG drawn with `preserveAspectRatio="none"`, so the
+  line fills the width while the markers stay round and keyboard-focusable.
 
 ## Out of scope
 

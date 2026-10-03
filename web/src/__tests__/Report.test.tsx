@@ -11,6 +11,7 @@ describe("Report", () => {
     stubFetch((url) => {
       if (url === SCAN_URL) return makeScan();
       if (url === REPORT_URL) return makeReport();
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     renderApp(`/scans/${SCAN_ID}`);
@@ -43,6 +44,7 @@ describe("Report", () => {
     stubFetch((url) => {
       if (url === SCAN_URL) return makeScan();
       if (url === REPORT_URL) return makeReport();
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     renderApp(`/scans/${SCAN_ID}`);
@@ -75,6 +77,7 @@ describe("Report", () => {
   it("shows progress while the scan runs and does not ask for the report", async () => {
     const fetchFn = stubFetch((url) => {
       if (url === SCAN_URL) return makeScan({ status: "running", finished_at: null, score: null, findings: null });
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     renderApp(`/scans/${SCAN_ID}`);
@@ -89,6 +92,7 @@ describe("Report", () => {
   it("shows the error of a failed scan", async () => {
     const fetchFn = stubFetch((url) => {
       if (url === SCAN_URL) return makeScan({ status: "failed", error: "interrupted by a restart", score: null, findings: null });
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     renderApp(`/scans/${SCAN_ID}`);
@@ -104,6 +108,7 @@ describe("Report", () => {
     stubFetch((url) => {
       if (url === SCAN_URL) return makeScan();
       if (url === REPORT_URL) return fail ? json({ detail: "report not ready" }, 409) : makeReport();
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     const user = userEvent.setup();
@@ -119,6 +124,7 @@ describe("Report", () => {
   it("opens an asset with its table checks and expandable columns", async () => {
     stubFetch((url) => {
       if (url === REPORT_URL) return makeReport();
+      if (url.includes("/history?")) return { points: [] };
       throw new Error(`unexpected ${url}`);
     });
     const user = userEvent.setup();
