@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     sample_rows: int = Field(default=100_000, ge=0)
     max_upload_mb: int = Field(default=200, ge=1)
     max_upload_files: int = Field(default=20, ge=1)
+    # Spec 012: the whole upload request, all files together, and the free disk it must leave.
+    max_upload_total_mb: int = Field(default=1024, ge=1)
+    min_free_disk_mb: int = Field(default=1024, ge=0)
+    # Spec 012: token buckets per session or address; `rate_scans_per_hour` per user.
+    rate_limits: bool = True
+    rate_scans_per_hour: int = Field(default=60, ge=1)
+    # Spec 012: `/api/docs` and `/api/openapi.json`; unset means on outside prod.
+    api_docs: bool | None = None
     # Spec 008: `inline` runs scans in a thread of the api, `queue` defers them to the worker.
     scan_execution: ScanExecution = "inline"
     upload_ttl_days: int = Field(default=7, ge=1)
@@ -128,6 +136,11 @@ class Settings(BaseSettings):
     @property
     def migration_url(self) -> str:
         return self.migration_database_url or self.database_url
+
+    @property
+    def docs_enabled(self) -> bool:
+        """Whether the API docs are served: `api_docs`, or on outside prod when unset."""
+        return self.api_docs if self.api_docs is not None else self.env != "prod"
 
     @property
     def uploads_dir(self) -> Path:

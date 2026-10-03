@@ -19,6 +19,7 @@ from ..deps import session, settings
 from ..jobs import start_scan
 from ..logging import get_logger
 from ..schemas import Items, Page, ScanIn, ScanOut, ScanScore
+from ..services.uploads import clean_file_name, content_matches
 from ..settings import Settings
 
 router = APIRouter(prefix="/api/scans", tags=["scans"])
@@ -88,9 +89,10 @@ async def upload_scan(
         raise HTTPException(422, "choose at least one file")
     if len(files) > cfg.max_upload_files:
         raise HTTPException(422, f"at most {cfg.max_upload_files} files per scan")
-    for f in files:
-        if Path(f.filename or "").suffix.lower() not in UPLOAD_EXTENSIONS:
-            raise HTTPException(415, f"{f.filename}: only CSV, TSV, Parquet and JSON files are accepted")
+    originals = [clean_file_name(f.filename) for f in files]
+    for original in originals:
+        if Path(original).suffix.lower() not in UPLOAD_EXTENSIONS:
+            raise HTTPException(415, f"{original}: only CSV, TSV, Parquet and JSON files are accepted")
     batch = uuid.uuid4().hex
     folder = cfg.uploads_dir / batch
     folder.mkdir(parents=True, exist_ok=True)
@@ -98,9 +100,9 @@ async def upload_scan(
     paths: list[str] = []
     names: dict[str, str] = {}
     try:
-        for f in files:
-            original = Path(f.filename or "file").name
-            target = folder / f"{secrets.token_hex(8)}{Path(original).suffix.lower()}"
+        for f, original in zip(files, originals, strict=True):
+            suffix = Path(original).suffix.lower()
+            target = folder / f"{secrets.token_hex(8)}{suffix}"
             size = 0
             with target.open("wb") as out:
                 while chunk := await f.read(CHUNK):
@@ -108,6 +110,16 @@ async def upload_scan(
                     if size > limit:
                         raise HTTPException(413, f"{original} is larger than {cfg.max_upload_mb} MB")
                     out.write(chunk)
+            if not content_matches(target, suffix):
+                raise HTTPException(
+                    415,
+                    {
+                        "code": "content_mismatch",
+                        "file": original,
+                        "message": f"{original} does not look like a {suffix[1:].upper()} file. "
+                        "Text files must be UTF-8.",
+                    },
+                )
             paths.append(str(target))
             names[str(target)] = Path(original).stem
     except HTTPException:
@@ -115,7 +127,6 @@ async def upload_scan(
             p.unlink(missing_ok=True)
         folder.rmdir()
         raise
-    originals = [Path(f.filename or "file").name for f in files]
     conn = Connection(
         name=f"upload-{batch}", kind="upload", config={"paths": paths, "names": names, "files": originals}
     )
