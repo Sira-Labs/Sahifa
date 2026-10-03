@@ -136,7 +136,18 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Follow-ups in the baseline: secret scanning and Caddy as non-root (sprint 4), limits
         shared across replicas (R3), signature check at deploy (R2).
       - Owner: raise `client_max_body_size` on `sahifa-web` to the upload limit (deploy/caprover.md).
-- [ ] S3-2 Performance run on a 1,000-table schema.
+- [x] **013 Performance run on a 1,000-table schema** — `docs/specs/013-performance-run.md`,
+      numbers in `docs/architecture/performance.md`
+      - 8 min 13 s with two workers (15 min 47 s with one), Postgres and scan pinned to 2 CPUs;
+        before: did not finish (about 3 days extrapolated).
+      - The cause was the foreign-key check: a text-cast NOT EXISTS inside the batched
+        aggregate, O(sample x parent); now its own anti-join query, native comparison when
+        the logical types match.
+      - Workers on Postgres only (DuckDB samples are temp tables of one connection).
+      - Regex guards dropped (3 %, and `\s` equivalence not certain); examples cap 10, not 5,
+        since the demo shop has six findings on two tables.
+      - Reports equal across worker counts apart from scan-time-relative values (freshness
+        age, future dates).
 - [ ] S3-3 Staging live, promote dry run to production.
 - [ ] S3-4 Accuracy benchmark per check.
 - [ ] S3-5 Release 0.1.

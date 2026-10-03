@@ -182,6 +182,7 @@ Rules:
     | `SAHIFA_SCAN_EXECUTION` | `inline` | `inline`: the api runs scans; `queue`: the worker does (section 3, same value on both apps) |
     | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | scans run at once, by the api or, in queue mode, by the worker (ADR-0009) |
     | `SAHIFA_SCHEDULE_MIN_INTERVAL_MINUTES` | `60` | a connection's schedule may not run more often (spec 010); due schedules start every minute, by the api or, in queue mode, by the worker |
+    | `SAHIFA_SCAN_WORKERS` | `2` | Postgres sessions one scan uses to scan tables at once (spec 013); a source sees this many read-only connections per running scan |
     | `SAHIFA_DUCKDB_MEMORY` | `1GB` | DuckDB's memory limit per scan |
     | `SAHIFA_STATEMENT_TIMEOUT_S` | `60` | per statement against a source |
     | `SAHIFA_LOG_LEVEL` | `info` | |

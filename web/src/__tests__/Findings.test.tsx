@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { EXAMPLES_SKIPPED } from "../components/Examples";
 import { SCAN_ID, makeFinding, makeReport, renderApp, stubFetch } from "./helpers";
 
 const BASE = `/api/scans/${SCAN_ID}/findings`;
@@ -25,6 +26,17 @@ function stub() {
 }
 
 describe("Findings", () => {
+  it("says why a finding has no examples when the scan skipped them (spec 013)", async () => {
+    const skipped = makeFinding({ summary: "Skipped: many failures.", examples: [], examples_skipped: true });
+    stubFetch((url) => {
+      if (url === `/api/scans/${SCAN_ID}/report`) return makeReport({ findings: [skipped] });
+      if (url.startsWith(BASE)) return { items: [{ ...skipped, examples: undefined, evidence: { examples: [], examples_skipped: true } }] };
+      throw new Error(`unexpected ${url}`);
+    });
+    renderApp(`/scans/${SCAN_ID}/findings`);
+    expect(await screen.findByText(EXAMPLES_SKIPPED)).toBeTruthy();
+  });
+
   it("lists findings by severity then failed share, with check, place, counts, examples, SQL and next step", async () => {
     stub();
     renderApp(`/scans/${SCAN_ID}/findings`);

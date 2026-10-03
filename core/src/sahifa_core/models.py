@@ -269,6 +269,8 @@ class CheckResult(BaseModel):
     examples: list[ValueCount] = Field(default_factory=list)
     sql: str | None = None
     truncated: bool = False
+    # Spec 013: examples are fetched for at most `EXAMPLES_PER_ASSET` failing checks per asset.
+    examples_skipped: bool = False
 
 
 class Finding(BaseModel):
@@ -288,6 +290,7 @@ class Finding(BaseModel):
     next_step: str
     examples: list[ValueCount] = Field(default_factory=list)
     sql: str | None = None
+    examples_skipped: bool = False
 
 
 class HealthItem(BaseModel):
@@ -337,6 +340,9 @@ class AssetReport(BaseModel):
     unevaluated: list[UnevaluatedCheck] = Field(default_factory=list)
     time_series_candidate: bool = False
     error: str | None = None
+    # Spec 013: what this asset cost the scan.
+    duration_s: float = 0.0
+    queries: int = 0
 
 
 class SourceInfo(BaseModel):
@@ -356,6 +362,10 @@ class ScanStats(BaseModel):
     checks_active: int = 0
     checks_proposed: int = 0
     queries: int = 0
+    # Spec 013: the query budget per asset, and the sessions the scan used.
+    queries_per_asset_max: int = 0
+    queries_per_asset_mean: float = 0.0
+    workers: int = 1
     duration_s: float = 0.0
 
 

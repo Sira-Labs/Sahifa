@@ -62,8 +62,16 @@ All notable changes to this project are documented here. The format follows
   names, refused when the disk runs low; rate limits per session or address with 429 and
   `Retry-After`; `/api/docs` off in prod; CI fails on known vulnerabilities and on licences
   outside ADR-0008 (psycopg allowed by ADR-0015). The checklist is `docs/security/baseline.md`.
+- Performance (spec 013): a 1,000-table Postgres schema (64 million rows, 100k-row samples)
+  scans in 8 min 13 s on 2 vCPU. Scans use two read-only Postgres sessions at once
+  (`SAHIFA_SCAN_WORKERS`, CLI `--workers`); each asset reports its seconds and queries; examples
+  are fetched for at most 10 failing checks per table (findings first). `sahifa bench-schema`
+  creates the benchmark schema; the numbers are in `docs/architecture/performance.md`.
 
 ### Fixed
+- The foreign-key check no longer runs once per sampled row against a text cast of the parent:
+  it counts orphans with an anti-join of its own. A table with a foreign key to a large
+  parent could keep a scan from finishing.
 - Reports no longer call a sampled score a "full read": scores are rounded to one decimal, so
   a narrow sampled interval can show equal bounds. "Full read" and "every row read" now appear
   only for a table read in full, or a store with no sampled table; otherwise the interval is

@@ -130,3 +130,32 @@ def test_empty_variables_are_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     s = Settings(env="prod", database_url=STRONG, access_gate="basic-auth-at-proxy")
     assert s.auth_mode is None and s.oidc_issuer is None and s.session_secret is None
     assert s.resolved_auth_mode == "proxy" and prod_problems(s) == []
+
+
+def test_scan_workers_reach_the_core(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    """`SAHIFA_SCAN_WORKERS` sets the core's parallel sessions (spec 013)."""
+    import uuid
+
+    import sahifa_core.scan as core_scan
+
+    from sahifa.services import scans
+
+    seen = {}
+
+    class Report:
+        def model_dump(self, mode: str) -> dict[str, object]:
+            return {}
+
+    def fake_run_scan(source: object, options: core_scan.ScanOptions, **_: object) -> Report:
+        seen["workers"] = options.workers
+        return Report()
+
+    monkeypatch.setattr(core_scan, "run_scan", fake_run_scan)
+    monkeypatch.setenv("SAHIFA_SCAN_WORKERS", "3")
+    scans._execute("postgresql://x/y", None, uuid.uuid4(), 100, Settings())
+    assert seen == {"workers": 3}
+    assert Settings().scan_workers == 3
+    monkeypatch.delenv("SAHIFA_SCAN_WORKERS")
+    assert Settings().scan_workers == 2
+    with pytest.raises(ValueError):
+        Settings(scan_workers=0)

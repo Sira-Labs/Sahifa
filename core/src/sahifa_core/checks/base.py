@@ -115,6 +115,15 @@ class Check:
     def k_expr(self, spec: CheckSpec, ctx: Context) -> str:
         return ctx.d.sum_case(f"({self.domain(spec, ctx)}) AND ({self.fail(spec, ctx)})")
 
+    # A check whose failure test is a subquery counts its failures in a query of its own, where
+    # the subquery sits in WHERE and the database can turn it into a join; in the batched
+    # aggregate it would run once per row.
+    own_query = False
+
+    def k_query(self, spec: CheckSpec, ctx: Context) -> str:
+        where = f"({self.domain(spec, ctx)}) AND ({self.fail(spec, ctx)})"
+        return ctx.rel.query(f"SELECT count(*) FROM {ctx.rel.ref} AS s WHERE {where}")
+
     def example_value(self, spec: CheckSpec, ctx: Context) -> str | None:
         return ctx.d.as_text(ctx.q(spec.column)) if spec.column else None
 

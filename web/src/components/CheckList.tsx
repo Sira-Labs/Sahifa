@@ -22,7 +22,7 @@ export function CheckList({ checks, empty = "No checks." }: { checks: CheckResul
           <p className="num muted text-sm">
             passing {formatPassShare(c.ratio, c.low, c.high)} · {formatCount(c.failed)} of {formatCount(c.evaluated)} failed
           </p>
-          {!c.passed && c.examples.length > 0 && <Examples items={c.examples} />}
+          {!c.passed && (c.examples.length > 0 || c.examples_skipped) && <Examples items={c.examples} skipped={c.examples_skipped} />}
           {!c.passed && c.sql && <SqlBlock sql={c.sql} />}
           {!c.passed && c.next_step && (
             <p className="next-step text-sm">
