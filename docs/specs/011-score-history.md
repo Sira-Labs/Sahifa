@@ -5,7 +5,7 @@ Sprint 2, story S2-5. Depends on: spec 003 (scores with intervals), spec 004 (sc
 `trigger`). Packages: `api/` (migration 0007, scores written with each scan, history routes),
 `web/` (score history on the store and table reports).
 
-Status: draft, awaiting the owner's approval.
+Status: approved 2026-10-03 by the owner.
 
 ## Goal
 

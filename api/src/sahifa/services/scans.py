@@ -25,6 +25,7 @@ from ..settings import Settings
 from .checks import Saved, load_saved, persist_checks
 from .connections import resolve
 from .findings import record_findings
+from .history import score_records
 
 if TYPE_CHECKING:
     from sahifa_core.models import CheckSpec
@@ -109,8 +110,8 @@ async def _succeed(
     report: dict[str, Any],
     saved: Saved | None = None,
 ) -> None:
-    """Store the report, its assets, columns and checks (spec 007) and its findings with their
-    occurrences (spec 009) in one transaction."""
+    """Store the report, its assets, columns and checks (spec 007), its findings with their
+    occurrences (spec 009) and its scores (spec 011) in one transaction."""
     async with sessions() as db:
         scan = await db.get(Scan, scan_id)
         if scan is None:
@@ -136,6 +137,15 @@ async def _succeed(
         )
         linked = await record_findings(
             db, scan_id=scan_id, seen_at=finished, report=report, asset_ids=persisted.asset_ids
+        )
+        db.add_all(
+            score_records(
+                report,
+                scan_id=scan_id,
+                connection_id=scan.connection_id,
+                finished_at=finished,
+                asset_ids=persisted.asset_ids,
+            )
         )
         await db.commit()
     log.info(

@@ -1,4 +1,4 @@
-"""Response and request models of the HTTP API (specs 004, 007, 009 and 010)."""
+"""Response and request models of the HTTP API (specs 004, 007, 009, 010 and 011)."""
 
 from __future__ import annotations
 
@@ -250,3 +250,21 @@ class FindingActionIn(BaseModel):
     # Plain text, stored as is and rendered as text; the table enforces the same limit.
     note: str | None = Field(default=None, max_length=1000)
     until: datetime | None = None
+
+
+class HistoryPoint(BaseModel):
+    """One successful scan's score at one level (spec 011)."""
+
+    scan_id: uuid.UUID
+    finished_at: datetime
+    # `manual` or `schedule` (spec 010).
+    trigger: str
+    overall: float | None
+    low: float | None
+    high: float | None
+    checks: int
+    dimensions: dict[str, Any]
+
+
+class History(BaseModel):
+    points: list[HistoryPoint]
