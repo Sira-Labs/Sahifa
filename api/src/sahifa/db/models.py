@@ -34,7 +34,7 @@ from . import Base
 CONNECTION_KINDS = ("postgres", "duckdb", "upload")
 SCAN_STATUSES = ("queued", "running", "succeeded", "failed")
 SCAN_TRIGGERS = ("manual", "schedule")
-SCHEDULE_OUTCOMES = ("queued", "skipped_running", "failed_to_queue")
+SCHEDULE_OUTCOMES = ("queued", "skipped_running", "failed_to_queue", "invalid_schedule")
 SIGN_IN_METHODS = ("google", "github", "passkey")
 ASSET_KINDS = ("table", "view", "file")
 CHECK_KINDS = ("rule", "baseline", "manual")

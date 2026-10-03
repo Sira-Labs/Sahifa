@@ -37,6 +37,7 @@ export const OUTCOME_TEXT: Record<ScheduleOutcome, string> = {
   queued: "Scan started",
   skipped_running: "Skipped: the previous scan was still running",
   failed_to_queue: "Could not start the scan",
+  invalid_schedule: "Disabled: the cron or time zone no longer resolves; save it again",
 };
 
 /** The browser's time zone, `UTC` when it cannot tell. */

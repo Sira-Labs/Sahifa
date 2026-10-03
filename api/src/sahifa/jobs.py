@@ -26,7 +26,9 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfoNotFoundError
 
+from croniter import CroniterError
 from procrastinate import App, JobContext, PsycopgConnector
 from procrastinate.exceptions import AlreadyEnqueued
 from procrastinate.jobs import Status
@@ -144,7 +146,7 @@ class ScheduleRun:
     connection_id: uuid.UUID
     outcome: str
     scan_id: uuid.UUID | None
-    next_run_at: datetime
+    next_run_at: datetime | None
 
 
 async def run_due_schedules(
@@ -159,8 +161,9 @@ async def run_due_schedules(
     One transaction locks at most `DUE_BATCH` due schedules (`SKIP LOCKED`: a second worker or
     the API's loop passes them by), inserts their scans and records each run with its next time
     after `now`; once it commits, the scans start through `start_scan` like manual ones. A
-    connection with a scan still queued or running is skipped. After an outage `next_run_at`
-    jumps past `now`, so the missed slots run once."""
+    connection with a scan still queued or running is skipped, and a schedule whose next time
+    cannot be computed is disabled. After an outage `next_run_at` jumps past `now`, so the
+    missed slots run once."""
     now = now or datetime.now(UTC)
     runs: list[ScheduleRun] = []
     queued: list[tuple[ScheduleRun, Scan, str]] = []
@@ -175,6 +178,18 @@ async def run_due_schedules(
         for schedule in list(due):
             conn = await db.get(Connection, schedule.connection_id)
             if conn is None:  # deleted meanwhile; the cascade takes the schedule
+                continue
+            try:
+                upcoming_run = next_run(schedule.cron, schedule.timezone, now)
+            except (ZoneInfoNotFoundError, CroniterError, ValueError):
+                # Validated on save, so only a tzdata or croniter change gets here: disable the
+                # schedule rather than leave it due, blocking the batch every minute.
+                log.exception("schedule.invalid", schedule_id=str(schedule.id), connection_id=str(conn.id))
+                schedule.enabled = False
+                schedule.next_run_at = None
+                schedule.last_outcome = "invalid_schedule"
+                schedule.last_run_at = now
+                runs.append(ScheduleRun(conn.id, schedule.last_outcome, None, None))
                 continue
             busy = await db.scalar(
                 select(exists().where(Scan.connection_id == conn.id, Scan.status.in_(("queued", "running"))))
@@ -194,8 +209,8 @@ async def run_due_schedules(
                 schedule.last_scan_id = scan.id
             schedule.last_outcome = "skipped_running" if scan is None else "queued"
             schedule.last_run_at = now
-            schedule.next_run_at = next_run(schedule.cron, schedule.timezone, now)
-            run = ScheduleRun(conn.id, schedule.last_outcome, scan.id if scan else None, schedule.next_run_at)
+            schedule.next_run_at = upcoming_run
+            run = ScheduleRun(conn.id, schedule.last_outcome, scan.id if scan else None, upcoming_run)
             runs.append(run)
             if scan is not None:
                 queued.append((run, scan, conn.name))
@@ -217,7 +232,7 @@ async def run_due_schedules(
             connection_id=str(run.connection_id),
             outcome=run.outcome,
             scan_id=str(run.scan_id) if run.scan_id else None,
-            next_run=run.next_run_at.isoformat(),
+            next_run=run.next_run_at.isoformat() if run.next_run_at else None,
         )
     return runs
 

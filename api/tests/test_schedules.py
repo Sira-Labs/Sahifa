@@ -445,6 +445,38 @@ async def test_an_outage_collapses_to_one_run(
 
 
 @needs_db
+async def test_a_schedule_that_no_longer_resolves_is_disabled(
+    client: AsyncClient, owner: Engine, db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bad = await connect(client, monkeypatch, tmp_path / "bad")
+    good = await connect(client, monkeypatch, tmp_path / "good")
+    due = parse((await put(client, good))["next_run_at"])
+    await put(client, bad)
+    # A zone that a tzdata update dropped; it sorts first, ahead of the good schedule.
+    sql(
+        owner,
+        "UPDATE scan_schedules SET timezone = 'Mars/Olympus_Mons', next_run_at = :t WHERE connection_id = :c",
+        t=due - timedelta(hours=1),
+        c=bad,
+    )
+    settings = settings_for(tmp_path)
+    now = due + timedelta(minutes=5)
+    runs = await jobs.run_due_schedules(db.sessions, settings, now, runner=ScanRunner(db.sessions, settings))
+    outcomes = {str(r.connection_id): (r.outcome, r.next_run_at) for r in runs}
+    assert outcomes[bad] == ("invalid_schedule", None)
+    assert outcomes[good] == ("queued", due + timedelta(days=1))
+    assert scans_of(owner, bad) == []
+    [(sid, _, trigger)] = scans_of(owner, good)
+    assert trigger == "schedule"
+    [(enabled, next_at, outcome)] = sql(
+        owner, "SELECT enabled, next_run_at, last_outcome FROM scan_schedules WHERE connection_id = :c", c=bad
+    )
+    assert (enabled, next_at, outcome) == (False, None, "invalid_schedule")
+    assert (await client.get(f"/api/connections/{bad}/schedule")).json()["next_runs"] == []
+    assert (await finished(client, sid))["status"] == "succeeded"
+
+
+@needs_db
 async def test_concurrent_runs_start_one_scan(
     client: AsyncClient, owner: Engine, db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

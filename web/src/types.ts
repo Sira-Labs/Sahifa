@@ -30,7 +30,7 @@ export type Connection = {
 
 // --- Schedules (spec 010) ---------------------------------------------------------------
 
-export type ScheduleOutcome = "queued" | "skipped_running" | "failed_to_queue";
+export type ScheduleOutcome = "queued" | "skipped_running" | "failed_to_queue" | "invalid_schedule";
 
 /** A schedule as `GET /api/connections` lists it. */
 export type ScheduleSummary = { cron: string; timezone: string; enabled: boolean; next_run_at: string | null };

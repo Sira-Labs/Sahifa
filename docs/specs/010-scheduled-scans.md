@@ -26,7 +26,7 @@ the findings reflect yesterday's data without my doing anything.
 
 | Table | Columns |
 |---|---|
-| `scan_schedules` | `id` uuid PK, `connection_id` → connections (cascade), unique: one schedule per connection. `cron` text (5 fields), `timezone` text (IANA name, default `UTC`), `enabled` bool, `sample_rows` int null (null: the setting's default), `next_run_at` timestamptz null (null when disabled), `last_run_at` null, `last_scan_id` → scans (set null), `last_outcome` text null (`queued`, `skipped_running`, `failed_to_queue`), `version` int, `created_at`, `updated_at`, `updated_by` text (actor). Index (`enabled`, `next_run_at`). |
+| `scan_schedules` | `id` uuid PK, `connection_id` → connections (cascade), unique: one schedule per connection. `cron` text (5 fields), `timezone` text (IANA name, default `UTC`), `enabled` bool, `sample_rows` int null (null: the setting's default), `next_run_at` timestamptz null (null when disabled), `last_run_at` null, `last_scan_id` → scans (set null), `last_outcome` text null (`queued`, `skipped_running`, `failed_to_queue`, `invalid_schedule`), `version` int, `created_at`, `updated_at`, `updated_by` text (actor). Index (`enabled`, `next_run_at`). |
 | `scans` | New column `trigger` text not null, default `manual`, CHECK (`manual`, `schedule`). |
 
 ### Settings
@@ -169,6 +169,10 @@ Each run does the following:
   it; 422 bodies are `{"detail", "field", "message"}`, `too_frequent` adds
   `min_interval_minutes` and `interval_minutes`; `GET /api/connections/{id}` carries `schedule` too.
 - croniter's random (`R`) and hashed (`H`) fields and crons that never fire are `invalid_cron`.
+- A due schedule whose next time cannot be computed (its zone dropped by a tzdata update, or a
+  cron a newer croniter refuses) is disabled with `last_outcome = invalid_schedule` and logged
+  as `schedule.invalid`, before any scan is created, so it cannot hold up the rest of the batch
+  every minute (review of PR #10).
 - The `tzdata` package (Apache-2.0) is a dependency, so zoneinfo knows every IANA name whatever
   the image ships.
 - Web: the schedule opens in a row below its connection ("Schedule" button), and the table

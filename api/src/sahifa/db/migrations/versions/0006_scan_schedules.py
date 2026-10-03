@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("updated_by", sa.Text(), nullable=False),
         sa.UniqueConstraint("connection_id", name="uq_scan_schedules_connection_id"),
         sa.CheckConstraint(
-            "last_outcome IN ('queued', 'skipped_running', 'failed_to_queue')",
+            "last_outcome IN ('queued', 'skipped_running', 'failed_to_queue', 'invalid_schedule')",
             name="ck_scan_schedules_last_outcome",
         ),
     )
