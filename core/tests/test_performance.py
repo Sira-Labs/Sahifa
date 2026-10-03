@@ -137,7 +137,17 @@ def test_foreign_key_check_is_linear(fk_schema: str) -> None:
 
 
 def comparable(report: ScanReport) -> dict[str, Any]:
-    data = report.model_dump(mode="json", exclude={"scan_id", "started_at", "finished_at", "stats"})
+    """The report without what a run measures about itself: ids, times, stats, per-asset cost."""
+    data = report.model_dump(
+        mode="json",
+        exclude={
+            "scan_id": True,
+            "started_at": True,
+            "finished_at": True,
+            "stats": True,
+            "assets": {"__all__": {"duration_s", "queries"}},
+        },
+    )
     return data
 
 
