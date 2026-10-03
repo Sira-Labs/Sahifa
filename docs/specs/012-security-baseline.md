@@ -3,7 +3,8 @@
 Sprint 3, story S3-1. Depends on: spec 004 (uploads, scans), spec 006 (sign-in, CSRF,
 sessions), spec 008 (worker), ADR-0006 (read-only sources, credentials), ADR-0008 (licences).
 Packages: `api/` (middleware, settings, upload checks), `deploy/caddy/` (headers, proxies),
-`.github/workflows/ci.yml` and `scripts/` (audits), `docs/security/`.
+`.github/workflows/ci.yml`, `.github/scripts/security_policy.py` and `security/` (audits),
+`docs/security/`.
 
 Status: approved 2026-10-03 by the owner; psycopg's LGPL-3.0 allowed by ADR-0015.
 
@@ -81,7 +82,7 @@ random storage names. In addition:
 
 1. **Content matches the extension**, checked on the first bytes: a Parquet file starts and
    ends with `PAR1`, and a CSV, TSV, JSON or NDJSON file has no NUL byte in its first 8 KB.
-   Otherwise `415 {"detail": "content_mismatch", "file": name}`.
+   Otherwise `415 {"detail": {"code": "content_mismatch", "file": name, "message": …}}`.
 2. **File names** are reduced to their base name. Control characters are removed and the name
    is capped at 200 characters, both where it is stored and where it is shown.
 3. **Free disk.** When the declared size would leave less than `MIN_FREE_DISK_MB` free under
@@ -90,8 +91,8 @@ random storage names. In addition:
 
 ### Rate limits
 
-Token buckets kept in the process, keyed by the signed-in user's id, or by the client address
-when nobody is signed in:
+Token buckets kept in the process, keyed by the session (its cookie, hashed), or by the client
+address when no session is sent:
 
 | Bucket | Routes | Limit |
 |---|---|---|
@@ -112,8 +113,9 @@ buckets live in one API process; several API replicas each count on their own (d
   `security/audit-ignore.toml`.
 - **npm vulnerabilities:** `pnpm audit --prod --audit-level high` fails the `web` job, with
   the same ignore file.
-- **Licences:** `scripts/check_licences.py` (standard library only) reads the runtime
-  dependencies of core and api (`uv export --no-dev`) with their licence metadata, and the web
+- **Licences:** `.github/scripts/security_policy.py` (standard library only) reads the
+  runtime dependencies of core and api (a `uv sync` without dev extras) with their licence
+  metadata, and the web
   production dependencies (`pnpm licenses list --prod --json`). It fails on any licence
   outside the allowlist in `security/licences.toml`: MIT, MIT-0, BSD-2/3-Clause, Apache-2.0,
   ISC, PSF-2.0, MPL-2.0, 0BSD, Unlicense, and OFL-1.1 for fonts. Exceptions are listed per
@@ -142,22 +144,22 @@ buckets live in one API process; several API replicas each count on their own (d
 
 ## Acceptance criteria
 
-- [ ] Caddy sends the new headers. A test parses the Caddyfile for each header, and `caddy
+- [x] Caddy sends the new headers. A test parses the Caddyfile for each header, and `caddy
       validate` runs in CI on the web image.
-- [ ] The API sends its headers on JSON responses and on errors. `/api/docs` is off in prod.
-- [ ] An upload over `MAX_UPLOAD_TOTAL_MB` gets 413 without the body being read in full: both
+- [x] The API sends its headers on JSON responses and on errors. `/api/docs` is off in prod.
+- [x] An upload over `MAX_UPLOAD_TOTAL_MB` gets 413 without the body being read in full: both
       with `Content-Length` and chunked. The upload folder does not remain.
-- [ ] A disguised file (a CSV named `.parquet`, a binary named `.csv`) gets 415. A hostile file
+- [x] A disguised file (a CSV named `.parquet`, a binary named `.csv`) gets 415. A hostile file
       name is stored and shown cleaned.
-- [ ] Low free disk gets 507 before any write.
-- [ ] Each bucket answers 429 with `Retry-After` past its limit; `/healthz` is never limited;
+- [x] Low free disk gets 507 before any write.
+- [x] Each bucket answers 429 with `Retry-After` past its limit; `/healthz` is never limited;
       `RATE_LIMITS=off` turns it off.
-- [ ] The client address behind CapRover's proxy is the real one: Caddy's `trusted_proxies`,
+- [x] The client address behind CapRover's proxy is the real one: Caddy's `trusted_proxies`,
       with a test of the key function.
-- [ ] CI fails on a known vulnerability or a licence outside the allowlist; both are shown by
+- [x] CI fails on a known vulnerability or a licence outside the allowlist; both are shown by
       a test of the script on fixtures. The current dependencies pass.
-- [ ] `docs/security/baseline.md` is complete, every item ticked or listed as a follow-up.
-- [ ] `make lint` and `make test` pass.
+- [x] `docs/security/baseline.md` is complete, every item ticked or listed as a follow-up.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -171,11 +173,31 @@ buckets live in one API process; several API replicas each count on their own (d
   - each rate bucket and the key function, with a fake clock;
   - the exemptions;
   - `RATE_LIMITS=off`.
-- **Script (`scripts/tests/test_check_licences.py`):**
+- **Script (`api/tests/test_security_policy.py`):**
   - allowed, denied and excepted licences;
   - expression parsing (`MIT OR Apache-2.0`, classifiers);
   - expired ignore entries.
 - **Web:** the 429 message.
+
+## Implementation notes
+
+- Rate limits key on the session cookie (hashed), not the user id: the check runs as ASGI
+  middleware before FastAPI reads an upload, where the user is not yet known without a
+  database lookup. A forged cookie gets its own bucket but only reaches 401s; every route that
+  does work needs a valid session.
+- FastAPI turns a body cut off mid-parse into a 400, so the size middleware drops whatever the
+  app answers once the limit is passed and sends its own 413.
+- uvicorn trusts `X-Forwarded-For` from private networks only (was `*`), overridable with
+  `FORWARDED_ALLOW_IPS`; Caddy has `trusted_proxies static private_ranges`, without which the
+  API saw CapRover's nginx as every client.
+- The content check refuses UTF-16 text as binary (NUL bytes); the reader takes UTF-8 only,
+  and the message says so.
+- The licence script prefers PEP 639 `License-Expression`, then licence classifiers (several
+  are alternatives), then a short `License` field; python-dateutil's field says only "Dual
+  License".
+- psycopg's LGPL-3.0 was found by the new licence job; ADR-0015 allows it (owner, 2026-10-03).
+- The 415 for a content mismatch keeps FastAPI's `detail` with a code, the file and a message,
+  which the web shows; the other new errors are `{"detail", "message", …}` at the top level.
 
 ## Out of scope
 

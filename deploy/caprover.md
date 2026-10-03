@@ -172,8 +172,12 @@ Rules:
     | Name | Default | Meaning |
     |---|---|---|
     | `SAHIFA_SAMPLE_ROWS` | `100000` | rows per table or file the profile and checks see; `0` reads everything |
-    | `SAHIFA_MAX_UPLOAD_MB` | `200` | per upload |
+    | `SAHIFA_MAX_UPLOAD_MB` | `200` | per file |
+    | `SAHIFA_MAX_UPLOAD_TOTAL_MB` | `1024` | per upload request, all files together; raise nginx's limit to match (below) |
     | `SAHIFA_MAX_UPLOAD_FILES` | `20` | per upload |
+    | `SAHIFA_MIN_FREE_DISK_MB` | `1024` | an upload that would leave less free disk is refused (507) |
+    | `SAHIFA_RATE_LIMITS` | `on` | per session or address: sign-in 20/min, writes 120/min, reads 1,200/min (spec 012) |
+    | `SAHIFA_RATE_SCANS_PER_HOUR` | `60` | scans one user may start per hour |
     | `SAHIFA_UPLOAD_TTL_DAYS` | `7` | uploaded files are deleted this long after their scan finished (hourly clean-up) |
     | `SAHIFA_SCAN_EXECUTION` | `inline` | `inline`: the api runs scans; `queue`: the worker does (section 3, same value on both apps) |
     | `SAHIFA_MAX_CONCURRENT_SCANS` | `2` | scans run at once, by the api or, in queue mode, by the worker (ADR-0009) |
@@ -181,6 +185,12 @@ Rules:
     | `SAHIFA_DUCKDB_MEMORY` | `1GB` | DuckDB's memory limit per scan |
     | `SAHIFA_STATEMENT_TIMEOUT_S` | `60` | per statement against a source |
     | `SAHIFA_LOG_LEVEL` | `info` | |
+
+    **Upload size at nginx.** CapRover's nginx refuses request bodies above its
+    `client_max_body_size` with its own 413 page before Sahifa sees them. For uploads up to
+    `SAHIFA_MAX_UPLOAD_TOTAL_MB`, open `sahifa-web` → HTTP Settings → *Edit Default Nginx
+    Configurations* and set `client_max_body_size 1024m;` (or your value) in the `server`
+    block.
 
     With `SAHIFA_ENV=prod` the api refuses to start unless strangers are kept out (spec 006,
     ADR-0010): either the Keycloak rows are complete (https public URL and issuer, client

@@ -152,8 +152,11 @@ a failure to connect fails the scan with the error message (credentials are neve
 
 - **Security:** no secrets in code or config; connection credentials are env references
   (ADR-0006); prod refuses placeholder secrets; read-only source access; uploads limited in
-  size, count and extension, stored under random names; identifiers quoted by SQLGlot,
-  values never interpolated; example values of personal semantic types masked.
+  size (while the body streams), count, extension and content, stored under random names;
+  identifiers quoted by SQLGlot, values never interpolated; example values of personal
+  semantic types masked; security headers at the edge and on the API; rate limits per session
+  or address; vulnerability and licence audits fail CI. The checklist with evidence is
+  `docs/security/baseline.md` (spec 012).
 - **Observability:** structlog JSON with `scan_id` and `asset` on every line; `/healthz`
   reports the database and the connected workers by commit (connections named
   `sahifa-worker/<commit>` in `pg_stat_activity`); errors to GlitchTip on the staging-and-tools server

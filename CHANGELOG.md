@@ -56,6 +56,12 @@ All notable changes to this project are documented here. The format follows
   with its 95 % band, the change since the previous scan (marked when within the interval),
   each point linked to its scan, and a table view. `/api/connections/{id}/history`,
   `/api/assets/{id}/history`, migration 0007, which fills the history from stored reports.
+- Security baseline (spec 012): HSTS, CORP, framing and cache headers at the edge and
+  no-store, nosniff and a none-CSP on the API; request bodies limited while they stream (1 MB,
+  uploads `SAHIFA_MAX_UPLOAD_TOTAL_MB`), uploads checked for matching content and cleaned
+  names, refused when the disk runs low; rate limits per session or address with 429 and
+  `Retry-After`; `/api/docs` off in prod; CI fails on known vulnerabilities and on licences
+  outside ADR-0008 (psycopg allowed by ADR-0015). The checklist is `docs/security/baseline.md`.
 
 ### Fixed
 - Reports no longer call a sampled score a "full read": scores are rounded to one decimal, so
