@@ -18,7 +18,7 @@
 |---|---|
 | **Phase** | R1 first preview: release 0.1 (`v0.1.0`, staging only) is being tagged; R2 starts with sprint 4 |
 | **Done** | R0; sprints 1–3: scan end to end, sign-in, checks lifecycle, worker, findings across scans, schedules, score history, security baseline, performance run, accuracy benchmark |
-| **In review** | S3-5 release 0.1 (PR #25); `v0.1.0` is tagged on its merge commit |
+| **In review** | S3-5 release 0.1 (PR #25); after the merge, `v0.1.0` is created on the merge commit, then the release run and staging are checked |
 | **Next** | Sprint 4: workspaces, roles, audit, security follow-ups |
 | **Waiting on the owner** | the G1 staging check (sign-in with three methods, a scheduled scan, the score history); nginx upload size on `sahifa-stg-web`; Delete Credential in Keycloak; production apps for the promote dry run; an SMTP account for sprint 4 |
 
