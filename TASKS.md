@@ -167,7 +167,8 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Follow-up: interval coverage 85 % for `not_blank` (17 of 20 groups, 5 placeholders in
         1,000 rows, half of them sampled). Compare the Wilson interval with the
         finite-population correction against an exact hypergeometric interval for rare faults.
-- [x] **015 Release 0.1** — `docs/specs/015-release-0-1.md`, tag `v0.1.0`
+- [ ] **015 Release 0.1** — `docs/specs/015-release-0-1.md`, tag `v0.1.0` (ticked once the tag's
+      release run is green and staging reports 0.1.0)
       - Tagged with G1 partly open, by the owner's decision of 7 Oct: the promote dry run and
         the owner's staging check come with the first production deploy. The roadmap records
         what was met.
