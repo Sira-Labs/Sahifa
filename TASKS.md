@@ -149,7 +149,23 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Reports equal across worker counts apart from scan-time-relative values (freshness
         age, future dates).
 - [ ] S3-3 Staging live, promote dry run to production.
-- [ ] S3-4 Accuracy benchmark per check.
+- [x] **014 Accuracy benchmark** — `docs/specs/014-accuracy-benchmark.md`, table in
+      `docs/checks/catalogue.md` ("Accuracy benchmark")
+      - Fault list counted from the final rows, not from the injections: duplicated order keys
+        leave invoices with an order id that no longer exists, and that counts.
+      - Matching is by count per check, asset and column; checks report counts, not row ids.
+      - `--rows` at least 2,500, so that products (rows / 50) reach the 50 rows baselines need.
+      - The sampled scan uses each seed as its sample seed: the shop's faults sit at fixed
+        rows, and one sample seed always saw or always missed the same ones (0 % against
+        100 % for two neighbouring rows).
+      - Baselines are locked, not just activated: an active generated check takes the new
+        scan's parameters (spec 007), so it can never see drift.
+      - Follow-up, sprint 5 (S5-1, S5-2): a locked `range` baseline fires on legitimate new
+        data in 122 of 200 cases (continuous columns and timestamps); baselines from several
+        scans, with a tolerance, and no upper bound on timestamps that grow.
+      - Follow-up: interval coverage 85 % for `not_blank` (17 of 20 groups, 5 placeholders in
+        1,000 rows, half of them sampled). Compare the Wilson interval with the
+        finite-population correction against an exact hypergeometric interval for rare faults.
 - [ ] S3-5 Release 0.1.
 
 ## Owner

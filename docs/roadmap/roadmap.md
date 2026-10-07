@@ -12,14 +12,14 @@
 - **Public dates:** the product page (`site/index.html`) shows the public plan, deliberately
   more conservative than this forecast.
 
-## Where we are (3 Oct 2026)
+## Where we are (7 Oct 2026)
 
 | | |
 |---|---|
 | **Phase** | R1 first preview: sprint 3, hardening, of 3 |
-| **Done** | R0; sprint 1 (scan end to end); sprint 2 (sign-in, checks lifecycle, worker, findings across scans, schedules, score history); S3-1 security baseline |
-| **In review** | S3-2 performance run (PR #14): a 1,000-table schema in 8 min 13 s on 2 vCPU |
-| **Next** | S3-3 promote dry run to production · S3-4 accuracy benchmark · S3-5 release 0.1 |
+| **Done** | R0; sprint 1 (scan end to end); sprint 2 (sign-in, checks lifecycle, worker, findings across scans, schedules, score history); S3-1 security baseline; S3-2 performance run |
+| **In review** | S3-4 accuracy benchmark (PR #24): every R1 check finds every known fault on a full read; the clean twin stays silent |
+| **Next** | S3-5 release 0.1, with the promote dry run (S3-3) deferred to the first production deploy (owner, 7 Oct) |
 | **Waiting on the owner** | nightly schedule check on staging; nginx upload size on `sahifa-stg-web`; Delete Credential in Keycloak; production apps for the promote dry run |
 
 ## How to follow
@@ -203,3 +203,4 @@ site/            product page for siralabs.org
 | 2026-10-03 | Spec 012, security baseline (PR #13); ADR-0015 allows psycopg's LGPL-3.0 |
 | 2026-10-03 | Spec 013, performance run (PR #14): 1,000 tables in 8 min 13 s on 2 vCPU; the foreign-key check made linear |
 | 2026-10-03 | Roadmap version 2: status, gates, risks; sprints 4–12 planned to story level |
+| 2026-10-07 | Spec 014, accuracy benchmark (PR #24): 100 % detection on a full read, a silent clean twin; locked `range` baselines raise false alarms on new data (follow-up, sprint 5) |
