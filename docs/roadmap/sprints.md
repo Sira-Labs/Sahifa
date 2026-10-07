@@ -72,7 +72,7 @@ gantt
 |---|---|---|---|---|
 | 1 | first scan end to end | 2–3 Oct | ✅ done 2 Oct | #1 |
 | 2 | sign-in, checks lifecycle, worker, findings, schedules, history | 4–6 Oct | ✅ done 3 Oct | #2, #3, #4, #6, #7, #8, #9, #10, #11, #12 |
-| 3 | hardening, staging, release 0.1 | 7–8 Oct | 🔄 S3-1 done, S3-2 in review | #13, #14 |
+| 3 | hardening, staging, release 0.1 | 7–8 Oct | 🔄 S3-1, S3-2 done, S3-4 in review | #13, #14, #16 |
 | 4 | workspaces, roles, audit, security follow-ups | ~11 Oct | | |
 | 5 | metric history, anomalies, drift | ~15 Oct | | |
 | 6 | explanations, Tabayyun hand-off | ~18 Oct | | |
@@ -138,9 +138,9 @@ and survive scans; scans run in a worker and on a schedule.
 | ID | Story | Prio | Done when | Status |
 |---|---|---|---|---|
 | S3-1 | Spec 012: security baseline: headers, upload hardening, rate limits, dependency and licence audit in CI (ADR-0008) | M | checklist ticked | ✅ PR #13 |
-| S3-2 | Spec 013: performance run on a 1,000-table schema; query budget per asset | M | under 10 minutes on 2 vCPU, numbers in the PR | 🔄 PR #14: 8 min 13 s |
+| S3-2 | Spec 013: performance run on a 1,000-table schema; query budget per asset | M | under 10 minutes on 2 vCPU, numbers in the PR | ✅ PR #14: 8 min 13 s |
 | S3-3 | Staging live at `sahifa-stg.siralabs.org`, promote dry run to production | M | `promote.yml` verified and a production promote dry run passed (G1) | ⏳ needs the production apps |
-| S3-4 | Accuracy benchmark: injected faults detected and false positives on clean twins, per check | S | table in `docs/checks/catalogue.md` | ⏳ |
+| S3-4 | Accuracy benchmark: injected faults detected and false positives on clean twins, per check | S | table in `docs/checks/catalogue.md` | 🔄 spec 014, PR #16 |
 | S3-5 | Release 0.1: changelog, tag, product page status "Preview" | M | `v0.1.0` tag from `main` (gate G1) | ⏳ |
 
 ## Sprint 4 — workspaces, roles, audit (R2)

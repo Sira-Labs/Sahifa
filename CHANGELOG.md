@@ -67,6 +67,12 @@ All notable changes to this project are documented here. The format follows
   (`SAHIFA_SCAN_WORKERS`, CLI `--workers`); each asset reports its seconds and queries; examples
   are fetched for at most 10 failing checks per table (findings first). `sahifa bench-schema`
   creates the benchmark schema; the numbers are in `docs/architecture/performance.md`.
+- Accuracy benchmark (spec 014): `sahifa bench-accuracy` measures each R1 check against the
+  faults known to be in the synthetic shop, over 20 seeds. It reports detection, exact counts,
+  unexpected flags, false alarms on the clean twin and of locked baselines on new data, and
+  detection and interval coverage in sampled scans. The table is in `docs/checks/catalogue.md`:
+  every check finds every fault on a full read, and the clean twin stays silent.
+  `sahifa synth --drift` writes the clean twin with one fault per baseline check.
 
 ### Fixed
 - The foreign-key check no longer runs once per sampled row against a text cast of the parent:

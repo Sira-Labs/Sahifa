@@ -277,6 +277,83 @@ an SAP connector). Same manifest, result and scoring as the generic checks.
 | `store.small_files` | Iceberg and Delta partitions with more than four data files | R3 |
 | `store.missing_index` | Postgres foreign keys without an index, Dexter and HypoPG advice | R3 |
 
+## Accuracy benchmark (release 0.1)
+
+How well each R1 check finds faults that are known to be in the data, and how often it flags
+data nobody broke (spec 014). Measured on 2026-10-07 at commit `7ead9e9`, pinned to 2 CPUs, in
+2 min 49 s:
+
+```
+sahifa bench-accuracy --seeds 20 --rows 5000 --sample-rows 500
+```
+
+**How it is measured.** The benchmark uses the synthetic shop and its fault list, which is
+counted from the final rows. For each of 20 seeds it runs five scans:
+- the faulty shop;
+- its clean twin;
+- the drift twin, against the baselines the clean twin proposed, locked;
+- a clean shop of another seed, against the same locked baselines;
+- the faulty shop again, sampled at 500 rows.
+
+The measures are counts per check, asset and column, whether or not a finding is raised. A
+fault group is one seed × asset × column. "Unexpected" counts checks that flagged rows where no
+fault was put in. Interval coverage is the share of fault groups on sampled assets where the
+95 % interval holds the full-read pass ratio.
+
+| Check | Kind | Fault groups (rows) | Detected | Count exact | Unexpected | Clean twin: findings, failing rows | Locked baseline on new data: findings | Sampled: detected | Sampled: interval coverage |
+|---|---|---|---|---|---|---|---|---|---|
+| `sah.not_null` | rule | 40 (480) | 100 % | 100 % | 0 | 0, 0 of 1,572,000 | – | 82 % | 92 % |
+| `sah.not_blank` | rule | 20 (100) | 100 % | 100 % | 0 | 0, 0 of 358,000 | – | 90 % | 85 % |
+| `sah.row_count` | rule | 20 (20) | 100 % | 100 % | 0 | 0, 0 of 100 | – | 100 % | – |
+| `sah.type_conformance` | rule | 20 (120) | 100 % | 100 % | 0 | 0, 0 of 0 | – | 70 % | 100 % |
+| `sah.semantic_format` | rule | 60 (378) | 100 % | 100 % | 0 | 0, 0 of 162,000 | – | 77 % | 90 % |
+| `sah.pattern` | baseline | 20 (100) | 100 % | 100 % | 0 | – | 0 of 120 | – | – |
+| `sah.accepted_values` | baseline | 20 (400) | 100 % | 100 % | 0 | – | 0 of 120 | – | – |
+| `sah.length` | baseline | 20 (100) | 100 % | 100 % | 0 | – | 9 of 260 | – | – |
+| `sah.whitespace` | rule | 20 (157) | 100 % | 100 % | 0 | 0, 0 of 358,000 | – | 100 % | 95 % |
+| `sah.non_printing` | rule | 20 (60) | 100 % | 100 % | 0 | 0, 0 of 358,000 | – | 90 % | 100 % |
+| `sah.range` | baseline | 40 (50,200) | 100 % | 100 % | 0 | – | 122 of 200 | – | – |
+| `sah.outliers` | rule | 20 (2,000) | 100 % | 100 % | 0 | 0, 0 of 332,000 | – | 100 % | 90 % |
+| `sah.future_dates` | rule | 20 (20) | 100 % | 100 % | 0 | 0, 0 of 350,000 | – | 65 % | 100 % |
+| `sah.implausible_dates` | rule | 20 (20) | 100 % | 100 % | 0 | 0, 0 of 350,000 | – | 50 % | 100 % |
+| `sah.foreign_key` | rule | 40 (602) | 100 % | 100 % | 0 | 0, 0 of 280,000 | – | 70 % | 100 % |
+| `sah.column_order` | rule | 20 (300) | 100 % | 100 % | 0 | 0, 0 of 100,000 | – | 70 % | 95 % |
+| `sah.casing_variants` | rule | 20 (397) | 100 % | 100 % | 0 | 0, 0 of 216,000 | – | 100 % | 100 % |
+| `sah.unique` | rule | 20 (320) | 100 % | 100 % | 0 | 0, 0 of 252,000 | – | 20 % | 100 % |
+| `sah.duplicate_rows` | rule | 20 (195) | 100 % | 100 % | 0 | 0, 0 of 252,000 | – | 15 % | 100 % |
+| `sah.freshness` | baseline | 20 (20) | 100 % | 100 % | 0 | – | 0 of 80 | – | – |
+
+**Reading the table.**
+
+- **Full read.**
+  - Every R1 check finds every fault it was given, with the exact number of rows, and flags
+    nothing else.
+  - The clean twin has no findings and not one failing row.
+  - `type_conformance` evaluates no rows on the clean twin: there, `invoices.total` is a
+    number column, and the check applies only to text that should be numbers.
+- **Locked baselines on legitimate new data.**
+  - A locked `range` baseline is the minimum and maximum of one scan. On a clean shop with
+    other random values, it raises a finding in 122 of 200 cases. This happens in 7 to 9 of 10
+    runs for continuous columns (amounts, prices, payload sizes, timestamps) and never for
+    `orders.quantity` (1–4). For timestamps it also means every new load past the locked
+    maximum raises a finding.
+  - `length` fires 9 times in 260, all on `customers.email`, whose longest address varies
+    by seed.
+  - Until baselines are learnt from several scans (R2, sprint 5), lock a `range` baseline
+    only on columns with fixed limits.
+- **Sampled scans.** These are rows read, not tables chosen; each shop has 5,000 orders and
+  1,000 customers.
+  - A fault in only a few rows is often outside a 500-row sample: one future date among
+    1,000 customers is found in 65 % of seeds, one default date in 50 %.
+  - `unique` and `duplicate_rows` need both copies of a row in the sample, so they rarely see
+    duplicates there (20 % and 15 %). Their intervals still hold the full-read share.
+- **Interval coverage.**
+  - Coverage is 85–100 % against the nominal 95 %, over 20 groups per check.
+  - `not_blank`, at 85 % (17 of 20), is below the 90 % this spec asks for. Its five
+    placeholders sit among 1,000 customers, half of whom are in the sample. The Wilson
+    interval with the finite-population correction may be too narrow for such rare faults;
+    see `TASKS.md`.
+
 ## Suggested next step per check
 
 Each finding carries one plain sentence of advice, from this table:

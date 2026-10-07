@@ -4,7 +4,7 @@ Sprint 3, story S3-4. Depends on: spec 003 (checks, scoring, synthetic shop), sp
 checks and their lifecycle), ADR-0004 (95 % intervals), ADR-0005 (baselines are proposed until
 approved). Packages: `core/` (synthetic shop, benchmark, CLI), `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-07 by the owner; done.
 
 ## Goal
 
@@ -81,7 +81,7 @@ temporary directory and needs no database. For each seed it runs:
 | B | Clean twin, full read | none | Rule checks: false alarms |
 | C | Drift twin, full read | baselines from a clean-twin scan, locked | Baseline checks: detection, count match |
 | D | Clean twin of another seed (`seed + 10_000`), full read | the same locked baselines | Baseline checks: false alarms on legitimate new data |
-| E | Faulty shop, sampled at `--sample-rows` | none | Sampled detection, interval coverage |
+| E | Faulty shop, sampled at `--sample-rows`, with the seed as sample seed | none | Sampled detection, interval coverage |
 
 ### Measures per check, summed over seeds
 
@@ -113,8 +113,9 @@ the detector; the thresholds belong to the owner (spec 007).
    - Run D evaluates the same locked checks on a clean shop with other random values.
 4. **Same numbers every time.** The data, the sample and the scan are all seeded, so the same
    options always give the same table.
-5. **Exit codes.** `0` on success; `2` on bad options (`--seeds < 1`, `--rows < 500`,
-   `--sample-rows < 1`).
+5. **Exit codes.** `0` on success; `2` on bad options (`--seeds < 1`, `--rows < 2500`,
+   `--sample-rows < 1`). Below 2,500 rows, products have fewer than the 50 rows a baseline
+   needs.
 6. **What a bad result leads to.**
    - A rule check that misses a fault on a full read, or raises a false alarm on the clean
      twin, has a bug. The bug is fixed in this spec.
@@ -124,21 +125,21 @@ the detector; the thresholds belong to the owner (spec 007).
 
 ## Acceptance criteria
 
-- [ ] **Fault list:** each of the 15 R1 rule checks has at least one fault in the faulty
+- [x] **Fault list:** each of the 15 R1 rule checks has at least one fault in the faulty
       shop's list, and each of the 5 R1 baseline checks has one in the drift twin's. Every
       listed count equals a direct count on the written CSV files.
-- [ ] **Full-read detection:** on runs A and C, every R1 check detects 100 % of its fault
+- [x] **Full-read detection:** on runs A and C, every R1 check detects 100 % of its fault
       groups.
-- [ ] **Clean twin:** run B has no findings and no failing rows for any check.
-- [ ] **The command:** `sahifa bench-accuracy` with its defaults runs in under 10 minutes on
+- [x] **Clean twin:** run B has no findings and no failing rows for any check.
+- [x] **The command:** `sahifa bench-accuracy` with its defaults runs in under 10 minutes on
       2 vCPU and prints the table.
-- [ ] **The table:** `docs/checks/catalogue.md` has an "Accuracy" section with the table for
+- [x] **The table:** `docs/checks/catalogue.md` has an "Accuracy" section with the table for
       the default run (20 seeds, 5,000 rows, a 500-row sample). It covers all 20 R1 checks and
       states the command, the date and the commit. Every check below 100 % on any measure has a
       reason in the table.
-- [ ] **Coverage of the intervals** in sampled runs is reported; if it falls below 90 %, a
+- [x] **Coverage of the intervals** in sampled runs is reported; if it falls below 90 %, a
       follow-up is in `TASKS.md`.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -147,13 +148,35 @@ the detector; the thresholds belong to the owner (spec 007).
     the CSV files with the standard library.
   - `test_every_r1_check_has_a_fault`: the 15 rule checks in the faulty shop's list and the 5
     baseline checks in the drift twin's.
-  - `test_benchmark_small_run`, with 2 seeds, 2,000 rows and a 300-row sample:
+  - `test_benchmark_small_run`, with 2 seeds, 2,500 rows and a 300-row sample:
     - detection 1.0 for every R1 check in runs A and C;
     - no findings and no failing rows in run B;
     - runs E and D are reported, with no threshold asserted;
     - the Markdown table has one row per R1 check.
   - `test_bench_accuracy_cli_rejects_bad_options`: exit code 2.
 - **Existing tests:** `test_checks.py` keeps passing with the unchanged `write_shop`.
+
+## Implementation notes
+
+- **Result** (20 seeds, 5,000 rows, 2 CPUs, 2 min 49 s):
+  - On a full read, every R1 check finds 100 % of its fault groups with the exact count, and
+    flags nothing else. The clean twin has no findings and no failing rows.
+  - Locked baselines raise findings on legitimate new data: `range` in 122 of 200 cases,
+    `length` in 9 of 260.
+  - Interval coverage in sampled scans is 85–100 %.
+
+  The table and its reading are in `docs/checks/catalogue.md`.
+- **Minimum rows is 2,500, not 500.** Products are rows / 50 and need 50 rows for a baseline,
+  and the drift twin's pattern fault is on `products.sku`. Behaviour 5 is edited with this
+  reason.
+- **Sample seed per seed.** The shop's faults sit at fixed rows. With one sample seed for all,
+  the same rows were always drawn: a future date in row 1 was found in 100 % of seeds, a
+  default date in row 2 in 0 %. Run E is edited to say so.
+- **Locked, not active.** An active generated baseline takes the parameters of each new scan
+  (spec 007), so it can never see drift; the benchmark locks what the clean twin proposed.
+- **Coverage below 90 % for `not_blank`** (17 of 20). The follow-up is in `TASKS.md`, as the
+  acceptance criteria require. The `range` false alarms go to sprint 5, where baselines are
+  learnt from several scans.
 
 ## Out of scope
 
