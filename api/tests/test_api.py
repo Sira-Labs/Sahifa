@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import sahifa_core
 from httpx import AsyncClient
 from sahifa_core.synth import write_shop
+
+import sahifa
 
 from .conftest import needs_db
 
@@ -17,6 +20,8 @@ async def test_health_and_version(client: AsyncClient) -> None:
     assert h["status"] == "ok" and h["database"] == "ok" and h["workers"] == []
     v = (await client.get("/api/version")).json()
     assert v["commit"] == "test" and v["schema_revision"] == "0007"
+    # One version for the release: the api and the engine it ships are tagged together (spec 015).
+    assert v["version"] == sahifa.__version__ == sahifa_core.__version__
 
 
 @needs_db

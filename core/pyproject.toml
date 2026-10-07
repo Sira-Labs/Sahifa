@@ -1,6 +1,6 @@
 [project]
 name = "sahifa-core"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Sahifa core: profiling, checks and scoring with intervals for whole data stores"
 readme = "README.md"
 requires-python = ">=3.11"
