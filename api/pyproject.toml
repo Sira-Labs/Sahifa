@@ -1,6 +1,6 @@
 [project]
 name = "sahifa-api"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Sahifa API: connections, scans, reports and findings on top of sahifa-core"
 requires-python = ">=3.11"
 license = "Apache-2.0"

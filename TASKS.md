@@ -148,7 +148,8 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         since the demo shop has six findings on two tables.
       - Reports equal across worker counts apart from scan-time-relative values (freshness
         age, future dates).
-- [ ] S3-3 Staging live, promote dry run to production.
+- [ ] S3-3 Staging live, promote dry run to production. Staging is live; the dry run is deferred
+      to the first production deploy (owner, 7 Oct), together with the owner's staging check.
 - [x] **014 Accuracy benchmark** — `docs/specs/014-accuracy-benchmark.md`, table in
       `docs/checks/catalogue.md` ("Accuracy benchmark")
       - Fault list counted from the final rows, not from the injections: duplicated order keys
@@ -166,7 +167,14 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Follow-up: interval coverage 85 % for `not_blank` (17 of 20 groups, 5 placeholders in
         1,000 rows, half of them sampled). Compare the Wilson interval with the
         finite-population correction against an exact hypergeometric interval for rare faults.
-- [ ] S3-5 Release 0.1.
+- [ ] **015 Release 0.1** — `docs/specs/015-release-0-1.md`, tag `v0.1.0` (ticked once the tag's
+      release run is green and staging reports 0.1.0)
+      - Tagged with G1 partly open, by the owner's decision of 7 Oct: the promote dry run and
+        the owner's staging check come with the first production deploy. The roadmap records
+        what was met.
+      - One version for core and api: a test asserts `/api/version` equals both
+        `__version__`s, since the api ships the engine.
+      - No GitHub Release page: the tag, the `0.1.0` images and `CHANGELOG.md` are the release.
 
 ## Owner
 
