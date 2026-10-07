@@ -1,4 +1,5 @@
-"""`sahifa` command line: scan a source, write the demo shop, list the catalogue (spec 003)."""
+"""`sahifa` command line: scan a source, write the demo shop, list the catalogue (spec 003), and
+the performance and accuracy benchmarks (specs 013, 014)."""
 
 from __future__ import annotations
 
@@ -65,7 +66,11 @@ def main(argv: list[str] | None = None) -> int:
 
     synth = sub.add_parser("synth", help="write the demo shop dataset")
     synth.add_argument("directory", type=Path)
-    synth.add_argument("--clean", action="store_true", help="write the twin without faults")
+    form = synth.add_mutually_exclusive_group()
+    form.add_argument("--clean", action="store_true", help="write the twin without faults")
+    form.add_argument(
+        "--drift", action="store_true", help="write the clean twin with one fault per baseline check"
+    )
     synth.add_argument("--rows", type=int, default=10_000)
     synth.add_argument("--seed", type=int, default=7)
 
@@ -80,6 +85,14 @@ def main(argv: list[str] | None = None) -> int:
         "--mix", default=None, help="tiers as TABLESxROWS,...; default 700x10000,270x100000,30x1000000"
     )
 
+    accuracy = sub.add_parser(
+        "bench-accuracy", help="measure each check against the synthetic shop's known faults (spec 014)"
+    )
+    accuracy.add_argument("--seeds", type=int, default=20)
+    accuracy.add_argument("--rows", type=int, default=5000)
+    accuracy.add_argument("--sample-rows", type=int, default=500)
+    accuracy.add_argument("--json", action="store_true", help="print the measures as JSON")
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -88,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "synth":
         from .synth import write_shop
 
-        for p in write_shop(args.directory, clean=args.clean, rows=args.rows, seed=args.seed):
+        for p in write_shop(
+            args.directory, clean=args.clean, drift=args.drift, rows=args.rows, seed=args.seed
+        ):
             print(p)
         return 0
     if args.command == "bench-schema":
@@ -100,6 +115,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"sahifa: {e}", file=sys.stderr)
             return 2
         print(f"{n} tables in schema {args.schema}")
+        return 0
+    if args.command == "bench-accuracy":
+        from .accuracy import render_markdown, run_benchmark
+
+        try:
+            result = run_benchmark(
+                seeds=args.seeds,
+                rows=args.rows,
+                sample_rows=args.sample_rows,
+                progress=lambda m: print(m, file=sys.stderr),
+            )
+        except UsageError as e:
+            print(f"sahifa: {e}", file=sys.stderr)
+            return 2
+        print(json.dumps(result.as_dict(), indent=2) if args.json else render_markdown(result))
         return 0
     if args.command == "checks":
         from .checks import CATALOGUE
