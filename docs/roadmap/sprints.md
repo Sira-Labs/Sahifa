@@ -25,7 +25,7 @@ log), and for user-facing stories a screenshot or curl transcript in the PR.
 
 | Milestone | Sprints | Forecast (2026-10-03) | Exit criteria |
 |---|---|---|---|
-| **R1 first preview, release 0.1** | 1–3 | ~8 Oct; release when staging is validated and the promote dry run passed (gate G1) | `docs/roadmap/roadmap.md`, R1 |
+| **R1 first preview, release 0.1** | 1–3 | ✅ released 7 Oct on staging; promote dry run and the owner's staging check deferred to the first production deploy (G1) | `docs/roadmap/roadmap.md`, R1 |
 | **R2 history and explanation, release 0.2** | 4–8 | ~24 Oct | `roadmap.md`, R2 |
 | **R3 platform, release 1.0** | 9–12 | ~7 Nov | `roadmap.md`, R3 |
 
@@ -72,7 +72,7 @@ gantt
 |---|---|---|---|---|
 | 1 | first scan end to end | 2–3 Oct | ✅ done 2 Oct | #1 |
 | 2 | sign-in, checks lifecycle, worker, findings, schedules, history | 4–6 Oct | ✅ done 3 Oct | #2, #3, #4, #6, #7, #8, #9, #10, #11, #12 |
-| 3 | hardening, staging, release 0.1 | 7–8 Oct | 🔄 S3-1, S3-2 done, S3-4 in review | #13, #14, #24 |
+| 3 | hardening, staging, release 0.1 | 7–8 Oct | ✅ done 7 Oct (S3-3 deferred) | #13, #14, #24, release PR |
 | 4 | workspaces, roles, audit, security follow-ups | ~11 Oct | | |
 | 5 | metric history, anomalies, drift | ~15 Oct | | |
 | 6 | explanations, Tabayyun hand-off | ~18 Oct | | |
@@ -139,9 +139,9 @@ and survive scans; scans run in a worker and on a schedule.
 |---|---|---|---|---|
 | S3-1 | Spec 012: security baseline: headers, upload hardening, rate limits, dependency and licence audit in CI (ADR-0008) | M | checklist ticked | ✅ PR #13 |
 | S3-2 | Spec 013: performance run on a 1,000-table schema; query budget per asset | M | under 10 minutes on 2 vCPU, numbers in the PR | ✅ PR #14: 8 min 13 s |
-| S3-3 | Staging live at `sahifa-stg.siralabs.org`, promote dry run to production | M | `promote.yml` verified and a production promote dry run passed (G1) | ⏳ needs the production apps |
-| S3-4 | Accuracy benchmark: injected faults detected and false positives on clean twins, per check | S | table in `docs/checks/catalogue.md` | 🔄 spec 014, PR #24 |
-| S3-5 | Release 0.1: changelog, tag, product page status "Preview" | M | `v0.1.0` tag from `main` (gate G1) | ⏳ |
+| S3-3 | Staging live at `sahifa-stg.siralabs.org`, promote dry run to production | M | `promote.yml` verified and a production promote dry run passed (G1) | ⏸ staging live; dry run deferred to the first production deploy (owner, 7 Oct) |
+| S3-4 | Accuracy benchmark: injected faults detected and false positives on clean twins, per check | S | table in `docs/checks/catalogue.md` | ✅ PR #24 |
+| S3-5 | Release 0.1: changelog, tag, product page status "Preview" | M | `v0.1.0` tag from `main` (gate G1) | ✅ spec 015, `v0.1.0` |
 
 ## Sprint 4 — workspaces, roles, audit (R2)
 

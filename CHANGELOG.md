@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-07
+
+The first preview (R1). It scans uploaded CSV, Parquet and JSON files and Postgres databases.
+It runs 20 checks, scores six quality dimensions with 95 % intervals, and explains each
+finding. Staging: <https://sahifa-stg.siralabs.org>.
+
+### Known limitations
+- **No production release yet.** The promote dry run to production (S3-3) is deferred to the
+  first production deploy, by the owner's decision of 7 Oct 2026. 0.1 runs on staging only.
+- **Locked `range` baselines raise false alarms.** A `range` baseline locked on one scan raises
+  a finding on legitimate new data most of the time (122 of 200 cases in the accuracy
+  benchmark); timestamps that keep growing always do. Lock `range` only on columns with fixed
+  limits. Baselines learnt from several scans come in 0.2.
+- **Sampled scans miss rare faults.** A sampled scan can miss faults in only a few rows, and
+  rarely sees duplicates. The 95 % intervals cover the true share in 85–100 % of benchmark
+  cases. Use `--all-rows` (CLI) or a full read when every row matters.
+- **Sources:** Postgres and files only. Snowflake, BigQuery, SAP HANA, S3 and Iceberg come in
+  0.2.
+- **Scores:** history is per scan; anomaly thresholds, drift and explanations of where
+  failures cluster come in 0.2.
+
 ### Added
 - R0 research and design: research 01–04 (DataKitchen TestGen as reference, the data-quality
   landscape, methods, synthesis and positioning), product vision, domain model, system
@@ -86,4 +107,5 @@ All notable changes to this project are documented here. The format follows
   uses `assets/favicon.svg`), Tabayyun is linked at tabayyun-stg.siralabs.org, and the page links
   the running preview at sahifa-stg.siralabs.org.
 
-[Unreleased]: https://github.com/Sira-Labs/Sahifa/commits/main
+[Unreleased]: https://github.com/Sira-Labs/Sahifa/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Sira-Labs/Sahifa/commits/v0.1.0
