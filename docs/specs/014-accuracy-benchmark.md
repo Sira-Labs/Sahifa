@@ -62,7 +62,7 @@ The shop comes in three forms:
 The drift twin's faults, on columns where the clean twin's baselines apply:
 - **accepted values:** an order status that was never seen;
 - **pattern:** SKUs in a new shape;
-- **length:** product titles longer than any before;
+- **length:** customer names longer than any before;
 - **range:** negative order amounts;
 - **freshness:** all events moved 30 days into the past.
 
@@ -169,6 +169,10 @@ the detector; the thresholds belong to the owner (spec 007).
 - **Minimum rows is 2,500, not 500.** Products are rows / 50 and need 50 rows for a baseline,
   and the drift twin's pattern fault is on `products.sku`. Behaviour 5 is edited with this
   reason.
+- **Length fault on customer names, not product titles.** A product title gets a new shape as
+  well as a new length, so `sah.pattern` would flag it too. Customer names have a length
+  baseline and no pattern baseline, so the fault reaches `sah.length` alone. The drift twin
+  list above is edited.
 - **Sample seed per seed.** The shop's faults sit at fixed rows. With one sample seed for all,
   the same rows were always drawn: a future date in row 1 was found in 100 % of seeds, a
   default date in row 2 in 0 %. Run E is edited to say so.
