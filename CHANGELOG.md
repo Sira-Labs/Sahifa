@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- The API image runs on Python 3.14 (was 3.12); the API and core tests pass on 3.14.8.
+- Web tooling: Vite 8, Vitest 5 and ESLint 10; the GitHub Pages actions are on their current
+  major versions.
+
 ## [0.1.0] - 2026-10-07
 
 The first preview (R1). It scans uploaded CSV, Parquet and JSON files and Postgres databases.
