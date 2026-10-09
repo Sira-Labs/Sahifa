@@ -167,14 +167,15 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Follow-up: interval coverage 85 % for `not_blank` (17 of 20 groups, 5 placeholders in
         1,000 rows, half of them sampled). Compare the Wilson interval with the
         finite-population correction against an exact hypergeometric interval for rare faults.
-- [ ] **015 Release 0.1** — `docs/specs/015-release-0-1.md`, tag `v0.1.0` (ticked once the tag's
-      release run is green and staging reports 0.1.0)
+- [x] **015 Release 0.1** — `docs/specs/015-release-0-1.md`, tag `v0.1.0` (pre-release, 9 Oct)
+      - The tag is on efd6f33, which includes the Dependabot updates of PR #26; kept, not moved,
+        and the changelog lists those updates under 0.1.0.
       - Tagged with G1 partly open, by the owner's decision of 7 Oct: the promote dry run and
         the owner's staging check come with the first production deploy. The roadmap records
         what was met.
       - One version for core and api: a test asserts `/api/version` equals both
         `__version__`s, since the api ships the engine.
-      - No GitHub Release page: the tag, the `0.1.0` images and `CHANGELOG.md` are the release.
+      - The owner published a GitHub pre-release with notes taken from the changelog.
 
 ## Owner
 

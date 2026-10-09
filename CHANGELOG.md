@@ -6,12 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-- The API image runs on Python 3.14 (was 3.12); the API and core tests pass on 3.14.8.
-- Web tooling: Vite 8, Vitest 5 and ESLint 10; the GitHub Pages actions are on their current
-  major versions.
-
-## [0.1.0] - 2026-10-07
+## [0.1.0] - 2026-10-09
 
 The first preview (R1). It scans uploaded CSV, Parquet and JSON files and Postgres databases.
 It runs 20 checks, scores six quality dimensions with 95 % intervals, and explains each
@@ -99,6 +94,11 @@ finding. Staging: <https://sahifa-stg.siralabs.org>.
   detection and interval coverage in sampled scans. The table is in `docs/checks/catalogue.md`:
   every check finds every fault on a full read, and the clean twin stays silent.
   `sahifa synth --drift` writes the clean twin with one fault per baseline check.
+
+### Changed
+- The API image runs on Python 3.14 (was 3.12); the API and core tests pass on 3.14.8.
+- Web tooling: Vite 8, Vitest 5 and ESLint 10; the GitHub Pages actions are on their current
+  major versions.
 
 ### Fixed
 - The foreign-key check no longer runs once per sampled row against a text cast of the parent:

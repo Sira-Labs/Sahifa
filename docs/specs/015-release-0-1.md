@@ -58,9 +58,9 @@ that I know what to expect from the preview and what comes next.
 - [x] `CHANGELOG.md` has `[0.1.0] - 2026-10-07` with "Known limitations"; `[Unreleased]` is
       empty.
 - [x] The product page and the roadmap state the release and the deferred promote dry run.
-- [ ] `v0.1.0` is on `main`; the release run is green; GHCR has `sahifa-api:0.1.0` and
+- [x] `v0.1.0` is on `main`; the release run is green; GHCR has `sahifa-api:0.1.0` and
       `sahifa-web:0.1.0`.
-- [ ] Staging `/api/version` reports `0.1.0` at the tagged commit.
+- [x] Staging `/api/version` reports `0.1.0` at the tagged commit.
 - [x] `make lint` and `make test` pass.
 
 ## Test cases
@@ -69,6 +69,18 @@ that I know what to expect from the preview and what comes next.
   equals `sahifa_core.__version__`, because the API and the engine it ships are released
   together.
 - **Commands:** `uv lock --check` in `core` and `api`; `pnpm build` in `web`.
+
+## Implementation notes
+
+- **Where the tag is.** The owner published the release on 9 Oct from `main`. By then `main` also
+  held the Dependabot updates (PR #26: Python 3.14 image, Vite 8, Vitest 5, ESLint 10, Pages
+  actions), so `v0.1.0` is on efd6f33, not on this spec's merge commit 57d2df9. Those updates
+  were tested before the merge and ran on staging for two days, so the tag was kept rather than
+  moved, as behaviour 5 asks. `CHANGELOG.md` lists them under `[0.1.0]`.
+- **Release date 9 Oct, not 7 Oct.** The changelog section carries the date the tag was
+  published.
+- **A GitHub Release page exists after all.** The owner published `v0.1.0` as a pre-release, with
+  notes taken from the changelog.
 
 ## Out of scope
 
