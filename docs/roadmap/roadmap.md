@@ -16,9 +16,9 @@
 
 | | |
 |---|---|
-| **Phase** | R1 first preview: release 0.1 (`v0.1.0`, staging only) is being tagged; R2 starts with sprint 4 |
-| **Done** | R0; sprints 1–3: scan end to end, sign-in, checks lifecycle, worker, findings across scans, schedules, score history, security baseline, performance run, accuracy benchmark |
-| **In review** | S3-5 release 0.1 (PR #25); after the merge, `v0.1.0` is created on the merge commit, then the release run and staging are checked |
+| **Phase** | R1 released as **0.1** on 9 Oct (`v0.1.0` pre-release, staging only); R2 starts with sprint 4 |
+| **Done** | R0; sprints 1–3: scan end to end, sign-in, checks lifecycle, worker, findings across scans, schedules, score history, security baseline, performance run, accuracy benchmark, release 0.1 |
+| **In review** | — |
 | **Next** | Sprint 4: workspaces, roles, audit, security follow-ups |
 | **Waiting on the owner** | the G1 staging check (sign-in with three methods, a scheduled scan, the score history); nginx upload size on `sahifa-stg-web`; Delete Credential in Keycloak; production apps for the promote dry run; an SMTP account for sprint 4 |
 
@@ -63,8 +63,8 @@ gantt
   section R1 first preview
   S1 first scan end to end                 :done, s1, 2026-10-02, 1d
   S2 sign-in, checks, worker, history      :done, s2, 2026-10-02, 2026-10-03
-  S3 hardening, staging, release 0.1       :active, s3, 2026-10-03, 2026-10-07
-  Release 0.1                              :milestone, v01, 2026-10-07, 0d
+  S3 hardening, staging, release 0.1       :done, s3, 2026-10-03, 2026-10-09
+  Release 0.1                              :milestone, v01, 2026-10-09, 0d
   section R2 history and explanation
   S4 workspaces, roles, audit              :s4, 2026-10-08, 3d
   S5 metric history, anomalies, drift      :s5, after s4, 4d
@@ -83,7 +83,7 @@ gantt
 | Phase | Sprints | Dates (actual / forecast) | Outcome and exit criteria | Release | Status |
 |---|---|---|---|---|---|
 | **R0 Research and design** | — | 1–2 Oct | Research 01–04, vision, domain model, architecture, ADRs 0001–0014, the catalogue of 30 checks, specs 001–005, product page | — | ✅ done |
-| **R1 First preview** | S1–S3 | 2 Oct – 7 Oct | Files and Postgres scanned with 20 checks; scores with intervals; findings with examples, SQL and a next step; sign-in; checks lifecycle; worker; findings across scans; schedules; history. Security baseline, performance budget, accuracy table and staging live; the owner's staging check and the promote dry run before production (gate G1). | `v0.1.0` | 🔄 release 0.1 in PR #25 |
+| **R1 First preview** | S1–S3 | 2 Oct – 9 Oct | Files and Postgres scanned with 20 checks; scores with intervals; findings with examples, SQL and a next step; sign-in; checks lifecycle; worker; findings across scans; schedules; history. Security baseline, performance budget, accuracy table and staging live; the owner's staging check and the promote dry run before production (gate G1). | `v0.1.0` | ✅ released 9 Oct (pre-release, staging) |
 | **R2 History and explanation** | S4–S8 | ~8 Oct – ~24 Oct | Workspaces and roles; metric history with anomaly thresholds and drift; explanations of where failures cluster; Snowflake, BigQuery, SAP HANA, S3 and Iceberg; ODCS contracts; SAP and EU rule packs; custom SQL checks; alerts | `v0.2.0` | ⏳ next |
 | **R3 Platform** | S9–S12 | ~24 Oct – ~7 Nov | Rules proposed by an LLM and approved by a person; dependencies and entity resolution; lineage root cause; store health; API tokens, reports, embeds; Helm and multi-node workers; production with tested restore | `v1.0.0` | ⏳ later |
 
@@ -97,7 +97,7 @@ gantt
    - the promote dry run to production has passed;
    - then `v0.1.0` is tagged from `main`.
 
-   **At the tag, 7 Oct.** Met: security baseline, performance budget, accuracy table, staging
+   **At the tag, 9 Oct.** Met: security baseline, performance budget, accuracy table, staging
    live (deployed and serving, not yet checked by the owner). Not yet done, by the owner's
    decision of 7 Oct: the owner's staging check and the promote dry run. Both are done before the first production deploy (S3-3), which is when 0.1
    reaches production (spec 015).
@@ -209,3 +209,4 @@ site/            product page for siralabs.org
 | 2026-10-03 | Spec 013, performance run (PR #14): 1,000 tables in 8 min 13 s on 2 vCPU; the foreign-key check made linear |
 | 2026-10-03 | Roadmap version 2: status, gates, risks; sprints 4–12 planned to story level |
 | 2026-10-07 | Spec 014, accuracy benchmark (PR #24): 100 % detection on a full read, a silent clean twin; locked `range` baselines raise false alarms on new data (follow-up, sprint 5) |
+| 2026-10-09 | **Release 0.1** (spec 015): `v0.1.0` published as a pre-release; R1 complete on staging. Dependabot updates (Python 3.14, Vite 8) merged with it (PR #26) |
