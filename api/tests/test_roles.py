@@ -50,6 +50,11 @@ async def test_viewer_cannot_change_and_editor_can(env: Env) -> None:
         for method, url, kwargs in changes(tree, wid):
             r = await viewer.request(method, url, **kwargs)
             assert (r.status_code, r.json()) == (403, FORBIDDEN), (method, url, r.text)
+        # A workspace the viewer is not in does not exist for them.
+        foreign = await viewer.post(
+            "/api/scans/upload", files={"files": CSV}, data={"workspace_id": make_workspace(env.owner)}
+        )
+        assert foreign.status_code == 404
         # Without a workspace the viewer's upload has none to go to: still 403.
         bare = await viewer.post("/api/scans/upload", files={"files": CSV})
         assert (bare.status_code, bare.json()) == (403, FORBIDDEN)

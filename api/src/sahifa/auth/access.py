@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TypeVar
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,9 +101,11 @@ class Access:
 
     def pick(self, workspace_id: uuid.UUID | None, needs: str, *, action: str) -> uuid.UUID:
         """The workspace a new object goes to: the one named, checked; else the only one where
-        the principal has `needs`. 403 when there is none, `WorkspaceRequiredError` when there
-        are several."""
+        the principal has `needs`. 404 for a workspace they do not see, 403 when there is none,
+        `WorkspaceRequiredError` when there are several."""
         if workspace_id is not None:
+            if workspace_id not in self.workspaces:
+                raise HTTPException(404, "workspace not found")
             self.require(workspace_id, needs, action=action)
             return workspace_id
         able = [w.id for w in self.workspaces.values() if self.allows(w.id, needs)]
