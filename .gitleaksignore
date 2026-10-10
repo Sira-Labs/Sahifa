@@ -1,0 +1,9 @@
+# Findings of the secret scan (CI job `secrets`, spec 019) that are not secrets.
+# One fingerprint per finding: commit:file:rule:line. A new value in the same file is still found.
+# Never add a real credential here: remove it from the history and rotate it instead.
+
+# Made-up OIDC client secret and session secret in a settings test; they never worked anywhere.
+a21dc6fdd64a207412b9280bfcff0d69a3497ee0:api/tests/test_settings.py:generic-api-key:42
+a21dc6fdd64a207412b9280bfcff0d69a3497ee0:api/tests/test_settings.py:generic-api-key:43
+# A placeholder the prod check must refuse ("too-short-0123456789").
+a21dc6fdd64a207412b9280bfcff0d69a3497ee0:api/tests/test_settings.py:generic-api-key:88

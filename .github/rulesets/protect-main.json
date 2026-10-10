@@ -23,7 +23,9 @@
         "required_status_checks": [
           { "context": "python core" },
           { "context": "python api" },
-          { "context": "web" }
+          { "context": "web" },
+          { "context": "secrets" },
+          { "context": "web image" }
         ]
       } }
   ]

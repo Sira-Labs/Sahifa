@@ -106,6 +106,40 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine
           caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
+  # Something that looks like a credential anywhere in the history fails the build (spec 019).
+  # Values that are not secrets are listed by fingerprint in .gitleaksignore.
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.24.3
+      GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: install gitleaks
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      # A committed token must be found and a clean commit must pass, or the scan proves nothing.
+      - name: self-test
+        run: .github/scripts/secret-scan-selftest.sh "$RUNNER_TEMP/gitleaks"
+      - name: scan the full history
+        run: '"$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose .'
+
+  # The web image runs Caddy as uid 10001 and still serves on 80 and 443 (spec 019).
+  web-image:
+    name: web image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: build
+        run: docker build -f web/Dockerfile --build-arg SAHIFA_COMMIT="$GITHUB_SHA" -t sahifa-web:ci .
+      - name: non-root and serving
+        run: .github/scripts/web-image-check.sh sahifa-web:ci "$GITHUB_SHA"
+
   # Runtime dependencies of core, api and web against ADR-0008 and ADR-0015 (spec 012).
   licences:
     name: licences

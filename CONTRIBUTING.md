@@ -24,7 +24,10 @@ ADRs in `docs/adr/` before changing behaviour.
   (`core/src/sahifa_core/sql.py`); no value from the data or the user is ever pasted into SQL
   as text.
 - **No secrets** in code, config, fixtures or tests. Environment variables only; connection
-  credentials are referenced by the name of a `SAHIFA_CONN_*` variable (ADR-0006).
+  credentials are referenced by the name of a `SAHIFA_CONN_*` variable (ADR-0006). The CI job
+  `secrets` scans the whole history with gitleaks. If it flags a real secret, remove it from
+  the history and rotate it. Only a value that is not a secret goes into `.gitleaksignore`,
+  by fingerprint, with the reason.
 - **Permissive dependencies only.** Runtime dependencies of the core, API and web are MIT,
   BSD, Apache-2.0, ISC, PSF or MPL-2.0; nothing AGPL, GPL, SSPL, ELv2 or BSL (ADR-0008).
 - **Never real customer data** in issues, fixtures or tests. Use `sahifa synth`.
@@ -84,10 +87,11 @@ contribute code or data you are not entitled to license this way, and never real
 ## Repository settings (maintainers)
 
 Protection for `main` is defined as a ruleset in `.github/rulesets/protect-main.json`:
-pull request required, the three CI jobs required, review threads resolved, no force-push,
-no deletion, no bypass. Committing the file does not enforce anything: a repository admin
-has to import it once under **Settings → Rules → Rulesets → New ruleset → Import a
-ruleset**, or with the GitHub CLI:
+pull request required, the CI jobs `python core`, `python api`, `web`, `secrets` and
+`web image` required, review threads resolved, no force-push, no deletion, no bypass.
+Committing the file does not enforce anything: a repository admin has to import it once
+under **Settings → Rules → Rulesets → New ruleset → Import a ruleset**, or with the GitHub
+CLI:
 
 ```bash
 gh api -X POST repos/Sira-Labs/Sahifa/rulesets --input .github/rulesets/protect-main.json
