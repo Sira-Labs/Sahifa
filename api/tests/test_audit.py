@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -214,7 +215,9 @@ async def test_filters_and_cursor(env: Env, admin: AsyncClient) -> None:
     ).json()
     assert [first["items"][0]["action"], second["items"][0]["action"]] == ["check.unlock", "check.lock"]
     assert second["next_cursor"] is None
-    assert (await admin.get("/api/audit", params={"cursor": "nope"})).status_code == 422
+    numeric = base64.urlsafe_b64encode(json.dumps(["2026-10-10T08:00:00+00:00", 123]).encode()).decode()
+    for bad in ("nope", "a", numeric):
+        assert (await admin.get("/api/audit", params={"cursor": bad})).status_code == 422, bad
 
 
 async def test_no_secret_in_any_entry(env: Env, admin: AsyncClient) -> None:

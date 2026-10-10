@@ -29,7 +29,8 @@ def _after(cursor: str) -> tuple[datetime, uuid.UUID]:
     try:
         at, eid = json.loads(base64.urlsafe_b64decode(cursor.encode()))
         return datetime.fromisoformat(at), uuid.UUID(eid)
-    except (ValueError, TypeError) as e:
+    # ValueError covers bad base64 (binascii.Error) and JSON; AttributeError a non-string id.
+    except (ValueError, TypeError, AttributeError) as e:
         raise HTTPException(422, "invalid cursor") from e
 
 
