@@ -20,6 +20,7 @@ from ..deps import access, session, settings
 from ..jobs import start_scan
 from ..logging import get_logger
 from ..schemas import Items, Page, ScanIn, ScanOut, ScanScore
+from ..services import audit
 from ..services.uploads import clean_file_name, content_matches
 from ..settings import Settings
 
@@ -64,8 +65,25 @@ async def _enqueue(
     options: dict[str, Any],
 ) -> ScanOut:
     """Commit the scan as `queued`, then start it in the inline runner or the queue (spec 008)."""
-    scan = Scan(connection_id=conn.id, sample_rows=sample_rows, options=options, status="queued")
+    scan = Scan(
+        id=uuid.uuid4(), connection_id=conn.id, sample_rows=sample_rows, options=options, status="queued"
+    )
     db.add(scan)
+    upload = conn.kind == "upload"
+    files = options.get("files") or []
+    audit.record(
+        db,
+        caller,
+        action="scan.uploaded" if upload else "scan.started",
+        workspace_id=conn.workspace_id,
+        object_type="scan",
+        object_id=scan.id,
+        summary=f"Uploaded {len(files)} file{'s' if len(files) != 1 else ''} for a scan"
+        if upload
+        else f"Started a scan of {conn.name}",
+        after={"connection": conn.name, "sample_rows": sample_rows}
+        | ({"files": files} if upload else {"assets": options.get("assets")}),
+    )
     await db.commit()
     await db.refresh(scan)
     await start_scan(db, scan, request.app.state.settings, request.app.state.runner, connection=conn.name)

@@ -197,6 +197,12 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - Every role check is now an `Access` method, so there is one way for a route to check a
         role and one place to switch them off in the meta-test.
       - A new route fails `test_every_route_is_classified` until it has a line in the matrix.
+- [x] **018 Audit log of changes** — `docs/specs/018-audit-log.md` (S4-4)
+      - One append-only table, written in each change's transaction; a trigger refuses UPDATE and
+        DELETE for every role except a deleted user's SET NULL and a marked purge (S4-3).
+      - People's changes only; the scanner's stay in each object's history. The existing check and
+        finding history from people is backfilled.
+      - Creating a workspace widens the request's scope and flushes the workspace before its entry.
 
 ## Owner
 

@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Audit log** (spec 018). Every change a person makes is recorded with who, when, the
+  workspace, and the state before and after, in the change's own transaction:
+  - checks, findings and schedules;
+  - scans and uploads;
+  - connections, workspaces and members.
+
+  Entries cannot be changed or deleted. Workspace admins read their workspaces' log on the new
+  page `/audit` and through `GET /api/audit`; the org admin reads all of it. Earlier check and
+  finding history is included.
 - **Workspaces and roles** (spec 016). Connections belong to a workspace; people are viewers,
   editors or admins of workspaces. Viewers see a workspace's scans, checks, findings and
   history; editors also scan, upload and change checks, findings and schedules; admins rename

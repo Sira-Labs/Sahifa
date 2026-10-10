@@ -1,5 +1,5 @@
 """Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008), 0005
-(spec 009), 0006 (spec 010), 0007 (spec 011) and 0008 (spec 016).
+(spec 009), 0006 (spec 010), 0007 (spec 011), 0008 (spec 016) and 0009 (spec 018).
 
 Every workspace-owned table carries `workspace_id` under row-level security (spec 016). On all but
 `connections` a database trigger fills it from the parent row, so the ORM never sets it there.
@@ -519,3 +519,29 @@ class Membership(Base):
     role: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class AuditEvent(Base):
+    """A change a person made (spec 018): append-only, under row-level security; migration 0009
+    refuses UPDATE and DELETE with a trigger."""
+
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("ix_audit_events_workspace_at", "workspace_id", text("at DESC")),
+        Index("ix_audit_events_action", "action"),
+        Index("ix_audit_events_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE", name="fk_audit_events_workspace_id")
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    actor: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(String(40))
+    object_type: Mapped[str] = mapped_column(String(20))
+    object_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    summary: Mapped[str] = mapped_column(Text)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

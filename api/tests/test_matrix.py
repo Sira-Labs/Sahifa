@@ -377,6 +377,16 @@ OPS: tuple[Op, ...] = (
         rls=False,
         before=_target_is_member,
     ),
+    # The audit log (spec 018), narrowed to A's tree so the org admin's page holds its entry.
+    Op(
+        "GET",
+        "/api/audit",
+        "admin",
+        "list",
+        200,
+        lambda w: ("/api/audit", {"params": {"object_id": w.tree["connection"]}}),
+        listed=lambda w: w.tree["audit"],
+    ),
     Op(
         "GET",
         "/api/users",
@@ -413,8 +423,10 @@ def expected(op: Op, caller: str) -> tuple[int, str | None, bool | None]:
     if caller == "outsider":
         if op.scope in ("object", "create"):
             return 404, None, None
-        if op.scope == "list":
+        if op.scope == "list" and RANK["editor"] >= RANK[op.needs]:
             return op.ok, None, False
+        if op.scope == "list":
+            return 403, "forbidden_role", None
         return (op.ok, None, None) if RANK["editor"] >= RANK[op.needs] else (403, "forbidden_role", None)
     if RANK[caller] >= RANK[op.needs]:
         return op.ok, None, True if op.listed else None
@@ -582,7 +594,11 @@ async def test_matrix_catches_a_missing_scope(setup: tuple[World, dict[str, Asyn
     secured = {
         (op.method, op.path)
         for op in OPS
-        if op.rls and op.scope in ("object", "list") and op.needs != "org_admin"
+        if op.rls
+        and op.scope in ("object", "list")
+        and op.needs != "org_admin"
+        # A list the outsider's role cannot read at all (the audit log) answers 403 either way.
+        and not (op.scope == "list" and RANK[op.needs] > RANK["editor"])
     }
     assert secured <= caught, secured - caught
     # A's viewer now also gets B's rows in the lists that can hold them.

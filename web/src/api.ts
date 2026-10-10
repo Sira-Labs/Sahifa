@@ -3,6 +3,8 @@
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
   Asset,
+  AuditEntry,
+  AuditFilters,
   CheckAction,
   Connection,
   ConnectionCreate,
@@ -307,6 +309,10 @@ export const api = {
     apiSend<Member>("PUT", `/api/workspaces/${enc(id)}/members/${enc(userId)}`, { role }),
   removeMember: (id: string, userId: string) => apiSend<void>("DELETE", `/api/workspaces/${enc(id)}/members/${enc(userId)}`),
   searchUsers: (q: string) => apiGet<UserMatch[]>(`/api/users${query({ q })}`),
+  listAudit: (filters: AuditFilters, cursor?: string, workspaceId?: string, limit = 50) =>
+    apiGet<Page<AuditEntry>>(
+      `/api/audit${query({ action: filters.action, actor: filters.actor, workspace_id: workspaceId, cursor, limit })}`,
+    ),
   moveConnection: (id: string, workspaceId: string) =>
     apiSend<Connection>("PUT", `/api/connections/${enc(id)}/workspace`, { workspace_id: workspaceId }),
 };

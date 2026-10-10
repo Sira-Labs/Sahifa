@@ -11,11 +11,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.access import Access
-from ..auth.deps import Principal
+from ..auth.deps import actor_of
 from ..db.models import CHECK_STATUSES, Asset, Check, CheckEvent
 from ..deps import access, session
 from ..logging import get_logger
 from ..schemas import CheckActionIn, CheckEventOut, CheckOut
+from ..services import audit
 from ..services.checks import TRANSITIONS
 
 router = APIRouter(prefix="/api/checks", tags=["checks"])
@@ -51,11 +52,6 @@ def to_out(c: Check) -> CheckOut:
         updated_at=c.updated_at,
         last_scan_id=c.last_scan_id,
     )
-
-
-def actor_of(principal: Principal) -> str:
-    """Who an event names, as text that outlives the user: the email, or `dev` / `proxy`."""
-    return principal.email if principal.mode == "oidc" and principal.email else principal.mode
 
 
 @router.get("", response_model=list[CheckOut])
@@ -111,9 +107,24 @@ async def change_check(
                 "message": f"A {check.status} check cannot be changed with {action}.",
             },
         )
+    version = check.version
     check.status = target
     check.version += 1
     check.updated_at = func.now()
+    asset = await db.get(Asset, check.asset_id)
+    label = asset.label if asset else ""
+    audit.record(
+        db,
+        caller,
+        action=f"check.{action}",
+        workspace_id=check.workspace_id,
+        object_type="check",
+        object_id=check.id,
+        summary=f"{audit.VERBS[action]} “{title_of(check.type)}” on "
+        f"{audit.where(label, check.column_name or ', '.join(check.columns or []) or None)}",
+        before={"status": source, "version": version},
+        after={"status": target, "version": version + 1},
+    )
     db.add(
         CheckEvent(
             check_id=check.id,
