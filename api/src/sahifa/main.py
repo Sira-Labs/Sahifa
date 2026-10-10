@@ -21,7 +21,18 @@ from .db import Database
 from .db.migrate import head_revision
 from .db.models import Organisation
 from .logging import configure, get_logger
-from .routers import assets, auth, checks, connections, findings, health, history, scans, schedules
+from .routers import (
+    assets,
+    auth,
+    checks,
+    connections,
+    findings,
+    health,
+    history,
+    scans,
+    schedules,
+    workspaces,
+)
 from .security import (
     MB,
     UPLOAD_PATH,
@@ -204,6 +215,7 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     app.include_router(checks.router, dependencies=protected)
     app.include_router(findings.router, dependencies=protected)
     app.include_router(history.router, dependencies=protected)
+    app.include_router(workspaces.router, dependencies=protected)
     return app
 
 

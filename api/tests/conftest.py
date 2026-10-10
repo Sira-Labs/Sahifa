@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 
 from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
@@ -27,6 +27,39 @@ def owner_engine() -> Engine:
     return create_engine(
         DB_URL, isolation_level="AUTOCOMMIT", connect_args={"options": "-c sahifa.system=on"}
     )
+
+
+def drop_workspaces(engine: Engine) -> None:
+    """Delete every workspace but the default one, with its connections and their rows (which
+    cascade), so tests that assume one workspace keep it."""
+    with engine.connect() as conn:
+        others = "SELECT id FROM workspaces WHERE NOT is_default"
+        conn.execute(text(f"DELETE FROM connections WHERE workspace_id IN ({others})"))
+        conn.execute(text("DELETE FROM workspaces WHERE NOT is_default"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def one_workspace_at_start() -> None:
+    """Workspaces left by an interrupted run would make every create and upload name one."""
+    if DB_URL:
+        upgrade(DB_URL)
+        engine = owner_engine()
+        drop_workspaces(engine)
+        engine.dispose()
+
+
+@pytest.fixture
+def drops_workspaces() -> Iterator[None]:
+    """For tests that create workspaces: none of them outlives the test."""
+    assert DB_URL
+    upgrade(DB_URL)
+    engine = owner_engine()
+    drop_workspaces(engine)
+    try:
+        yield
+    finally:
+        drop_workspaces(engine)
+        engine.dispose()
 
 
 @pytest.fixture
