@@ -177,6 +177,21 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         `__version__`s, since the api ships the engine.
       - The owner published a GitHub pre-release with notes taken from the changelog.
 
+## Sprint 4 — workspaces, roles, audit
+
+- [x] **016 Workspaces, memberships and roles with row-level security** —
+      `docs/specs/016-workspaces-and-roles.md` (S4-1, with member management from S4-3)
+      - A superuser login bypasses row-level security even with `FORCE`; migration 0008 creates
+        `sahifa_app` and every API transaction switches to it. Prod refuses to start (exit 4)
+        when the login would bypass row-level security and cannot switch.
+      - The scope is set per transaction from the session (`set_config(…, true)` at each
+        begin), so mid-request commits keep it and pooled connections never leak it.
+      - The org admin also names a workspace for new connections and uploads once there are
+        several: nothing lands in the broad `Default` by accident.
+      - An allowed email removed from every workspace comes back as an editor of `Default`
+        until it leaves `SAHIFA_ALLOWED_EMAILS` (S4-3 retires the setting).
+      - Tests that create workspaces delete them afterwards; the older tests assume one.
+
 ## Owner
 
 - [x] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment

@@ -54,7 +54,8 @@ An install can read every source it is connected to, so with `SAHIFA_ENV=prod` t
 refuses to start unless one of two things keeps strangers out (spec 006, ADR-0010):
 
 - **Sign-in through Keycloak** (`SAHIFA_AUTH_MODE=oidc`): Google, GitHub and passkeys through
-  a realm `sahifa`; only `SAHIFA_ADMIN_EMAIL` and `SAHIFA_ALLOWED_EMAILS` get access. The
+  a realm `sahifa`; `SAHIFA_ADMIN_EMAIL` and members of a workspace get access (addresses in
+  `SAHIFA_ALLOWED_EMAILS` become editors of the `Default` workspace, spec 016). The
   settings are in `.env.example`; the realm set-up is `caprover.md`, section 4a.
 - **An access gate** (`SAHIFA_AUTH_MODE=proxy` with `SAHIFA_ACCESS_GATE=basic-auth-at-proxy`):
   something in front asks for a password. On CapRover that is the web app's HTTP basic auth
@@ -169,5 +170,12 @@ migrations it ships with, and `GET /api/version` reports `schema_revision`. Take
 before upgrading a production database.
 
 `SAHIFA_MIGRATION_DATABASE_URL` is optional: a separate login (the table owner) for the
-migration step only. Without it migrations use `SAHIFA_DATABASE_URL`. Sahifa keeps one login
-until workspace RBAC with row-level security arrives in R2 (ADR-0010).
+migration step only. Without it migrations use `SAHIFA_DATABASE_URL`.
+
+Row-level security (spec 016) keeps each workspace's rows apart in Postgres, so the api's login
+must not bypass it. The Postgres image makes `POSTGRES_USER` a superuser, which would; migration
+0008 therefore creates a role `sahifa_app` without login and lets the migrating login join it,
+and the api switches to it in every transaction. A separate api login that neither owns the
+tables nor is a superuser is bound anyway; it needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on
+the tables. With `SAHIFA_ENV=prod` the api refuses to start (exit code 4, log
+`db.rls_bypassed`) when its login would bypass row-level security.

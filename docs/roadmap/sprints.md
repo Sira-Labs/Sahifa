@@ -148,13 +148,13 @@ and survive scans; scans run in a worker and on a schedule.
 Goal: an install serves a team. People belong to workspaces with a role, connections belong to
 a workspace, and every change is in an audit log.
 
-| ID | Story | Prio | Done when |
-|---|---|---|---|
-| S4-1 | Organisations, workspaces and memberships; connections owned by a workspace; roles viewer, editor and admin; row-level security in Postgres (ADR-0010) | M | a viewer cannot change a check, and another workspace's connections, scans and findings are invisible |
-| S4-2 | Role matrix test: every route against every role, cross-workspace → 404 | M | the matrix test is green and fails when a route loses its check |
-| S4-3 | Invitations by email, replacing the allowed-emails list; the admin changes roles and removes members | S | an invited person signs in and lands in the right workspace |
-| S4-4 | Audit log of changes (who, what, when, before and after) with a page for admins | S | approving a check or muting a finding appears in the log |
-| S4-5 | Security follow-ups from spec 012: secret scanning in CI; Caddy as a non-root user | S | CI fails on a committed test secret; the web image runs as non-root |
+| ID | Story | Prio | Done when | Status |
+|---|---|---|---|---|
+| S4-1 | Organisations, workspaces and memberships; connections owned by a workspace; roles viewer, editor and admin; row-level security in Postgres (ADR-0010); the admin changes roles and removes members | M | a viewer cannot change a check, and another workspace's connections, scans and findings are invisible | ✅ spec 016 |
+| S4-2 | Role matrix test: every route against every role, cross-workspace → 404 | M | the matrix test is green and fails when a route loses its check | |
+| S4-3 | Invitations by email, replacing the allowed-emails list; deleting workspaces (member management moved to S4-1 by the owner, 10 Oct) | S | an invited person signs in and lands in the right workspace | |
+| S4-4 | Audit log of changes (who, what, when, before and after) with a page for admins | S | approving a check or muting a finding appears in the log | |
+| S4-5 | Security follow-ups from spec 012: secret scanning in CI; Caddy as a non-root user | S | CI fails on a committed test secret; the web image runs as non-root | |
 
 ## Sprint 5 — metric history, anomalies, drift (R2)
 
