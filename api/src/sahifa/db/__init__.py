@@ -41,7 +41,7 @@ _HAS_ROLE = text(
     " AND pg_has_role(session_user, r.oid, 'MEMBER'))"
 )
 _SET_ROLE = text(f"SET LOCAL ROLE {APP_ROLE}")
-_BYPASS = text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = session_user")
+_BYPASS = text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = :role")
 
 
 class ScopedSession(Session):
@@ -100,12 +100,13 @@ class Database:
             yield s
 
     async def bypasses_rls(self) -> bool:
-        """Whether row-level security would not bind the API: the login is a superuser or has
-        BYPASSRLS, and cannot switch to `sahifa_app` (migration 0008 could not create it)."""
+        """Whether row-level security would not bind the API: the role its transactions run as
+        (`sahifa_app` when the login can switch to it, else the login) is a superuser or has
+        BYPASSRLS."""
         async with self.engine.connect() as conn:
-            bypass = bool((await conn.execute(_BYPASS)).scalar())
-            role = bool((await conn.execute(_HAS_ROLE, {"role": APP_ROLE})).scalar())
-        return bypass and not role
+            switches = bool((await conn.execute(_HAS_ROLE, {"role": APP_ROLE})).scalar())
+            effective = APP_ROLE if switches else (await conn.execute(text("SELECT session_user"))).scalar()
+            return bool((await conn.execute(_BYPASS, {"role": effective})).scalar())
 
     async def dispose(self) -> None:
         await self.engine.dispose()

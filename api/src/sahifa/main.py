@@ -77,11 +77,11 @@ async def run_schedules_every_minute(db: Database, settings: Settings, runner: S
 
 
 async def check_rls(db: Database, settings: Settings) -> None:
-    """Row-level security (spec 016) does not bind a superuser or BYPASSRLS login unless it can
-    switch to `sahifa_app`: prod refuses to start (exit 4), dev warns."""
+    """Row-level security (spec 016) does not bind a superuser or a BYPASSRLS role: when the
+    role the API's transactions run as is one, prod refuses to start (exit 4) and dev warns."""
     if not await db.bypasses_rls():
         return
-    detail = "the database login bypasses row-level security and cannot switch to sahifa_app"
+    detail = "the API's database role (sahifa_app, or the login without it) bypasses row-level security"
     if settings.env == "prod":
         log.error("db.rls_bypassed", detail=detail)
         sys.exit(EXIT_RLS)

@@ -142,7 +142,7 @@ nothing else, and cannot lock or retire a check by mistake.
 5. **Moving a connection.**
    - One transaction updates `workspace_id` on the connection and on all its rows.
    - A running scan of the connection blocks the move: 409 `scan_running`.
-6. **Deleting.** Workspaces are not deleted in this spec. An empty workspace stays, and deleting is S4-3 together with member removal flows.
+6. **Deleting.** Workspaces are not deleted in this spec. An empty workspace stays; deleting it is S4-3.
 7. **Logging.**
    - `rbac.denied` with user, workspace, action, role and needed role, for each 403.
    - `workspace.created`, `workspace.renamed`, `membership.changed`, `connection.moved`.

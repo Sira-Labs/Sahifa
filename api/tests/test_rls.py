@@ -197,3 +197,20 @@ async def test_prod_refuses_a_login_that_bypasses_rls(tmp_path: Path) -> None:
 
 async def test_the_test_login_is_bound_by_rls(db: Database) -> None:
     assert await db.bypasses_rls() is False
+
+
+async def test_an_app_role_with_bypassrls_is_reported(owner: Engine, db: Database) -> None:
+    """Switching to `sahifa_app` does not help when someone gave it BYPASSRLS."""
+    can = sql(
+        owner,
+        "SELECT r.rolsuper AND pg_has_role(current_user, 'sahifa_app', 'MEMBER')"
+        " FROM pg_roles r WHERE r.rolname = current_user AND EXISTS"
+        " (SELECT 1 FROM pg_roles WHERE rolname = 'sahifa_app')",
+    )
+    if not (can and can[0][0]):
+        pytest.skip("needs a superuser test login that can switch to sahifa_app")
+    sql(owner, "ALTER ROLE sahifa_app BYPASSRLS")
+    try:
+        assert await db.bypasses_rls() is True
+    finally:
+        sql(owner, "ALTER ROLE sahifa_app NOBYPASSRLS")
