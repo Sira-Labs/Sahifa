@@ -1,5 +1,8 @@
 """Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008), 0005
-(spec 009), 0006 (spec 010) and 0007 (spec 011).
+(spec 009), 0006 (spec 010), 0007 (spec 011) and 0008 (spec 016).
+
+Every workspace-owned table carries `workspace_id` under row-level security (spec 016). On all but
+`connections` a database trigger fills it from the parent row, so the ORM never sets it there.
 
 Procrastinate's own tables (migration 0004) are not mapped here; Alembic ignores them.
 """
@@ -15,6 +18,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    FetchedValue,
     Float,
     ForeignKey,
     Index,
@@ -36,6 +40,7 @@ SCAN_STATUSES = ("queued", "running", "succeeded", "failed")
 SCAN_TRIGGERS = ("manual", "schedule")
 SCHEDULE_OUTCOMES = ("queued", "skipped_running", "failed_to_queue", "invalid_schedule")
 SIGN_IN_METHODS = ("google", "github", "passkey")
+ROLES = ("viewer", "editor", "admin")
 ASSET_KINDS = ("table", "view", "file")
 CHECK_KINDS = ("rule", "baseline", "manual")
 CHECK_ORIGINS = ("generated", "manual", "suggested", "declared")
@@ -63,6 +68,9 @@ class Connection(Base):
     __table_args__ = (CheckConstraint(f"kind IN {CONNECTION_KINDS}", name="ck_connections_kind"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_connections_workspace_id"), index=True
+    )
     name: Mapped[str] = mapped_column(String(200), unique=True)
     kind: Mapped[str] = mapped_column(String(20))
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
@@ -79,6 +87,11 @@ class Scan(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_scans_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(20), server_default="queued")
     sample_rows: Mapped[int] = mapped_column(Integer)
@@ -113,6 +126,11 @@ class ScanSchedule(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_scan_schedules_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
     cron: Mapped[str] = mapped_column(Text)
     timezone: Mapped[str] = mapped_column(Text, server_default="UTC")
@@ -142,6 +160,11 @@ class FindingOccurrence(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_finding_occurrences_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
     finding_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("findings.id", ondelete="SET NULL"))
     check_type: Mapped[str] = mapped_column(String(100))
@@ -229,6 +252,11 @@ class Asset(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_assets_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
     namespace: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
@@ -252,6 +280,11 @@ class AssetColumn(Base):
     __tablename__ = "columns"
 
     asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_columns_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     name: Mapped[str] = mapped_column(Text, primary_key=True)
     position: Mapped[int] = mapped_column(Integer)
     physical_type: Mapped[str] = mapped_column(Text)
@@ -276,6 +309,11 @@ class Check(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_checks_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
     key: Mapped[str] = mapped_column(Text)
     type: Mapped[str] = mapped_column(String(100))
@@ -306,6 +344,11 @@ class CheckEvent(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_check_events_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     check_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("checks.id", ondelete="CASCADE"))
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -337,6 +380,11 @@ class Finding(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_findings_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     check_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("checks.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(20))
     severity: Mapped[str] = mapped_column(String(20))
@@ -366,6 +414,11 @@ class FindingEvent(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_finding_events_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"))
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -405,6 +458,11 @@ class ScoreRecord(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_scores_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
     connection_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"))
     asset_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
@@ -416,3 +474,48 @@ class ScoreRecord(Base):
     checks: Mapped[int] = mapped_column(Integer)
     # {dimension: {value, low, high, checks}}, as in the report's `Score.dimensions`.
     dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class Organisation(Base):
+    """The install (spec 016): exactly one row in R2, named by `SAHIFA_ORG_NAME` at start."""
+
+    __tablename__ = "organisations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Workspace(Base):
+    """A group of connections and the people who work on them (spec 016). One is the default:
+    new `SAHIFA_CONN_*` connections and allowed emails land there."""
+
+    __tablename__ = "workspaces"
+    __table_args__ = (
+        Index("uq_workspaces_org_name", "organisation_id", text("lower(name)"), unique=True),
+        Index("uq_workspaces_default", "organisation_id", unique=True, postgresql_where=text("is_default")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organisations.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100))
+    is_default: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Membership(Base):
+    """A person's role in a workspace (spec 016). Org admins are not stored here."""
+
+    __tablename__ = "memberships"
+    __table_args__ = (
+        CheckConstraint(f"role IN {ROLES}", name="ck_memberships_role"),
+        Index("ix_memberships_user_id", "user_id"),
+    )
+
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
