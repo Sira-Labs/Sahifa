@@ -94,11 +94,11 @@ gantt
 | S2 | Sign-in | Keycloak realm `sahifa`; Google and GitHub OAuth clients (`deploy/caprover.md`, section 4a) | ✅ 2 Oct |
 | S2 | Worker app | `sahifa-stg-worker` with its app token (`CAPROVER_APP_TOKEN_WORKER`) | ✅ 2 Oct |
 | S2 | Demo source | optional: a read-only login on a non-production Postgres to scan on staging (`SAHIFA_CONN_DEMO`) | open |
-| S2 | Staging checks | queue mode on the API with a test scan; a nightly schedule produces a scan the next morning; the score history on a connection with several scans; Delete Credential in the Keycloak realm | open |
+| S2 | Staging checks | queue mode on the API with a test scan; a nightly schedule produces a scan the next morning; the score history on a connection with several scans; Delete Credential in the Keycloak realm | ✅ 10 Oct (sign-in and hourly then nightly scans checked by the owner); Delete Credential open |
 | S3 | Upload size | `client_max_body_size 1024m;` on `sahifa-stg-web` (HTTP Settings → Edit Default Nginx Configurations) | open |
-| S3 | Production | production apps and the `production` environment for the promote dry run (S3-3) | open, needed ~6 Oct |
+| S3 | Production | production apps and the `production` environment for the promote dry run (S3-3) | postponed by the owner (10 Oct) |
 | S3 | ISO/IEC 25024 | buy the standard text so the catalogue can cite measure identifiers | open, optional |
-| S4 | Mail | an SMTP account (or a transactional mail service) for invitations and, in S8, alerts | needed ~8 Oct |
+| S4 | Mail | an SMTP account (or a transactional mail service) for invitation emails and, in S8, alerts | later: invitations work by link (S4b-1) |
 | S6 | Tabayyun wheel | publish `tabayyun_core` wheels (Tabayyun release job) so Sahifa can depend on it | needed ~15 Oct |
 | S7 | Warehouses | Snowflake and BigQuery test accounts (trial or sandbox) | needed ~18 Oct |
 | S7 | SAP | a HANA Cloud trial (or a HANA/Datasphere instance) with a read-only user; for the SAP pack, read access to `DD03L`, `DD08L`, `TCURC`, `T006`; ideally an anonymised S/4HANA sample (ADR-0014) | needed ~18 Oct |
@@ -152,9 +152,22 @@ a workspace, and every change is in an audit log.
 |---|---|---|---|---|
 | S4-1 | Organisations, workspaces and memberships; connections owned by a workspace; roles viewer, editor and admin; row-level security in Postgres (ADR-0010); the admin changes roles and removes members | M | a viewer cannot change a check, and another workspace's connections, scans and findings are invisible | ✅ spec 016 |
 | S4-2 | Role matrix test: every route against every role, cross-workspace → 404 | M | the matrix test is green and fails when a route loses its check | ✅ spec 017 |
-| S4-3 | Invitations by email, replacing the allowed-emails list; deleting workspaces (member management moved to S4-1 by the owner, 10 Oct) | S | an invited person signs in and lands in the right workspace | |
+| S4-3 | Invitations by email, replacing the allowed-emails list; deleting workspaces (member management moved to S4-1 by the owner, 10 Oct) | S | an invited person signs in and lands in the right workspace | → S4b-1 (by link, no SMTP) |
 | S4-4 | Audit log of changes (who, what, when, before and after) with a page for admins | S | approving a check or muting a finding appears in the log | ✅ spec 018 |
 | S4-5 | Security follow-ups from spec 012: secret scanning in CI; Caddy as a non-root user | S | CI fails on a committed test secret; the web image runs as non-root | ✅ spec 019 |
+
+## Sprint 4b — ready for test users (inserted 10 Oct)
+
+Goal: a test user can install Sahifa in their own environment, point it at their databases and
+files, get in by an invitation link and reach a first report without help. The owner moved this
+sprint ahead of sprint 5 on 10 Oct; production stays postponed, and staging serves demos.
+
+| ID | Story | Prio | Done when | Status |
+|---|---|---|---|---|
+| S4b-1 | Invitations by a link an admin copies (no SMTP yet; email can be added later), replacing `SAHIFA_ALLOWED_EMAILS`; deleting workspaces | M | an invited person opens the link, signs in and lands in the right workspace with the right role | |
+| S4b-2 | Install in your own environment: a quick start for the compose bundle against the user's own databases and folders of files; the connection check shows what the login may read and warns when it may write (the database role should be read-only) | M | on a fresh machine the quick start scans a Postgres database and a folder of files, and a login with write rights is flagged | |
+| S4b-3 | First run: demo data in one click, a guided first scan, empty states and error texts that say what to do | S | a new person reaches a first report without reading the docs | |
+| S4b-4 | Stable for test users: versioned images to install, error reporting, a backup and restore guide for self-hosters, a short note on uploaded data, a feedback link | S | a test user installs a tagged version, and an error in the API is visible to the operator with its request id | |
 
 ## Sprint 5 — metric history, anomalies, drift (R2)
 

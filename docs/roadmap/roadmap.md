@@ -12,15 +12,15 @@
 - **Public dates:** the product page (`site/index.html`) shows the public plan, deliberately
   more conservative than this forecast.
 
-## Where we are (7 Oct 2026)
+## Where we are (10 Oct 2026)
 
 | | |
 |---|---|
-| **Phase** | R1 released as **0.1** on 9 Oct (`v0.1.0` pre-release, staging only); R2 starts with sprint 4 |
-| **Done** | R0; sprints 1–3: scan end to end, sign-in, checks lifecycle, worker, findings across scans, schedules, score history, security baseline, performance run, accuracy benchmark, release 0.1 |
+| **Phase** | R1 released as **0.1** on 9 Oct (`v0.1.0` pre-release, staging only); R2 under way |
+| **Done** | R0; sprints 1–3; sprint 4 except invitations: workspaces and roles, role matrix, audit log, security follow-ups |
 | **In review** | — |
-| **Next** | Sprint 4: workspaces, roles, audit, security follow-ups |
-| **Waiting on the owner** | the G1 staging check (sign-in with three methods, a scheduled scan, the score history); nginx upload size on `sahifa-stg-web`; Delete Credential in Keycloak; production apps for the promote dry run; an SMTP account for sprint 4 |
+| **Next** | Sprint 4b, ready for test users (inserted by the owner on 10 Oct): invitation links, install in your own environment, first run, stability. Then sprint 5 |
+| **Waiting on the owner** | nginx upload size on `sahifa-stg-web`; Delete Credential in Keycloak; applying the updated `protect-main` ruleset. Production is postponed |
 
 ## How to follow
 
@@ -210,3 +210,4 @@ site/            product page for siralabs.org
 | 2026-10-03 | Roadmap version 2: status, gates, risks; sprints 4–12 planned to story level |
 | 2026-10-07 | Spec 014, accuracy benchmark (PR #24): 100 % detection on a full read, a silent clean twin; locked `range` baselines raise false alarms on new data (follow-up, sprint 5) |
 | 2026-10-09 | **Release 0.1** (spec 015): `v0.1.0` published as a pre-release; R1 complete on staging. Dependabot updates (Python 3.14, Vite 8) merged with it (PR #26) |
+| 2026-10-10 | Specs 016–019 (PRs #28–#31): workspaces and roles with row-level security, role matrix, audit log, secret scanning and a non-root web image. The owner postpones production and inserts sprint 4b, ready for test users |
