@@ -3,8 +3,8 @@ import { useId, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { formatLocalTime } from "../format";
-import type { Connection, Member, Workspace, WorkspaceRole } from "../types";
-import { useMe } from "../workspace";
+import type { Connection, Invitation, InvitationCreated, Member, Workspace, WorkspaceRole } from "../types";
+import { setWorkspaceFilter, useMe, useWorkspaceFilter } from "../workspace";
 
 const ROLES: { value: WorkspaceRole; label: string }[] = [
   { value: "viewer", label: "Viewer" },
@@ -253,6 +253,196 @@ function Members({ workspace, selfId }: { workspace: Workspace; selfId: string |
   );
 }
 
+function CreatedLink({ created }: { created: InvitationCreated }) {
+  const linkId = useId();
+  const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(created.link);
+      setCopied("yes");
+    } catch {
+      setCopied("failed");
+    }
+  }
+  return (
+    <div className="stack-xs" role="status">
+      <p>
+        Invitation for <strong className="break-anywhere">{created.email}</strong> as {created.role}. Send this link yourself; it
+        is shown only now and works once, until {formatLocalTime(created.expires_at)}.
+      </p>
+      <div className="inline-form">
+        <label htmlFor={linkId} className="sr-only">
+          Invitation link
+        </label>
+        <input id={linkId} className="input" readOnly value={created.link} onFocus={(e) => e.target.select()} />
+        <button type="button" className="btn btn-small" onClick={() => void copy()}>
+          {copied === "yes" ? "Copied" : "Copy link"}
+        </button>
+      </div>
+      {copied === "failed" && <p className="muted text-sm">Copying is blocked here; select the link and copy it by hand.</p>}
+    </div>
+  );
+}
+
+function InvitationRow({ invitation, workspace }: { invitation: Invitation; workspace: Workspace }) {
+  const client = useQueryClient();
+  const revoke = useMutation({
+    mutationFn: () => api.revokeInvitation(invitation.id),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ["invitations", workspace.id] }),
+  });
+  return (
+    <li className="row-actions">
+      <span>
+        <span className="break-anywhere">{invitation.email}</span> <span className="muted text-sm">as {invitation.role}</span>{" "}
+        <span className="tag">{invitation.status}</span>
+      </span>
+      {invitation.status === "open" && (
+        <button
+          type="button"
+          className="btn btn-small btn-quiet"
+          disabled={revoke.isPending}
+          aria-label={`Revoke the invitation of ${invitation.email}`}
+          onClick={() => revoke.mutate()}
+        >
+          Revoke
+        </button>
+      )}
+      {revoke.isError && (
+        <p role="alert" className="text-bad text-sm">
+          {revoke.error.message}
+        </p>
+      )}
+    </li>
+  );
+}
+
+/** Invitations by link (spec 020): the link is shown once, right after creating it. */
+function Invitations({ workspace }: { workspace: Workspace }) {
+  const client = useQueryClient();
+  const emailId = useId();
+  const roleId = useId();
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<WorkspaceRole>("viewer");
+  const [created, setCreated] = useState<InvitationCreated | null>(null);
+  const list = useQuery({ queryKey: ["invitations", workspace.id], queryFn: () => api.listInvitations(workspace.id) });
+  const create = useMutation({
+    mutationFn: () => api.createInvitation(workspace.id, email.trim(), role),
+    onSuccess: (done) => {
+      setCreated(done);
+      setEmail("");
+      void client.invalidateQueries({ queryKey: ["invitations", workspace.id] });
+    },
+  });
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (email.trim()) create.mutate();
+  }
+
+  const shown = (list.data ?? []).filter((i) => i.status === "open" || i.status === "accepted").slice(0, 10);
+  return (
+    <div className="stack-sm">
+      <h4>Invite by link</h4>
+      <form className="inline-form" aria-label={`Invite to ${workspace.name}`} onSubmit={submit}>
+        <label htmlFor={emailId} className="field-label">
+          Email
+        </label>
+        <input
+          id={emailId}
+          type="email"
+          className="input"
+          maxLength={254}
+          value={email}
+          autoComplete="off"
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <label htmlFor={roleId} className="field-label">
+          as
+        </label>
+        <select id={roleId} className="input input-small" value={role} onChange={(e) => setRole(e.target.value as WorkspaceRole)}>
+          {ROLES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="btn btn-primary btn-small" disabled={create.isPending || !email.trim()}>
+          Create link
+        </button>
+      </form>
+      {create.isError && (
+        <p role="alert" className="text-bad">
+          {create.error.message}
+        </p>
+      )}
+      {created && <CreatedLink created={created} />}
+      {list.isError && <p className="text-bad text-sm">Could not load the invitations: {list.error.message}</p>}
+      {shown.length > 0 && (
+        <ul className="plain-list stack-xs" aria-label={`Invitations to ${workspace.name}`}>
+          {shown.map((i) => (
+            <InvitationRow key={i.id} invitation={i} workspace={workspace} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Deleting a workspace (spec 020, org admin): the name must be typed to confirm. */
+function DeleteWorkspace({ workspace }: { workspace: Workspace }) {
+  const id = useId();
+  const refresh = useRefresh();
+  const filter = useWorkspaceFilter();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const remove = useMutation({
+    mutationFn: () => api.deleteWorkspace(workspace.id, typed.trim()),
+    onSuccess: () => {
+      if (filter === workspace.id) setWorkspaceFilter(null);
+      refresh();
+    },
+  });
+  if (!open) {
+    return (
+      <div>
+        <button type="button" className="btn btn-small btn-quiet" onClick={() => setOpen(true)}>
+          Delete workspace…
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="stack-sm" role="group" aria-label={`Delete ${workspace.name}`}>
+      <p>
+        Deleting <strong>{workspace.name}</strong> removes its uploads, scans, checks, findings, history, members, invitations and
+        audit entries. It cannot be undone. Connections from the server's settings must be moved to another workspace first.
+      </p>
+      <div className="inline-form">
+        <label htmlFor={id} className="field-label">
+          Type the name to confirm
+        </label>
+        <input id={id} className="input" value={typed} autoComplete="off" onChange={(e) => setTyped(e.target.value)} />
+        <button
+          type="button"
+          className="btn btn-small btn-danger"
+          disabled={typed.trim() !== workspace.name || remove.isPending}
+          onClick={() => remove.mutate()}
+        >
+          Delete
+        </button>
+        <button type="button" className="btn btn-small btn-quiet" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {remove.isError && (
+        <p role="alert" className="text-bad">
+          {remove.error.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MoveConnection({ connection, workspaces }: { connection: Connection; workspaces: Workspace[] }) {
   const id = useId();
   const refresh = useRefresh();
@@ -328,6 +518,7 @@ function WorkspaceCard({
       </div>
       {admin && <Rename workspace={workspace} />}
       {admin && <Members workspace={workspace} selfId={selfId} />}
+      {admin && <Invitations workspace={workspace} />}
       {orgAdmin && own.length > 0 && (
         <div className="stack-sm">
           <h3>Connections</h3>
@@ -338,12 +529,14 @@ function WorkspaceCard({
           </ul>
         </div>
       )}
+      {orgAdmin && !workspace.is_default && <DeleteWorkspace workspace={workspace} />}
     </section>
   );
 }
 
-/** `/workspaces` (spec 016): the workspaces the person administers, with rename and members;
- * the org admin also creates workspaces and moves connections between them. */
+/** `/workspaces` (spec 016): the workspaces the person administers, with rename, members and
+ * invitation links (spec 020); the org admin also creates, deletes and moves connections
+ * between workspaces. */
 export function Workspaces() {
   const me = useMe();
   const workspaces = useQuery({ queryKey: ["workspaces"], queryFn: api.listWorkspaces });

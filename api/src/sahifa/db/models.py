@@ -1,5 +1,5 @@
 """Tables of migrations 0001 (spec 004), 0002 (spec 006), 0003 (spec 007), 0004 (spec 008), 0005
-(spec 009), 0006 (spec 010), 0007 (spec 011), 0008 (spec 016) and 0009 (spec 018).
+(spec 009), 0006 (spec 010), 0007 (spec 011), 0008 (spec 016), 0009 (spec 018) and 0010 (spec 020).
 
 Every workspace-owned table carries `workspace_id` under row-level security (spec 016). On all but
 `connections` a database trigger fills it from the parent row, so the ORM never sets it there.
@@ -545,3 +545,34 @@ class AuditEvent(Base):
     summary: Mapped[str] = mapped_column(Text)
     before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class Invitation(Base):
+    """An invitation to a workspace by link (spec 020). Only the SHA-256 of the link's token is
+    stored. Under row-level security: accepting reads it as the system, the token being the proof."""
+
+    __tablename__ = "invitations"
+    __table_args__ = (
+        CheckConstraint(f"role IN {ROLES}", name="ck_invitations_role"),
+        CheckConstraint("email = lower(email)", name="ck_invitations_email_lower"),
+        # One open invitation per workspace and address; a new one revokes the old.
+        Index(
+            "uq_invitations_open",
+            "workspace_id",
+            "email",
+            unique=True,
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(String(20))
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -30,6 +30,7 @@ from .routers import (
     findings,
     health,
     history,
+    invitations,
     scans,
     schedules,
     workspaces,
@@ -124,6 +125,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     if settings.resolved_auth_mode == "proxy" and settings.oidc_issuer:
         log.warning("auth.mode", detail="SAHIFA_OIDC_ISSUER is set but SAHIFA_AUTH_MODE resolves to proxy")
+    if settings.allowed_emails.strip():
+        log.warning(
+            "settings.deprecated",
+            setting="SAHIFA_ALLOWED_EMAILS",
+            detail="invitation links replace it (spec 020); it is removed in the next release",
+        )
     async with AsyncExitStack() as stack:
         if settings.scan_execution == "queue":
             await stack.enter_async_context(jobs.opened(settings, "api"))
@@ -218,6 +225,9 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     app.include_router(history.router, dependencies=protected)
     app.include_router(workspaces.router, dependencies=protected)
     app.include_router(audit.router, dependencies=protected)
+    app.include_router(invitations.router, dependencies=protected)
+    # A signed-in person without a workspace looks up and accepts an invitation (spec 020).
+    app.include_router(invitations.token_router)
     return app
 
 

@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "../auth";
-import type { Connection, Member, StoredFinding, Workspace } from "../types";
+import type { Connection, Invitation, InvitationCreated, Member, StoredFinding, Workspace } from "../types";
 import { VIEWER_REASON, setWorkspaceFilter } from "../workspace";
 import { DEFAULT_WORKSPACE, DEV_ME, ME, json, renderApp, stubFetch } from "./helpers";
 
@@ -149,6 +149,17 @@ describe("/workspaces (spec 016)", () => {
     { user_id: "u2", email: "bo@example.org", display_name: "Bo", role: "viewer", last_login_at: "2026-10-09T08:00:00Z" },
   ];
   const ORG_ADMIN: Me = { ...DEV_ME, workspaces: [DEFAULT_WORKSPACE, { ...FINANCE, role: "admin" }] };
+  const invitation: Invitation = {
+    id: "i1",
+    workspace_id: DEFAULT_WORKSPACE.id,
+    email: "cy@example.org",
+    role: "editor",
+    created_at: "2026-10-10T08:00:00Z",
+    expires_at: "2026-10-17T08:00:00Z",
+    status: "open",
+    accepted_at: null,
+  };
+  const created: InvitationCreated = { ...invitation, id: "i2", email: "dee@example.org", link: "https://sahifa.test/invite#tok123" };
 
   function serve() {
     return stubFetch(
@@ -156,6 +167,10 @@ describe("/workspaces (spec 016)", () => {
         const method = init?.method ?? "GET";
         if (url === "/api/workspaces" && method === "GET") return workspaces;
         if (url === "/api/workspaces" && method === "POST") return json({ ...workspaces[1], id: "w3", name: "Ops" }, 201);
+        if (url.endsWith("/invitations") && method === "POST") return json(created, 201);
+        if (url.endsWith("/invitations")) return url.includes(DEFAULT_WORKSPACE.id) ? [invitation] : [];
+        if (url.startsWith("/api/invitations/") && method === "DELETE") return new Response(null, { status: 204 });
+        if (url === `/api/workspaces/${FINANCE.id}` && method === "DELETE") return new Response(null, { status: 204 });
         if (url.startsWith("/api/workspaces/") && url.endsWith("/members")) return url.includes(DEFAULT_WORKSPACE.id) ? members : [];
         if (url.includes("/members/")) return method === "DELETE" ? new Response(null, { status: 204 }) : members[0];
         if (url.startsWith("/api/workspaces/") && method === "PATCH") return workspaces[0];
@@ -215,5 +230,40 @@ describe("/workspaces (spec 016)", () => {
     await waitFor(() =>
       expect(sent(fetch, "PUT", "/api/connections/c0000000-0000-4000-8000-000000000001/workspace")).toEqual({ workspace_id: FINANCE.id }),
     );
+  });
+  it("creates an invitation link, shows it once and revokes an open one (spec 020)", async () => {
+    const fetch = serve();
+    renderApp("/workspaces");
+    const user = userEvent.setup();
+    const form = await screen.findByRole("form", { name: "Invite to Default" });
+    await user.type(within(form).getByRole("textbox", { name: "Email" }), "dee@example.org");
+    await user.selectOptions(within(form).getByRole("combobox", { name: "as" }), "editor");
+    await user.click(within(form).getByRole("button", { name: "Create link" }));
+    await waitFor(() =>
+      expect(sent(fetch, "POST", `/api/workspaces/${DEFAULT_WORKSPACE.id}/invitations`)).toEqual({ email: "dee@example.org", role: "editor" }),
+    );
+    const link = await screen.findByRole("textbox", { name: "Invitation link" });
+    expect((link as HTMLInputElement).value).toBe("https://sahifa.test/invite#tok123");
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(writeText).toHaveBeenCalledWith("https://sahifa.test/invite#tok123");
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Revoke the invitation of cy@example.org" }));
+    await waitFor(() => expect(sent(fetch, "DELETE", "/api/invitations/i1")).toBe(null));
+  });
+
+  it("deletes a workspace only after its name is typed (spec 020)", async () => {
+    const fetch = serve();
+    renderApp("/workspaces");
+    const user = userEvent.setup();
+    const finance = (await screen.findByRole("heading", { name: "Finance" })).closest("section")!;
+    expect(within(screen.getByRole("heading", { name: /Default/ }).closest("section")!).queryByRole("button", { name: /Delete workspace/ })).toBeNull();
+    await user.click(within(finance).getByRole("button", { name: "Delete workspace…" }));
+    const confirm = within(finance).getByRole("button", { name: "Delete" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    await user.type(within(finance).getByRole("textbox", { name: "Type the name to confirm" }), "Finance");
+    await user.click(confirm);
+    await waitFor(() => expect(sent(fetch, "DELETE", `/api/workspaces/${FINANCE.id}`)).toEqual({ confirm: "Finance" }));
   });
 });

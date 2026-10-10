@@ -27,7 +27,7 @@ from sahifa.auth.deps import DEV_PRINCIPAL
 from sahifa.db import SYSTEM
 
 from .conftest import needs_db
-from .tenancy import add_member, make_tree, make_workspace, user_id
+from .tenancy import add_member, make_tree, make_workspace, sql, user_id
 from .test_auth_flow import ADMIN, Env, browser, sign_in
 from .test_auth_flow import env as env  # the fixture
 
@@ -63,6 +63,9 @@ SESSION = {
     ("GET", "/api/auth/sessions"),
     ("DELETE", "/api/auth/sessions/{session_id}"),
     ("POST", "/api/auth/sessions/revoke-others"),
+    # A person without a workspace looks up and accepts an invitation (spec 020).
+    ("POST", "/api/invitations/lookup"),
+    ("POST", "/api/invitations/accept"),
 }
 
 
@@ -115,6 +118,27 @@ def _schedule() -> dict[str, Any]:
 
 def _target_is_member(w: World) -> None:
     add_member(w.owner, w.a, TARGET, "viewer")
+
+
+def _open_invitation(w: World) -> Call:
+    """A new open invitation in A, to revoke."""
+    iid = str(uuid.uuid4())
+    sql(
+        w.owner,
+        "INSERT INTO invitations (id, workspace_id, email, role, token_hash, expires_at)"
+        " VALUES (:i, :w, :e, 'viewer', decode(md5(:h), 'hex'), now() + interval '1 day')",
+        i=iid,
+        h=iid,
+        w=w.a,
+        e=f"{_name()}@example.org",
+    )
+    return f"/api/invitations/{iid}", {}
+
+
+def _spare_workspace(w: World) -> Call:
+    """A new empty workspace, to delete."""
+    name = _name()
+    return f"/api/workspaces/{make_workspace(w.owner, name)}", {"json": {"confirm": name}}
 
 
 OPS: tuple[Op, ...] = (
@@ -387,6 +411,30 @@ OPS: tuple[Op, ...] = (
         lambda w: ("/api/audit", {"params": {"object_id": w.tree["connection"]}}),
         listed=lambda w: w.tree["audit"],
     ),
+    # Invitations (spec 020)
+    Op(
+        "POST",
+        "/api/workspaces/{workspace_id}/invitations",
+        "admin",
+        "object",
+        201,
+        lambda w: (
+            f"/api/workspaces/{w.a}/invitations",
+            {"json": {"email": f"{_name()}@example.org", "role": "viewer"}},
+        ),
+        rls=False,
+    ),
+    Op(
+        "GET",
+        "/api/workspaces/{workspace_id}/invitations",
+        "admin",
+        "object",
+        200,
+        lambda w: (f"/api/workspaces/{w.a}/invitations", {}),
+        rls=False,
+    ),
+    Op("DELETE", "/api/invitations/{invitation_id}", "admin", "object", 204, _open_invitation),
+    Op("DELETE", "/api/workspaces/{workspace_id}", "org_admin", "object", 204, _spare_workspace, rls=False),
     Op(
         "GET",
         "/api/users",
@@ -526,8 +574,12 @@ async def test_session_routes(setup: tuple[World, dict[str, AsyncClient]]) -> No
             (await c.get("/api/auth/sessions")).status_code,
             (await c.delete(f"/api/auth/sessions/{uuid.uuid4()}")).status_code,
             (await c.post("/api/auth/sessions/revoke-others")).status_code,
+            # An unknown token: the route answers for any signed-in person (spec 020).
+            (await c.post("/api/invitations/lookup", json={"token": "x" * 43})).status_code,
+            (await c.post("/api/invitations/accept", json={"token": "x" * 43})).status_code,
         ]
-        assert answers == ([401] * 3 if caller == "anonymous" else [200, 404, 204]), (caller, answers)
+        expected = [401] * 5 if caller == "anonymous" else [200, 404, 204, 404, 404]
+        assert answers == expected, (caller, answers)
 
 
 def operations(app: FastAPI) -> set[tuple[str, str]]:

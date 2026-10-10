@@ -87,8 +87,8 @@ On every pull request and push to `main`, CI builds `web/Dockerfile` without pus
 - [x] The compose bundle upgrades an existing `caddy_data` volume without a manual step.
 - [x] `docs/security/baseline.md` ticks both items, naming the checks. Spec 012's open-items
       line points here.
-- [ ] Staging serves the web app after the deploy, with the same headers as before.
-      Checked after the merge, when the release workflow deploys the image.
+- [x] Staging serves the web app after the deploy, with the same headers as before.
+      Checked after the merge (2464d68): identical headers, web, api and worker on the commit.
 - [x] `make lint` and `make test` pass.
 
 ## Test cases

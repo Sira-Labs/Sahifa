@@ -111,9 +111,9 @@ caproverOneClickApp:
       defaultValue: ''
       description: For oidc, the administrator's address; always has access.
     - id: $$cap_allowed_emails
-      label: Allowed emails (optional)
+      label: Allowed emails (optional, deprecated)
       defaultValue: ''
-      description: For oidc, further addresses with access, comma-separated. Everyone else sees "No access yet".
+      description: Deprecated, removed in the next release. For oidc, further addresses with access, comma-separated. Invite people by link on /workspaces instead.
     - id: $$cap_demo_source
       label: Database to assess (optional)
       defaultValue: ''

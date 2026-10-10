@@ -208,6 +208,24 @@ next session reads). Sprint priorities, actual dates and the forecast live in
         for organisation repositories); a self-test with a generated token proves the gate.
       - Caddy as uid 10001 with the bind capability; a one-shot `web-volume` service in compose
         re-owns old certificate volumes. CapRover's web app has no volume, so nothing changes there.
+- [ ] S4-3 invitations by email: moved to S4b-1 as invitation links (no SMTP yet).
+
+## Sprint 4b — ready for test users (inserted by the owner, 10 Oct)
+
+Production is postponed. Test users install Sahifa in their own environment, with their own
+databases and files, and get in by invitation link; staging serves demos.
+
+- [x] **020 Invitations by link, deleting workspaces** — `docs/specs/020-invitation-links.md` (S4b-1)
+      - The token never reaches a URL the server sees: link fragment, then sessionStorage, then
+        request bodies; only its SHA-256 is stored. Accepting reads as the system, the token
+        being the proof.
+      - Token tries have their own rate-limit bucket per session, not the sign-in bucket per address.
+      - `SAHIFA_ALLOWED_EMAILS` still works and logs a deprecation; the next release removes it.
+- [ ] S4b-2 install in your own environment; the connection check shows what the login may read
+      and warns when it may write.
+- [ ] S4b-3 first run: demo data, guided first scan, empty states, error texts.
+- [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
+      feedback link.
 
 ## Owner
 

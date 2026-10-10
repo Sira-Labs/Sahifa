@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.access import Access
-from ..auth.deps import actor_of
+from ..auth.deps import Principal, actor_of
 from ..db.models import AuditEvent
 
 # The past-tense verb of each check and finding action, for summaries.
@@ -34,7 +34,7 @@ VERBS = {
 
 def record(
     db: AsyncSession,
-    caller: Access,
+    caller: Access | Principal,
     *,
     action: str,
     workspace_id: uuid.UUID,
@@ -44,11 +44,13 @@ def record(
     before: dict[str, Any] | None = None,
     after: dict[str, Any] | None = None,
 ) -> AuditEvent:
-    """Add the entry to the session; it is written with the route's commit."""
+    """Add the entry to the session; it is written with the route's commit. `caller` is a
+    principal for a person who has no workspace yet (accepting an invitation, spec 020)."""
+    principal = caller if isinstance(caller, Principal) else caller.principal
     event = AuditEvent(
         workspace_id=workspace_id,
-        user_id=caller.principal.user_id,
-        actor=actor_of(caller.principal),
+        user_id=principal.user_id,
+        actor=actor_of(principal),
         action=action,
         object_type=object_type,
         object_id=object_id,

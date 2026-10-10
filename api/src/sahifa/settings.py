@@ -73,7 +73,10 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr | None = None
     session_secret: SecretStr | None = None
     admin_email: str | None = None
+    # Deprecated by invitations (spec 020): still honoured, removed in the next release.
     allowed_emails: str = ""
+    # Spec 020: how long an invitation link works.
+    invitation_ttl_days: int = Field(default=7, ge=1, le=90)
     # Spec 016: the organisation's name, shown in the header and stored on start.
     org_name: str = Field(default="Sahifa", min_length=1, max_length=200)
     sign_in_methods: str = ",".join(SIGN_IN_METHODS)

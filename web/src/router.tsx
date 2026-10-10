@@ -7,6 +7,7 @@ import { Audit } from "./pages/Audit";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
 import { FindingPage, FindingsAcross } from "./pages/FindingsAcross";
+import { Invite } from "./pages/Invite";
 import { Layout } from "./pages/Layout";
 import { Login } from "./pages/Login";
 import { NewScan } from "./pages/NewScan";
@@ -94,6 +95,9 @@ const loginRoute = createRoute({
   component: Login,
 });
 
+// Accepting an invitation (spec 020): outside the app layout, which needs a workspace.
+const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "/invite", component: Invite });
+
 export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     scansRoute,
@@ -109,6 +113,7 @@ export const routeTree = rootRoute.addChildren([
     accountRoute,
   ]),
   loginRoute,
+  inviteRoute,
 ]);
 
 /** The app router; tests pass a memory history. A 401 from any API call goes to /login with
