@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import TypeVar
+from typing import NoReturn, TypeVar
 
 from fastapi import HTTPException, Request
 from sqlalchemy import select
@@ -88,16 +88,35 @@ class Access:
         """403 `forbidden_role` unless the principal has at least `needs` in the workspace."""
         if self.allows(workspace_id, needs):
             return
-        role = self.role_in(workspace_id)
+        self._deny(needs, action=action, role=self.role_in(workspace_id), workspace_id=workspace_id)
+
+    @property
+    def best_role(self) -> str | None:
+        """The principal's highest role in any workspace."""
+        return max((w.role for w in self.workspaces.values()), key=RANK.__getitem__, default=None)
+
+    def _deny(
+        self, needs: str, *, action: str, role: str | None, workspace_id: uuid.UUID | None = None
+    ) -> NoReturn:
         log.info(
             "rbac.denied",
             user_id=str(self.principal.user_id) if self.principal.user_id else None,
-            workspace_id=str(workspace_id),
+            workspace_id=str(workspace_id) if workspace_id else None,
             action=action,
             role=role,
             needs=needs,
         )
         raise ForbiddenRoleError(role, needs)
+
+    def require_org_admin(self, *, action: str) -> None:
+        """403 `forbidden_role` (needs `org_admin`) unless the principal is the org admin."""
+        if not self.org_admin:
+            self._deny("org_admin", action=action, role=self.best_role)
+
+    def require_any(self, needs: str, *, action: str) -> None:
+        """403 `forbidden_role` unless the principal has at least `needs` in some workspace."""
+        if not any(self.allows(w, needs) for w in self.workspaces):
+            self._deny(needs, action=action, role=self.best_role)
 
     def pick(self, workspace_id: uuid.UUID | None, needs: str, *, action: str) -> uuid.UUID:
         """The workspace a new object goes to: the one named, checked; else the only one where
@@ -112,15 +131,7 @@ class Access:
         if len(able) == 1:
             return able[0]
         if not able:
-            best = max((w.role for w in self.workspaces.values()), key=RANK.__getitem__, default=None)
-            log.info(
-                "rbac.denied",
-                user_id=str(self.principal.user_id) if self.principal.user_id else None,
-                action=action,
-                role=best,
-                needs=needs,
-            )
-            raise ForbiddenRoleError(best, needs)
+            self._deny(needs, action=action, role=self.best_role)
         raise WorkspaceRequiredError
 
 

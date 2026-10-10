@@ -191,6 +191,12 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - An allowed email removed from every workspace comes back as an editor of `Default`
         until it leaves `SAHIFA_ALLOWED_EMAILS` (S4-3 retires the setting).
       - Tests that create workspaces delete them afterwards; the older tests assume one.
+- [x] **017 Role matrix: every route against every role** — `docs/specs/017-role-matrix.md` (S4-2)
+      - 32 workspace operations × 7 callers agree with spec 016's table; three meta-tests show the
+        matrix fails without the role check, the workspace scope or the sign-in.
+      - Every role check is now an `Access` method, so there is one way for a route to check a
+        role and one place to switch them off in the meta-test.
+      - A new route fails `test_every_route_is_classified` until it has a line in the matrix.
 
 ## Owner
 

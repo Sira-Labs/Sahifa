@@ -69,7 +69,8 @@ def make_tree(owner: Engine, workspace_id: str, *, scan_status: str = "succeeded
     }
     statements = (
         "INSERT INTO connections (id, name, kind, workspace_id) VALUES (:connection, :name, 'duckdb', :ws)",
-        "INSERT INTO scans (id, connection_id, sample_rows, status) VALUES (:scan, :connection, 0, :status)",
+        "INSERT INTO scans (id, connection_id, sample_rows, status, report)"
+        " VALUES (:scan, :connection, 0, :status, '{}'::jsonb)",
         "INSERT INTO scan_schedules (id, connection_id, cron, updated_by, enabled)"
         " VALUES (:schedule, :connection, '0 2 * * *', 'test', false)",
         "INSERT INTO assets (id, connection_id, namespace, name, kind)"
