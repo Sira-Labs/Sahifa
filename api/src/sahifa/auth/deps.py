@@ -68,7 +68,7 @@ def no_access_body(email: str | None) -> dict[str, str | None]:
         "detail": "no_access",
         "email": email,
         "message": f"You are signed in{who}, but this address has no access to this Sahifa yet. "
-        "Ask a workspace admin to add you.",
+        "Ask a workspace admin for an invitation link.",
     }
 
 

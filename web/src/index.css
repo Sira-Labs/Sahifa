@@ -473,6 +473,11 @@ summary {
 .btn-quiet {
   background: transparent;
 }
+/* Irreversible actions (deleting a workspace, spec 020). */
+.btn-danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
 .fieldset {
   border: 0;
   padding: 0;

@@ -1,4 +1,4 @@
-// Thin fetch wrapper with one typed function per route of specs 004, 007, 009, 010 and 016. Every non-2xx answer
+// Thin fetch wrapper with one typed function per route of specs 004, 007, 009, 010, 016 and 020. Every non-2xx answer
 // becomes an ApiError carrying the API's `detail` as its message. Every request carries the
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
@@ -16,6 +16,10 @@ import type {
   FindingsSearch,
   Health,
   HistoryPoint,
+  Invitation,
+  InvitationAccepted,
+  InvitationCreated,
+  InvitationLookup,
   Page,
   Scan,
   ScanCreate,
@@ -315,4 +319,13 @@ export const api = {
     ),
   moveConnection: (id: string, workspaceId: string) =>
     apiSend<Connection>("PUT", `/api/connections/${enc(id)}/workspace`, { workspace_id: workspaceId }),
+  deleteWorkspace: (id: string, confirm: string) => apiSend<void>("DELETE", `/api/workspaces/${enc(id)}`, { confirm }),
+
+  // Invitations (spec 020). Tokens travel in request bodies only, never in a URL.
+  createInvitation: (workspaceId: string, email: string, role: WorkspaceRole) =>
+    apiSend<InvitationCreated>("POST", `/api/workspaces/${enc(workspaceId)}/invitations`, { email, role }),
+  listInvitations: (workspaceId: string) => apiGet<Invitation[]>(`/api/workspaces/${enc(workspaceId)}/invitations`),
+  revokeInvitation: (id: string) => apiSend<void>("DELETE", `/api/invitations/${enc(id)}`),
+  lookupInvitation: (token: string) => apiSend<InvitationLookup>("POST", "/api/invitations/lookup", { token }),
+  acceptInvitation: (token: string) => apiSend<InvitationAccepted>("POST", "/api/invitations/accept", { token }),
 };

@@ -33,6 +33,31 @@ export type Workspace = {
 
 export type Member = { user_id: string; email: string; display_name: string; role: WorkspaceRole; last_login_at: string | null };
 
+/** An invitation as admins list it (spec 020); the link only comes with `InvitationCreated`. */
+export type Invitation = {
+  id: string;
+  workspace_id: string;
+  email: string;
+  role: WorkspaceRole;
+  created_at: string;
+  expires_at: string;
+  status: "open" | "accepted" | "revoked" | "expired";
+  accepted_at: string | null;
+};
+
+export type InvitationCreated = Invitation & { link: string };
+
+/** What a link does, for `/invite`; the email is masked. */
+export type InvitationLookup = {
+  workspace: { id: string; name: string };
+  role: WorkspaceRole;
+  email: string;
+  invited_by: string | null;
+  expires_at: string;
+};
+
+export type InvitationAccepted = { workspace: { id: string; name: string }; role: WorkspaceRole };
+
 /** One change a person made (spec 018). */
 export type AuditEntry = {
   id: string;

@@ -18,6 +18,7 @@ export function Login() {
           <p className="eyebrow">Welcome</p>
           <h1 id="login-heading">Sign in</h1>
         </div>
+        {target === "/invite" && <p>Sign in to accept your invitation.</p>}
         {options.isPending && <p role="status">Loading sign-in options…</p>}
         {options.isError && (
           <ErrorPanel title="Could not reach the API" error={options.error} onRetry={() => void options.refetch()} />

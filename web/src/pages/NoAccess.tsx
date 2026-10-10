@@ -1,6 +1,8 @@
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { signOut } from "../auth";
 import { PlainFrame } from "../components/Brand";
+import { pendingInvitation } from "../invitation";
 
 /** Signed in, but neither the org admin nor a member of any workspace (403 `no_access`). */
 export function NoAccess({ email }: { email: string | null }) {
@@ -13,9 +15,17 @@ export function NoAccess({ email }: { email: string | null }) {
           You are signed in{email ? <> as <strong className="break-anywhere">{email}</strong></> : null}, but this address has no
           access to this Sahifa yet.
         </p>
-        <p className="muted">
-          Ask a workspace admin to add you, then reload this page. If you meant to use another account, sign out first.
-        </p>
+        {pendingInvitation() ? (
+          <p>
+            <Link to="/invite" className="btn btn-primary">
+              Continue with your invitation
+            </Link>
+          </p>
+        ) : (
+          <p className="muted">
+            Ask a workspace admin for an invitation link and open it. If you meant to use another account, sign out first.
+          </p>
+        )}
         <div>
           <button type="button" className="btn" onClick={() => signOut().catch((e: Error) => setError(e.message))}>
             Sign out
