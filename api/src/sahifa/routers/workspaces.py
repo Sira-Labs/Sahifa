@@ -18,11 +18,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth.access import Access
 from ..db import add_to_scope
 from ..db.models import Connection, Membership, Organisation, User, Workspace
-from ..deps import access, session
+from ..deps import access, session, settings
 from ..logging import get_logger
-from ..schemas import ConnectionOut, MemberIn, MemberOut, MoveIn, UserMatch, WorkspaceIn, WorkspaceOut
+from ..schemas import (
+    ConnectionOut,
+    MemberIn,
+    MemberOut,
+    MoveIn,
+    UserMatch,
+    WorkspaceDeleteIn,
+    WorkspaceIn,
+    WorkspaceOut,
+)
 from ..services import audit
-from ..services.workspaces import ScanRunningError, move_connection
+from ..services.uploads import delete_folder
+from ..services.workspaces import HasConnectionsError, ScanRunningError, delete_workspace, move_connection
+from ..settings import Settings
 from .connections import to_out as connection_out
 
 router = APIRouter(prefix="/api", tags=["workspaces"])
@@ -157,6 +168,72 @@ async def rename_workspace(
         return JSONResponse(status_code=409, content=NAME_TAKEN)
     log.info("workspace.renamed", workspace_id=str(ws.id), before=before, name=ws.name, actor=_actor(caller))
     return await _out(db, caller, ws)
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+async def remove_workspace(
+    workspace_id: uuid.UUID,
+    body: WorkspaceDeleteIn,
+    db: AsyncSession = Depends(session),
+    caller: Access = Depends(access),
+    cfg: Settings = Depends(settings),
+) -> Response:
+    """Delete a workspace and everything in it (org admin, spec 020). The name, repeated in the
+    body, confirms it; the default workspace and one holding `SAHIFA_CONN_*` connections stay."""
+    caller.require_org_admin(action="workspace.delete")
+    ws = await db.get(Workspace, workspace_id)
+    if ws is None:
+        raise HTTPException(404, "workspace not found")
+    if ws.is_default:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "default_workspace", "message": "The default workspace cannot be deleted."},
+        )
+    if body.confirm.strip() != ws.name:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "confirm_mismatch", "message": "Type the workspace's name to confirm."},
+        )
+    default = await db.scalar(select(Workspace).where(Workspace.is_default))
+    assert default is not None  # migration 0008 creates it
+    name = ws.name
+    try:
+        done = await delete_workspace(db, ws)
+    except HasConnectionsError as e:
+        await db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "workspace_has_connections",
+                "connections": e.names,
+                "message": "Move its connections to another workspace first: " + ", ".join(e.names),
+            },
+        )
+    except ScanRunningError:
+        await db.rollback()
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "scan_running", "message": "A scan in this workspace is queued or running."},
+        )
+    # The record outlives the workspace: it goes to the default workspace.
+    audit.record(
+        db,
+        caller,
+        action="workspace.deleted",
+        workspace_id=default.id,
+        object_type="workspace",
+        object_id=workspace_id,
+        summary=f"Deleted the workspace {name}",
+        before={"name": name, **done.counts},
+    )
+    await db.commit()
+    # Files after the commit: a rolled-back deletion keeps its uploads.
+    for folder in done.folders:
+        delete_folder(cfg.uploads_dir, folder)
+    log.info(
+        "workspace.deleted", workspace_id=str(workspace_id), name=name, actor=_actor(caller), **done.counts
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _member_out(user: User, role: str) -> MemberOut:

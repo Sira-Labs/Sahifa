@@ -326,6 +326,61 @@ class MoveIn(BaseModel):
     workspace_id: uuid.UUID
 
 
+# A plain shape check: the sign-in provider vouches for the address when it is accepted.
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class InvitationIn(BaseModel):
+    """An invitation to create (spec 020)."""
+
+    email: str = Field(min_length=3, max_length=254, pattern=EMAIL_PATTERN)
+    role: str = Field(pattern=ROLE_PATTERN)
+
+
+class InvitationOut(BaseModel):
+    """An invitation as admins list it: never with its link."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    email: str
+    role: str
+    created_at: datetime
+    expires_at: datetime
+    status: str  # open, accepted, revoked, expired
+    accepted_at: datetime | None = None
+
+
+class InvitationCreated(InvitationOut):
+    """The answer to creating one: the only time the link is shown."""
+
+    link: str
+
+
+class TokenIn(BaseModel):
+    token: str = Field(min_length=16, max_length=128)
+
+
+class InvitationLookup(BaseModel):
+    """What a link does, for the page that accepts it."""
+
+    workspace: WorkspaceRef
+    role: str
+    email: str  # masked
+    invited_by: str | None
+    expires_at: datetime
+
+
+class InvitationAccepted(BaseModel):
+    workspace: WorkspaceRef
+    role: str
+
+
+class WorkspaceDeleteIn(BaseModel):
+    """The workspace's name, repeated to confirm the deletion."""
+
+    confirm: str = Field(min_length=1, max_length=100)
+
+
 class AuditEntry(BaseModel):
     """One change a person made (spec 018)."""
 

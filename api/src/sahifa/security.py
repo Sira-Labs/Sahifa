@@ -226,6 +226,8 @@ class RateLimiter:
 
 UPLOAD_PATH = "/api/scans/upload"
 AUTH_FLOW_PATHS = frozenset({"/api/auth/login", "/api/auth/passkey/add", "/api/auth/callback"})
+# Trying invitation tokens (spec 020): a bucket of its own, per session like the others.
+INVITATION_PATHS = frozenset({"/api/invitations/lookup", "/api/invitations/accept"})
 SCAN_PATHS = frozenset({"/api/scans", UPLOAD_PATH})
 
 
@@ -235,6 +237,8 @@ def bucket_of(method: str, path: str, exempt: frozenset[str]) -> str | None:
         return None
     if path in AUTH_FLOW_PATHS:
         return "auth"
+    if path in INVITATION_PATHS:
+        return "invitations"
     if method == "POST" and path in SCAN_PATHS:
         return "scans"
     if method in BODY_METHODS:
@@ -297,6 +301,7 @@ def default_buckets(scans_per_hour: int) -> dict[str, Bucket]:
     """The rules of spec 012."""
     return {
         "auth": Bucket(limit=20, period_s=60),
+        "invitations": Bucket(limit=20, period_s=60),
         "scans": Bucket(limit=scans_per_hour, period_s=3600),
         "write": Bucket(limit=120, period_s=60),
         "read": Bucket(limit=1200, period_s=60),

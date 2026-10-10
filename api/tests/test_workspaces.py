@@ -1,9 +1,11 @@
-"""Workspaces, members, the user search, moving connections and `/me` (spec 016)."""
+"""Workspaces, members, the user search, moving connections and `/me` (spec 016); deleting a
+workspace (spec 020)."""
 
 from __future__ import annotations
 
 import uuid
 from contextlib import AsyncExitStack
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
@@ -172,3 +174,58 @@ async def test_allowed_email_becomes_editor_of_default_once(env: Env) -> None:
         e=ALLOWED,
     )
     assert rows == [(True, "editor")]
+
+
+async def test_deleting_a_workspace(env: Env, tmp_path: Path) -> None:
+    """Spec 020: the org admin deletes a workspace with its uploads, scans, findings, members,
+    invitations and audit entries; the record stays in the default workspace."""
+    wid = make_workspace(env.owner, f"Trial {uuid.uuid4().hex[:6]}")
+    name = sql(env.owner, "SELECT name FROM workspaces WHERE id = :w", w=wid)[0][0]
+    tree = make_tree(env.owner, wid)
+    folder = tmp_path / "uploads" / "batch-1"
+    folder.mkdir(parents=True)
+    (folder / "orders.csv").write_text("id\n1\n")
+    async with AsyncExitStack() as stack:
+        admin = await person(env, stack, ADMIN)
+        ana = await person(env, stack, ALLOWED)
+        add_member(env.owner, wid, ALLOWED, "admin")
+        target = f"/api/workspaces/{wid}"
+        has = await admin.request("DELETE", target, json={"confirm": name})
+        assert has.status_code == 409 and has.json()["connections"] == [f"t-{tree['connection']}"]
+        sql(
+            env.owner,
+            "UPDATE connections SET kind = 'upload',"
+            " config = jsonb_build_object('paths', jsonb_build_array(CAST(:p AS text))) WHERE id = :c",
+            p=str(folder / "orders.csv"),
+            c=tree["connection"],
+        )
+        await admin.post(f"{target}/invitations", json={"email": "new@example.org", "role": "viewer"})
+        denied = await ana.request("DELETE", target, json={"confirm": name})
+        assert denied.status_code == 403 and denied.json()["needs"] == "org_admin"
+        wrong = await admin.request("DELETE", target, json={"confirm": name.upper()})
+        assert wrong.status_code == 422 and wrong.json()["detail"] == "confirm_mismatch"
+        default = await admin.request(
+            "DELETE", f"/api/workspaces/{default_workspace(env.owner)}", json={"confirm": "Default"}
+        )
+        assert default.status_code == 409 and default.json()["detail"] == "default_workspace"
+        done = await admin.request("DELETE", target, json={"confirm": name})
+        assert done.status_code == 204, done.text
+        assert (await ana.get(target + "/invitations")).status_code == 404
+    for table in ("connections", "scans", "findings", "memberships", "invitations", "audit_events"):
+        assert sql(env.owner, f"SELECT count(*) FROM {table} WHERE workspace_id = :w", w=wid) == [(0,)], table
+    assert sql(env.owner, "SELECT count(*) FROM workspaces WHERE id = :w", w=wid) == [(0,)]
+    assert not folder.exists()
+    record = sql(
+        env.owner,
+        "SELECT workspace_id, before FROM audit_events WHERE action = 'workspace.deleted' AND object_id = :w",
+        w=wid,
+    )
+    assert len(record) == 1 and str(record[0][0]) == default_workspace(env.owner)
+    assert record[0][1] | {} == {
+        "name": name,
+        "uploads": 1,
+        "scans": 1,
+        "findings": 1,
+        "members": 1,
+        "invitations": 1,
+    }
