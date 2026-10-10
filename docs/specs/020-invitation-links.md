@@ -57,7 +57,7 @@ Google, GitHub or a passkey, and see our workspace, with nobody editing a server
 | `POST /api/workspaces/{id}/invitations` `{email, role}` | admin of the workspace, org admin | creates an invitation and returns it **with the link**, once |
 | `GET /api/workspaces/{id}/invitations` | admin of the workspace, org admin | open and recent invitations, without links |
 | `DELETE /api/invitations/{id}` | admin of its workspace, org admin | revokes an open invitation |
-| `GET /api/invitations/lookup?token=…` | anyone signed in | the workspace name, the role and the masked email, so the page can say what the link does |
+| `POST /api/invitations/lookup` `{token}` | anyone signed in | the workspace name, the role and the masked email, so the page can say what the link does; a POST keeps the token out of URLs |
 | `POST /api/invitations/accept` `{token}` | anyone signed in, with or without a workspace | accepts: creates or raises the membership |
 | `DELETE /api/workspaces/{id}` `{confirm: "<name>"}` | org admin | deletes a workspace (Behaviour 6) |
 
@@ -71,8 +71,8 @@ Google, GitHub or a passkey, and see our workspace, with nobody editing a server
   - accepted already: 409 `invitation_used`.
   - signed in with another address: 403 `invitation_other_email`, with the masked invited
     address (`b***@example.org`).
-- **Rate limit.** Lookup and accept count against the `auth` bucket of spec 012 (20 per minute
-  per client).
+- **Rate limit.** Lookup and accept have a bucket of their own next to those of spec 012: 20
+  per minute per session, so a token cannot be guessed by trying.
 - **Role matrix (spec 017).** The three invitation routes and workspace deletion join `OPS` with
   minimum role `admin` (deletion: org admin). Lookup and accept join the `SESSION` set.
 
