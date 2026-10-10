@@ -21,7 +21,7 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from procrastinate.schema import SchemaManager
 from sahifa_core.synth import write_shop
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from sahifa import jobs, main
@@ -33,7 +33,7 @@ from sahifa.services.scans import execute_scan
 from sahifa.services.uploads import clean_uploads, delete_folder
 from sahifa.settings import Settings
 
-from .conftest import CSRF, DB_URL, needs_db
+from .conftest import CSRF, DB_URL, DEFAULT_WORKSPACE, needs_db, owner_engine
 
 ROOT = Path(__file__).resolve().parents[2]
 WAIT_LIVE = ROOT / ".github" / "scripts" / "wait-live.sh"
@@ -59,7 +59,7 @@ def owner() -> Iterator[Engine]:
     are dropped so that each test's worker sees only its own."""
     assert DB_URL
     upgrade(DB_URL)
-    engine = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    engine = owner_engine()
     sql(engine, "DELETE FROM procrastinate_jobs WHERE status = 'todo'")
     yield engine
     engine.dispose()
@@ -128,7 +128,7 @@ async def test_queue_mode_runs_in_the_worker_like_inline(
         (f"scan:{queued['id']}",)
     ]
 
-    await jobs.work(queue_settings(tmp_path), db.sessions, queues=(jobs.SCANS,), wait=False)
+    await jobs.work(queue_settings(tmp_path), db.system, queues=(jobs.SCANS,), wait=False)
     done = await finished(queue_client, queued["id"])
     assert done["status"] == "succeeded", done["error"]
     assert job_of(owner, queued["id"]) == (job_id, "succeeded")
@@ -148,15 +148,15 @@ async def test_job_is_idempotent(
     files = write_shop(tmp_path / "shop", clean=True, rows=50)
     sid = (await upload(queue_client, files))["id"]
     settings = queue_settings(tmp_path)
-    await jobs.work(settings, db.sessions, queues=(jobs.SCANS,), wait=False)
+    await jobs.work(settings, db.system, queues=(jobs.SCANS,), wait=False)
     before = sql(owner, "SELECT status, started_at, finished_at, report FROM scans WHERE id = :s", s=sid)
     assert before[0][0] == "succeeded"
     findings = sql(owner, "SELECT count(*) FROM finding_occurrences WHERE scan_id = :s", s=sid)
 
     # A second job for the same scan, and a direct call, change nothing.
     second = await jobs._defer_scan(uuid.UUID(sid))
-    await jobs.work(settings, db.sessions, queues=(jobs.SCANS,), wait=False)
-    await execute_scan(db.sessions, settings, uuid.UUID(sid))
+    await jobs.work(settings, db.system, queues=(jobs.SCANS,), wait=False)
+    await execute_scan(db.system, settings, uuid.UUID(sid))
     assert (
         sql(owner, "SELECT status, started_at, finished_at, report FROM scans WHERE id = :s", s=sid) == before
     )
@@ -212,7 +212,7 @@ async def test_reaper_interrupts_scans_of_stalled_workers(
         )
         sql(owner, "UPDATE scans SET status = 'running', started_at = now() WHERE id = :s", s=sid)
     try:
-        interrupted, _ = await jobs.reap(db.sessions, queue_settings(tmp_path, reaper_stale_minutes=1))
+        interrupted, _ = await jobs.reap(db.system, queue_settings(tmp_path, reaper_stale_minutes=1))
         assert interrupted >= 1
         scan = (await queue_client.get(f"/api/scans/{stalled}")).json()
         assert scan["status"] == "failed" and scan["error"] == "interrupted: the worker stopped"
@@ -252,11 +252,11 @@ async def test_reaper_requeues_a_queued_scan_without_a_job(
             c=cid,
         )
     try:
-        _, requeued = await jobs.reap(db.sessions, queue_settings(tmp_path, reaper_stale_minutes=1))
+        _, requeued = await jobs.reap(db.system, queue_settings(tmp_path, reaper_stale_minutes=1))
         assert requeued >= 1
         assert job_of(owner, old)[1] == "todo"
         assert sql(owner, "SELECT job_id FROM scans WHERE id = :s", s=recent) == [(None,)]
-        await jobs.work(queue_settings(tmp_path), db.sessions, queues=(jobs.SCANS,), wait=False)
+        await jobs.work(queue_settings(tmp_path), db.system, queues=(jobs.SCANS,), wait=False)
         scan = (await queue_client.get(f"/api/scans/{old}")).json()
         assert scan["status"] == "succeeded", scan["error"]
     finally:
@@ -271,7 +271,8 @@ def make_upload(owner: Engine, root: Path, status: str, age_s: float) -> Path:
     (folder / "a.csv").write_text("id\n1\n")
     cid = sql(
         owner,
-        "INSERT INTO connections (id, name, kind, config) VALUES (gen_random_uuid(), :n, 'upload', '{}')"
+        "INSERT INTO connections (id, name, kind, config, workspace_id)"
+        f" VALUES (gen_random_uuid(), :n, 'upload', '{{}}', {DEFAULT_WORKSPACE})"
         " RETURNING id",
         n=f"upload-{batch}",
     )[0][0]
@@ -316,7 +317,7 @@ async def test_clean_uploads(owner: Engine, db: Database, tmp_path: Path) -> Non
     link.symlink_to(outside, target_is_directory=True)
     age(link, 2 * DAY)
     try:
-        cleaned = await clean_uploads(db.sessions, settings)
+        cleaned = await clean_uploads(db.system, settings)
         assert cleaned.folders == 3 and cleaned.bytes == 2 * len("id\n1\n") + len("x\n")
         assert not old_done.exists() and not old_failed.exists() and not orphan_old.exists()
         assert recent_done.exists() and running.exists() and queued.exists() and orphan_new.exists()

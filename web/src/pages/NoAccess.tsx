@@ -2,7 +2,7 @@ import { useState } from "react";
 import { signOut } from "../auth";
 import { PlainFrame } from "../components/Brand";
 
-/** Signed in, but the address is neither the admin email nor an allowed one (403 `no_access`). */
+/** Signed in, but neither the org admin nor a member of any workspace (403 `no_access`). */
 export function NoAccess({ email }: { email: string | null }) {
   const [error, setError] = useState<string | null>(null);
   return (
@@ -14,8 +14,7 @@ export function NoAccess({ email }: { email: string | null }) {
           access to this Sahifa yet.
         </p>
         <p className="muted">
-          Ask its administrator to add your address to <code>SAHIFA_ALLOWED_EMAILS</code>, then sign in again. If you meant to use
-          another account, sign out first.
+          Ask a workspace admin to add you, then reload this page. If you meant to use another account, sign out first.
         </p>
         <div>
           <button type="button" className="btn" onClick={() => signOut().catch((e: Error) => setError(e.message))}>

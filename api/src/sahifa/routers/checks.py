@@ -10,10 +10,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import current_user
+from ..auth.access import Access
 from ..auth.deps import Principal
 from ..db.models import CHECK_STATUSES, Asset, Check, CheckEvent
-from ..deps import session
+from ..deps import access, session
 from ..logging import get_logger
 from ..schemas import CheckActionIn, CheckEventOut, CheckOut
 from ..services.checks import TRANSITIONS
@@ -63,6 +63,7 @@ async def list_checks(
     asset_id: uuid.UUID,
     status: list[str] | None = Query(default=None),
     db: AsyncSession = Depends(session),
+    caller: Access = Depends(access),
 ) -> list[CheckOut]:
     if await db.get(Asset, asset_id) is None:
         raise HTTPException(404, "asset not found")
@@ -73,7 +74,7 @@ async def list_checks(
             raise HTTPException(422, f"status must be one of {', '.join(CHECK_STATUSES)}")
         stmt = stmt.where(Check.status.in_(status))
     stmt = stmt.order_by(Check.column_name.asc().nulls_first(), Check.type, Check.key)
-    return [to_out(c) for c in await db.scalars(stmt)]
+    return [caller.stamp(to_out(c), c.workspace_id) for c in await db.scalars(stmt)]
 
 
 @router.post("/{check_id}/{action}", response_model=CheckOut)
@@ -82,13 +83,15 @@ async def change_check(
     action: Action,
     body: CheckActionIn,
     db: AsyncSession = Depends(session),
-    principal: Principal = Depends(current_user),
+    caller: Access = Depends(access),
 ) -> CheckOut | JSONResponse:
     """One lifecycle action in one transaction: lock the row, compare versions, check the
     transition, change the status and record the event (behaviour 5)."""
     check = await db.scalar(select(Check).where(Check.id == check_id).with_for_update())
     if check is None:
         raise HTTPException(404, "check not found")
+    caller.require(check.workspace_id, "editor", action=f"check.{action}")
+    principal = caller.principal
     if check.version != body.version:
         return JSONResponse(
             status_code=409,
@@ -131,7 +134,7 @@ async def change_check(
         to_status=target,
         user_id=str(principal.user_id) if principal.user_id else None,
     )
-    return to_out(check)
+    return caller.stamp(to_out(check), check.workspace_id)
 
 
 @router.get("/{check_id}/events", response_model=list[CheckEventOut])

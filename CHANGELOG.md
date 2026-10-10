@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Workspaces and roles** (spec 016). Connections belong to a workspace; people are viewers,
+  editors or admins of workspaces. Viewers see a workspace's scans, checks, findings and
+  history; editors also scan, upload and change checks, findings and schedules; admins rename
+  the workspace and manage its members. The org admin (`SAHIFA_ADMIN_EMAIL`) creates
+  workspaces and moves connections between them. A new page `/workspaces`, a workspace filter
+  in the header, and `SAHIFA_ORG_NAME` for the name shown there.
+
+### Changed
+- **Access comes from memberships.** A signed-in person needs a workspace (or to be the org
+  admin). Until invitations arrive, an address in `SAHIFA_ALLOWED_EMAILS` becomes an editor of
+  the `Default` workspace; everything that existed before moves to `Default`.
+- Creating a connection needs the admin role in its workspace; uploads and new connections name
+  their workspace when the person works in several.
+
+### Security
+- **Row-level security in Postgres** on every workspace-owned table, failing closed, so a query
+  that forgets its filter still sees nothing of another workspace. The API switches to the
+  role `sahifa_app` in each transaction, and refuses to start in prod when its database login
+  would bypass row-level security.
+
 ## [0.1.0] - 2026-10-09
 
 The first preview (R1). It scans uploaded CSV, Parquet and JSON files and Postgres databases.

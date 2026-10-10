@@ -227,6 +227,23 @@ summary {
   letter-spacing: -0.02em;
   min-height: 44px;
 }
+/* Spec 016: the organisation and the workspace filter beside the mark. */
+.header-start {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-width: 0;
+}
+.org-name {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .brand-mark {
   width: 34px;
   height: 34px;
@@ -323,6 +340,29 @@ summary {
 .stack-lg {
   display: grid;
   gap: 28px;
+}
+.stack-xs {
+  display: grid;
+  gap: 4px;
+}
+/* A label, a field and a button on one line, wrapping on narrow screens (spec 016). */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.inline-form > .input:not(.input-small) {
+  flex: 1 1 12em;
+  min-width: 0;
+  width: auto;
+}
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
 .grid-2 {
   display: grid;
@@ -449,6 +489,13 @@ summary {
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+.input.input-small {
+  min-height: 36px;
+  padding-block: 4px;
+  font-size: 14px;
+  width: auto;
+  max-width: 100%;
 }
 .input {
   min-height: 44px;

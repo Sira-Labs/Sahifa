@@ -1,8 +1,8 @@
 """Request dependencies of the sign-in (spec 006): the current session and `current_user`.
 
 The session is looked up once per request, in its own short transaction, and kept on
-`request.state`. Access is decided here from the settings, not stored: the admin email and
-the allowed emails get in, every other signed-in person gets 403 `no_access`.
+`request.state`. Access comes from workspace memberships (spec 016, `access.py`): the admin
+email and members get in, every other signed-in person gets 403 `no_access`.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ PROXY_PRINCIPAL = Principal(mode="proxy", sign_in_method="proxy", display_name="
 
 
 class NoAccessError(Exception):
-    """Signed in, but the email is neither the admin email nor an allowed one."""
+    """Signed in, but neither the admin email nor a member of any workspace."""
 
     def __init__(self, email: str | None) -> None:
         super().__init__(email)
@@ -63,7 +63,7 @@ def no_access_body(email: str | None) -> dict[str, str | None]:
         "detail": "no_access",
         "email": email,
         "message": f"You are signed in{who}, but this address has no access to this Sahifa yet. "
-        "Ask its administrator to add it to SAHIFA_ALLOWED_EMAILS.",
+        "Ask a workspace admin to add you.",
     }
 
 
@@ -133,9 +133,7 @@ async def signed_in(request: Request) -> Principal:
 
 async def current_user(request: Request) -> Principal:
     """The principal every protected route acts for: 401 `not_authenticated` without a
-    session, 403 `no_access` when the email is not admitted (spec 006, behaviour 4)."""
-    principal = await signed_in(request)
-    if principal.mode == "oidc" and not settings_of(request).has_access(principal.email):
-        log.info("auth.denied", reason="no_access", user_id=str(principal.user_id), path=request.url.path)
-        raise NoAccessError(principal.email)
-    return principal
+    session, 403 `no_access` without any workspace (spec 006 behaviour 4, spec 016)."""
+    from .access import current_access
+
+    return (await current_access(request)).principal

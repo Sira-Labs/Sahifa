@@ -156,7 +156,8 @@ Rules:
     | `SAHIFA_OIDC_CLIENT_SECRET` | the `sahifa-api` client's secret from Keycloak (Clients → `sahifa-api` → Credentials) |
     | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32`; changing it signs everyone out |
     | `SAHIFA_ADMIN_EMAIL` | the administrator's address; always has access |
-    | `SAHIFA_ALLOWED_EMAILS` | optional: further addresses with access, comma-separated |
+    | `SAHIFA_ALLOWED_EMAILS` | optional: further addresses, comma-separated; each becomes an editor of the `Default` workspace at its first sign-in |
+    | `SAHIFA_ORG_NAME` | optional, default `Sahifa`: the organisation's name in the header |
     | `SAHIFA_SIGN_IN_METHODS` | optional, default `google,github,passkey` |
     | `SAHIFA_SESSION_IDLE` / `SAHIFA_SESSION_ABSOLUTE` | optional, defaults `12h` / `30d` |
 

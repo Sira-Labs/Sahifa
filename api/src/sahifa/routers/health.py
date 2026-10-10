@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import __version__
-from ..deps import session, settings
+from ..deps import settings, unscoped_session
 from ..settings import Settings
 
 router = APIRouter()
@@ -28,7 +28,7 @@ WORKERS = text(
 
 
 @router.get("/healthz")
-async def healthz(db: AsyncSession = Depends(session)) -> dict[str, Any]:
+async def healthz(db: AsyncSession = Depends(unscoped_session)) -> dict[str, Any]:
     workers: list[dict[str, Any]] = []
     try:
         await db.execute(text("SELECT 1"))

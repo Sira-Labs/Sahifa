@@ -1,21 +1,44 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ApiError, api } from "../api";
-import { authApi, noAccessEmail, signOut } from "../auth";
+import { noAccessEmail, signOut, type Me } from "../auth";
 import { BrandMark } from "../components/Brand";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { administers, setWorkspaceFilter, useMe, useWorkspaceFilter } from "../workspace";
 import { NoAccess } from "./NoAccess";
 
 const activeProps = { className: "is-active", "aria-current": "page" as const };
 
+/** The header's workspace filter (spec 016), for a person who sees more than one workspace. */
+function WorkspaceFilter({ me }: { me: Me }) {
+  const id = useId();
+  const value = useWorkspaceFilter();
+  if (me.workspaces.length < 2) return null;
+  return (
+    <span className="workspace-filter">
+      <label htmlFor={id} className="sr-only">
+        Workspace
+      </label>
+      <select id={id} className="input input-small" value={value ?? ""} onChange={(e) => setWorkspaceFilter(e.target.value || null)}>
+        <option value="">All workspaces</option>
+        {me.workspaces.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 /** Page frame of the app: checks the session (spec 006), then the skip link, sticky header
- * with the mark, navigation, account and sign-out, the route, and the API version in the
- * footer. A 401 goes to /login (the API client's handler); an address without access sees
+ * with the mark, the organisation and the workspace filter (spec 016), navigation, account and
+ * sign-out, the route, and the API version in the footer. A 401 goes to /login (the API client's handler); an address without access sees
  * "No access yet". In dev and proxy mode `/api/auth/me` always answers, so nothing changes.
  * `children` replaces the route outlet (the not-found page of unknown paths). */
 export function Layout({ children }: { children?: React.ReactNode }) {
-  const me = useQuery({ queryKey: ["me"], queryFn: authApi.me, retry: false, staleTime: 60_000 });
+  const me = useMe();
   const version = useQuery({ queryKey: ["version"], queryFn: api.version, staleTime: 5 * 60_000, retry: false });
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
@@ -37,9 +60,13 @@ export function Layout({ children }: { children?: React.ReactNode }) {
       </a>
       <div className="topbar">
         <header className="wrap site-header">
-          <Link to="/" className="brand" aria-label="Sahifa, scans">
-            <BrandMark />
-          </Link>
+          <div className="header-start">
+            <Link to="/" className="brand" aria-label="Sahifa, scans">
+              <BrandMark />
+            </Link>
+            {me.data?.organisation && <span className="org-name">{me.data.organisation}</span>}
+            {me.data && <WorkspaceFilter me={me.data} />}
+          </div>
           <nav aria-label="Main" className="nav">
             <Link to="/" activeOptions={{ exact: true }} className="nav-link" activeProps={activeProps}>
               Scans
@@ -53,6 +80,11 @@ export function Layout({ children }: { children?: React.ReactNode }) {
             <Link to="/connections" className="nav-link" activeProps={activeProps}>
               Connections
             </Link>
+            {administers(me.data) && (
+              <Link to="/workspaces" className="nav-link" activeProps={activeProps}>
+                Workspaces
+              </Link>
+            )}
             {signedIn && (
               <>
                 <Link to="/settings/account" className="nav-link" activeProps={activeProps}>

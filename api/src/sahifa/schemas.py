@@ -1,4 +1,4 @@
-"""Response and request models of the HTTP API (specs 004, 007, 009, 010 and 011)."""
+"""Response and request models of the HTTP API (specs 004, 007, 009, 010, 011 and 016)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,20 @@ from typing import Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
+ROLE_PATTERN = r"^(viewer|editor|admin)$"
+
+
+class WorkspaceRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class InWorkspace(BaseModel):
+    """What every workspace-owned object carries (spec 016): its workspace and the caller's
+    role there, so the web app can disable what the role does not allow."""
+
+    workspace: WorkspaceRef | None = None
+    role: str | None = None
 
 
 class ScheduleSummary(BaseModel):
@@ -20,7 +34,7 @@ class ScheduleSummary(BaseModel):
     next_run_at: datetime | None
 
 
-class ConnectionOut(BaseModel):
+class ConnectionOut(InWorkspace):
     id: uuid.UUID
     name: str
     kind: str
@@ -41,7 +55,7 @@ class ScheduleIn(BaseModel):
     version: int | None = Field(default=None, ge=1)
 
 
-class ScheduleOut(BaseModel):
+class ScheduleOut(InWorkspace):
     cron: str
     timezone: str
     enabled: bool
@@ -62,6 +76,8 @@ class ConnectionIn(BaseModel):
     kind: Literal["postgres", "duckdb"]
     secret_ref: str = Field(min_length=13, max_length=200)
     config: dict[str, Any] = Field(default_factory=dict)
+    # Spec 016: required when the caller is admin of several workspaces.
+    workspace_id: uuid.UUID | None = None
 
 
 class ConnectionTest(BaseModel):
@@ -76,7 +92,7 @@ class ScanScore(BaseModel):
     high: float | None
 
 
-class ScanOut(BaseModel):
+class ScanOut(InWorkspace):
     id: uuid.UUID
     connection_id: uuid.UUID
     connection_name: str
@@ -126,7 +142,7 @@ class ColumnOut(BaseModel):
     role: str
 
 
-class AssetOut(BaseModel):
+class AssetOut(InWorkspace):
     id: uuid.UUID
     connection_id: uuid.UUID
     namespace: str
@@ -142,7 +158,7 @@ class AssetDetail(AssetOut):
     columns: list[ColumnOut]
 
 
-class CheckOut(BaseModel):
+class CheckOut(InWorkspace):
     id: uuid.UUID
     key: str
     type: str
@@ -203,7 +219,7 @@ class FindingLatest(BaseModel):
     dimension: str
 
 
-class FindingOut(BaseModel):
+class FindingOut(InWorkspace):
     id: uuid.UUID
     status: str
     severity: str
@@ -268,3 +284,43 @@ class HistoryPoint(BaseModel):
 
 class History(BaseModel):
     points: list[HistoryPoint]
+
+
+class WorkspaceOut(BaseModel):
+    """A workspace with the caller's role and its size (spec 016)."""
+
+    id: uuid.UUID
+    name: str
+    role: str
+    is_default: bool
+    connections: int
+    members: int
+    created_at: datetime
+
+
+class WorkspaceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100, pattern=r"^\S(.*\S)?$")
+
+
+class MemberOut(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    display_name: str
+    role: str
+    last_login_at: datetime | None
+
+
+class MemberIn(BaseModel):
+    role: str = Field(pattern=ROLE_PATTERN)
+
+
+class UserMatch(BaseModel):
+    """A person who has signed in, to add as a member."""
+
+    id: uuid.UUID
+    email: str
+    display_name: str
+
+
+class MoveIn(BaseModel):
+    workspace_id: uuid.UUID

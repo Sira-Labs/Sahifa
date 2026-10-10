@@ -14,11 +14,16 @@ export function json(body: unknown, status = 200): Response {
 }
 
 /** The principal of a server without sign-in (dev mode): what most tests run as. */
+export const DEFAULT_WORKSPACE = { id: "w0000000-0000-4000-8000-000000000001", name: "Default", role: "admin" as const, is_default: true };
+
 export const DEV_ME: Me = {
   mode: "dev",
   user: { id: null, email: null, display_name: "Developer" },
   sign_in_method: "dev",
   admin: true,
+  org_admin: true,
+  organisation: "Sahifa",
+  workspaces: [DEFAULT_WORKSPACE],
 };
 
 /** A signed-in administrator (oidc mode, Google). */
@@ -27,6 +32,9 @@ export const ME: Me = {
   user: { id: "u1", email: "ana@example.org", display_name: "Ana" },
   sign_in_method: "google",
   admin: true,
+  org_admin: true,
+  organisation: "Sahifa",
+  workspaces: [DEFAULT_WORKSPACE],
 };
 
 /** Stub `fetch` with a router function; a returned Response is passed through, anything else is

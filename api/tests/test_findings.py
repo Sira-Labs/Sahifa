@@ -15,7 +15,6 @@ import pytest
 from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
 from sahifa_core.synth import write_shop
-from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from sahifa.db import Database
@@ -23,7 +22,7 @@ from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
 from sahifa.services.findings import TRANSITIONS, record_findings
 
-from .conftest import CSRF, DB_URL, needs_db
+from .conftest import CSRF, DB_URL, needs_db, owner_engine
 from .fake_idp import FakeIdp
 from .test_auth_flow import ADMIN, Env, auth_settings, browser, sign_in
 from .test_checks import (
@@ -50,7 +49,7 @@ def owner() -> Iterator[Engine]:
     """A direct connection for setup and for reading the tables."""
     assert DB_URL
     upgrade(DB_URL)
-    engine = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    engine = owner_engine()
     yield engine
     engine.dispose()
 
@@ -356,7 +355,7 @@ async def test_retired_and_unevaluated_checks_leave_their_findings_alone(
     assert DB_URL
     db = Database(DB_URL)
     try:
-        async with db.sessions() as s:
+        async with db.system() as s:
             linked = await record_findings(
                 s, scan_id=uuid.UUID(sid), seen_at=datetime.now(UTC), report=report, asset_ids=ids
             )

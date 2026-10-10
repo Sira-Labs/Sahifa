@@ -19,16 +19,15 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from ..auth import store
+from ..auth.access import current_access
 from ..auth.deps import (
     LOGIN_COOKIE,
     SESSION_COOKIE,
-    NoAccessError,
     current_session,
     factory_of,
     require_session,
     session_secret,
     settings_of,
-    signed_in,
 )
 from ..auth.oidc import IdpError, IdpUnavailableError, InvalidTokenError, OidcClient
 from ..auth.store import EmailTakenError, Flow
@@ -68,13 +67,25 @@ class UserOut(BaseModel):
     display_name: str
 
 
+class MeWorkspace(BaseModel):
+    """A workspace the person sees, with their role there (spec 016)."""
+
+    id: str
+    name: str
+    role: str
+    is_default: bool
+
+
 class MeOut(BaseModel):
-    """`GET /api/auth/me`."""
+    """`GET /api/auth/me`. `admin` and `org_admin` are the same: the org admin (spec 016)."""
 
     mode: str
     user: UserOut
     sign_in_method: str
     admin: bool
+    org_admin: bool
+    organisation: str
+    workspaces: list[MeWorkspace]
 
 
 class DeviceOut(BaseModel):
@@ -332,11 +343,9 @@ async def callback(
     except _AccountMismatchError:
         log.warning("auth.denied", reason="account_mismatch", method=flow.method)
         return _failure(409, "account_mismatch")
-    access = settings.has_access(user.email)
-    log.info("auth.login", user_id=str(user.user_id), method=flow.method, access=access)
-    if not access:
-        # A session anyway, so the web app can say who is signed in ("No access yet").
-        log.info("auth.denied", reason="no_access", user_id=str(user.user_id), method=flow.method)
+    # Access (memberships, and the allowed-email bootstrap of spec 016) is resolved at the next
+    # request, `/api/auth/me`; without it the session still lets the web app say who is signed in.
+    log.info("auth.login", user_id=str(user.user_id), method=flow.method)
     next_path = flow.next_path
     if action_ran:
         log.info("auth.action", user_id=str(user.user_id), status=kc_action_status)
@@ -349,14 +358,13 @@ async def callback(
 
 @router.get("/me", response_model=MeOut)
 async def me(request: Request) -> MeOut:
-    """Who is signed in, how, and whether they are the admin.
+    """Who is signed in, how, whether they are the org admin, and their workspaces.
 
     401 without a session; 403 `no_access` (with the email, for the "No access yet" page) for
-    an address that is not admitted.
+    a person who is not the org admin and in no workspace.
     """
-    principal = await signed_in(request)
-    if principal.mode == "oidc" and not settings_of(request).has_access(principal.email):
-        raise NoAccessError(principal.email)
+    access = await current_access(request)
+    principal = access.principal
     return MeOut(
         mode=principal.mode,
         user=UserOut(
@@ -365,7 +373,13 @@ async def me(request: Request) -> MeOut:
             display_name=principal.display_name,
         ),
         sign_in_method=principal.sign_in_method,
-        admin=principal.admin,
+        admin=access.org_admin,
+        org_admin=access.org_admin,
+        organisation=settings_of(request).org_name,
+        workspaces=[
+            MeWorkspace(id=str(w.id), name=w.name, role=w.role, is_default=w.is_default)
+            for w in access.workspaces.values()
+        ],
     )
 
 

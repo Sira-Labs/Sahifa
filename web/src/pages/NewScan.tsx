@@ -11,6 +11,7 @@ import { formatBytes } from "../format";
 import type { NewScanTab } from "../search";
 import type { Scan } from "../types";
 import { countError, fileError, mergeFiles, parseSampleRows } from "../validation";
+import { VIEWER_REASON, allows, editableWorkspaces, useMe, useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
 
 
 const routeApi = getRouteApi("/_app/scans/new");
@@ -61,15 +62,32 @@ function SampleField({ sample }: { sample: ReturnType<typeof useSample> }) {
   );
 }
 
+/** Where an upload goes (spec 016): the filtered workspace when the person may upload there,
+ * else the default one, else the first they may upload to. */
+function initialWorkspace(editable: { id: string; is_default: boolean }[], filtered: string | undefined): string {
+  return (editable.find((w) => w.id === filtered) ?? editable.find((w) => w.is_default) ?? editable[0])?.id ?? "";
+}
+
 function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
+  const me = useMe();
+  const editable = editableWorkspaces(me.data);
+  const filtered = useWorkspaceFilter();
+  const workspaceId = useId();
   const [files, setFiles] = useState<File[]>([]);
   const [tried, setTried] = useState(false);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const workspace = chosen ?? initialWorkspace(editable, filtered);
   const sample = useSample();
-  const upload = useMutation({ mutationFn: () => api.uploadScan(files, sample.value ?? undefined), onSuccess: onCreated });
+  const upload = useMutation({
+    // With one workspace to upload to, the API picks it; with several, the choice goes along.
+    mutationFn: () => api.uploadScan(files, sample.value ?? undefined, editable.length > 1 ? workspace : undefined),
+    onSuccess: onCreated,
+  });
 
   const errors = files.map(fileError);
   const tooMany = files.length > 0 ? countError(files.length) : null;
-  const blocked = files.length === 0 || errors.some(Boolean) || tooMany !== null || sample.error !== null;
+  const readOnly = !!me.data && editable.length === 0;
+  const blocked = readOnly || files.length === 0 || errors.some(Boolean) || tooMany !== null || sample.error !== null;
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -115,10 +133,25 @@ function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
           Remove the files marked above, then start the scan.
         </p>
       )}
+      {editable.length > 1 && (
+        <div className="filter">
+          <label htmlFor={workspaceId} className="field-label">
+            Upload to workspace
+          </label>
+          <select id={workspaceId} className="input" value={workspace} onChange={(e) => setChosen(e.target.value)}>
+            {editable.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <SampleField sample={sample} />
+      {readOnly && <p className="muted">{VIEWER_REASON}</p>}
       {upload.isError && <ErrorPanel title="The upload was not accepted" error={upload.error} onRetry={() => upload.mutate()} />}
       <div>
-        <button type="submit" className="btn btn-primary" disabled={upload.isPending}>
+        <button type="submit" className="btn btn-primary" disabled={upload.isPending || readOnly} title={readOnly ? VIEWER_REASON : undefined}>
           {upload.isPending ? "Uploading…" : files.length > 1 ? `Scan ${files.length} files` : "Start scan"}
         </button>
       </div>
@@ -127,7 +160,9 @@ function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
 }
 
 function ConnectionPanel({ onCreated, initial }: { onCreated: (scan: Scan) => void; initial?: string }) {
-  const connections = useQuery({ queryKey: ["connections"], queryFn: api.listConnections });
+  const filtered = useWorkspaceFilter();
+  const showWorkspace = useShowsWorkspaces();
+  const connections = useQuery({ queryKey: ["connections", filtered ?? null], queryFn: () => api.listConnections(filtered) });
   const [picked, setPicked] = useState<string | undefined>(initial);
   const [tried, setTried] = useState(false);
   const sample = useSample();
@@ -136,11 +171,13 @@ function ConnectionPanel({ onCreated, initial }: { onCreated: (scan: Scan) => vo
     onSuccess: onCreated,
   });
   const items = (connections.data?.items ?? []).filter((c) => c.kind !== "upload");
+  // A viewer of the picked connection's workspace cannot scan it (spec 016).
+  const readOnly = !allows(items.find((c) => c.id === picked)?.role);
 
   function submit(e: FormEvent) {
     e.preventDefault();
     setTried(true);
-    if (picked && !sample.error) create.mutate(picked);
+    if (picked && !sample.error && !readOnly) create.mutate(picked);
   }
 
   if (connections.isPending) return <p role="status">Loading connections…</p>;
@@ -170,6 +207,7 @@ function ConnectionPanel({ onCreated, initial }: { onCreated: (scan: Scan) => vo
                 <input type="radio" name="connection" value={c.id} checked={picked === c.id} onChange={() => setPicked(c.id)} />
                 <span>
                   <span className="font-semibold">{c.name}</span> <span className="tag">{c.kind}</span>
+                  {showWorkspace && c.workspace && <span className="muted text-sm"> · {c.workspace.name}</span>}
                 </span>
                 {!c.available && <StatusChip status="unavailable" />}
               </label>
@@ -184,11 +222,12 @@ function ConnectionPanel({ onCreated, initial }: { onCreated: (scan: Scan) => vo
         )}
       </fieldset>
       <SampleField sample={sample} />
+      {readOnly && <p className="muted">{VIEWER_REASON}</p>}
       {create.isError && (
         <ErrorPanel title="The scan was not accepted" error={create.error} onRetry={() => picked && create.mutate(picked)} />
       )}
       <div>
-        <button type="submit" className="btn btn-primary" disabled={create.isPending}>
+        <button type="submit" className="btn btn-primary" disabled={create.isPending || readOnly} title={readOnly ? VIEWER_REASON : undefined}>
           {create.isPending ? "Starting…" : "Start scan"}
         </button>
       </div>

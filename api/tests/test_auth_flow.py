@@ -18,7 +18,7 @@ from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from joserfc.jwk import RSAKey
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from sahifa.auth import SESSION_COOKIE, OidcClient
@@ -26,7 +26,7 @@ from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
 from sahifa.settings import Settings
 
-from .conftest import CSRF, DB_URL, needs_db
+from .conftest import CSRF, DB_URL, needs_db, owner_engine
 from .fake_idp import CLIENT_SECRET, ISSUER, FakeIdp, unsigned
 
 pytestmark = needs_db
@@ -72,7 +72,7 @@ async def env(tmp_path: Path) -> AsyncIterator[Env]:
     """Empty auth tables, the fake IdP and apps with their lifespan running."""
     assert DB_URL
     upgrade(DB_URL)
-    owner = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    owner = owner_engine()
     with owner.connect() as conn:
         conn.execute(text("TRUNCATE login_flows, sessions"))
         # Check events (spec 007) refer to users and keep their actor when a user goes.
@@ -276,7 +276,7 @@ async def test_unknown_email_gets_no_access(env: Env) -> None:
         assert me.status_code == 403
         body = me.json()
         assert body["detail"] == "no_access" and body["email"] == OTHER
-        assert "SAHIFA_ALLOWED_EMAILS" in body["message"]
+        assert "Ask a workspace admin" in body["message"]
         scans = await c.get("/api/scans")
         assert scans.status_code == 403 and scans.json()["detail"] == "no_access"
         assert (await c.get("/api/auth/sessions")).status_code == 200  # devices stay reachable

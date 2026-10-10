@@ -14,8 +14,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth.access import Access
 from ..db.models import Connection, Finding, FindingOccurrence, Scan
-from ..deps import session, settings
+from ..deps import access, session, settings
 from ..jobs import start_scan
 from ..logging import get_logger
 from ..schemas import Items, Page, ScanIn, ScanOut, ScanScore
@@ -55,7 +56,12 @@ def to_out(scan: Scan, conn: Connection) -> ScanOut:
 
 
 async def _enqueue(
-    request: Request, db: AsyncSession, conn: Connection, sample_rows: int, options: dict[str, Any]
+    request: Request,
+    db: AsyncSession,
+    caller: Access,
+    conn: Connection,
+    sample_rows: int,
+    options: dict[str, Any],
 ) -> ScanOut:
     """Commit the scan as `queued`, then start it in the inline runner or the queue (spec 008)."""
     scan = Scan(connection_id=conn.id, sample_rows=sample_rows, options=options, status="queued")
@@ -63,18 +69,23 @@ async def _enqueue(
     await db.commit()
     await db.refresh(scan)
     await start_scan(db, scan, request.app.state.settings, request.app.state.runner, connection=conn.name)
-    return to_out(scan, conn)
+    return caller.stamp(to_out(scan, conn), conn.workspace_id)
 
 
 @router.post("", response_model=ScanOut, status_code=status.HTTP_202_ACCEPTED)
 async def create_scan(
-    body: ScanIn, request: Request, db: AsyncSession = Depends(session), cfg: Settings = Depends(settings)
+    body: ScanIn,
+    request: Request,
+    db: AsyncSession = Depends(session),
+    cfg: Settings = Depends(settings),
+    caller: Access = Depends(access),
 ) -> ScanOut:
     conn = await db.get(Connection, body.connection_id)
     if conn is None or conn.kind == "upload":
         raise HTTPException(404, "connection not found")
+    caller.require(conn.workspace_id, "editor", action="scan.create")
     sample = cfg.sample_rows if body.sample_rows is None else body.sample_rows
-    return await _enqueue(request, db, conn, sample, {"assets": body.assets})
+    return await _enqueue(request, db, caller, conn, sample, {"assets": body.assets})
 
 
 @router.post("/upload", response_model=ScanOut, status_code=status.HTTP_202_ACCEPTED)
@@ -82,9 +93,13 @@ async def upload_scan(
     request: Request,
     files: list[UploadFile] = File(default=[]),
     sample_rows: int | None = Form(default=None, ge=0),
+    workspace_id: uuid.UUID | None = Form(default=None),
     db: AsyncSession = Depends(session),
     cfg: Settings = Depends(settings),
+    caller: Access = Depends(access),
 ) -> ScanOut:
+    # Before any file is written: the workspace the upload goes to (spec 016).
+    target_workspace = caller.pick(workspace_id, "editor", action="scan.upload")
     if not files:
         raise HTTPException(422, "choose at least one file")
     if len(files) > cfg.max_upload_files:
@@ -128,12 +143,15 @@ async def upload_scan(
         folder.rmdir()
         raise
     conn = Connection(
-        name=f"upload-{batch}", kind="upload", config={"paths": paths, "names": names, "files": originals}
+        name=f"upload-{batch}",
+        kind="upload",
+        config={"paths": paths, "names": names, "files": originals},
+        workspace_id=target_workspace,
     )
     db.add(conn)
     await db.flush()
     sample = cfg.sample_rows if sample_rows is None else sample_rows
-    return await _enqueue(request, db, conn, sample, {"files": originals})
+    return await _enqueue(request, db, caller, conn, sample, {"files": originals})
 
 
 def _cursor(scan: Scan) -> str:
@@ -153,7 +171,9 @@ def _after(cursor: str) -> tuple[datetime, uuid.UUID]:
 async def list_scans(
     limit: int = Query(default=25, ge=1, le=100),
     cursor: str | None = None,
+    workspace_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(session),
+    caller: Access = Depends(access),
 ) -> Page[ScanOut]:
     stmt = (
         select(Scan, Connection)
@@ -161,11 +181,13 @@ async def list_scans(
         .order_by(Scan.created_at.desc(), Scan.id.desc())
         .limit(limit + 1)
     )
+    if workspace_id is not None:
+        stmt = stmt.where(Scan.workspace_id == workspace_id)
     if cursor:
         created, sid = _after(cursor)
         stmt = stmt.where(or_(Scan.created_at < created, and_(Scan.created_at == created, Scan.id < sid)))
     rows = [(r[0], r[1]) for r in (await db.execute(stmt)).all()]
-    items = [to_out(s, c) for s, c in rows[:limit]]
+    items = [caller.stamp(to_out(s, c), c.workspace_id) for s, c in rows[:limit]]
     nxt = _cursor(rows[limit - 1][0]) if len(rows) > limit else None
     return Page[ScanOut](items=items, next_cursor=nxt)
 
@@ -184,9 +206,11 @@ async def _scan(db: AsyncSession, scan_id: uuid.UUID) -> tuple[Scan, Connection]
 
 
 @router.get("/{scan_id}", response_model=ScanOut)
-async def get_scan(scan_id: uuid.UUID, db: AsyncSession = Depends(session)) -> ScanOut:
+async def get_scan(
+    scan_id: uuid.UUID, db: AsyncSession = Depends(session), caller: Access = Depends(access)
+) -> ScanOut:
     scan, conn = await _scan(db, scan_id)
-    return to_out(scan, conn)
+    return caller.stamp(to_out(scan, conn), conn.workspace_id)
 
 
 @router.get("/{scan_id}/report")

@@ -1,4 +1,4 @@
-// Thin fetch wrapper with one typed function per route of specs 004, 007, 009 and 010. Every non-2xx answer
+// Thin fetch wrapper with one typed function per route of specs 004, 007, 009, 010 and 016. Every non-2xx answer
 // becomes an ApiError carrying the API's `detail` as its message. Every request carries the
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
@@ -23,8 +23,12 @@ import type {
   StoredCheck,
   StoredFinding,
   StoredFindingDetail,
+  UserMatch,
   ValueCount,
   Version,
+  Workspace,
+  WorkspaceRole,
+  Member,
 } from "./types";
 
 const HEADERS = { Accept: "application/json", "X-Sahifa-Request": "1" };
@@ -197,23 +201,25 @@ const ALL_FINDING_STATUSES = ["open", "acknowledged", "resolved", "muted"] as co
 
 /** Query string of `GET /api/findings`. The default view sends no status: the API's default is
  * the findings needing attention (open, acknowledged, muted). */
-export function findingsQuery(search: FindingsSearch, cursor?: string, limit = 50): string {
+export function findingsQuery(search: FindingsSearch, cursor?: string, limit = 50, workspaceId?: string): string {
   const q = new URLSearchParams();
   const view = search.status ?? "attention";
   if (view === "all") for (const s of ALL_FINDING_STATUSES) q.append("status", s);
   else if (view !== "attention") q.append("status", view);
   if (search.severity) q.append("severity", search.severity);
   if (search.connection) q.append("connection_id", search.connection);
+  if (workspaceId) q.append("workspace_id", workspaceId);
   q.append("limit", String(limit));
   if (cursor) q.append("cursor", cursor);
   return `?${q.toString()}`;
 }
 
 /** Multipart body of an upload scan. */
-export function uploadForm(files: File[], sampleRows?: number): FormData {
+export function uploadForm(files: File[], sampleRows?: number, workspaceId?: string): FormData {
   const form = new FormData();
   for (const file of files) form.append("files", file, file.name);
   if (sampleRows !== undefined) form.append("sample_rows", String(sampleRows));
+  if (workspaceId) form.append("workspace_id", workspaceId);
   return form;
 }
 
@@ -231,7 +237,7 @@ export const api = {
   health: () => apiGet<Health>("/healthz"),
   version: () => apiGet<Version>("/api/version"),
 
-  listConnections: () => apiGet<{ items: Connection[] }>("/api/connections"),
+  listConnections: (workspaceId?: string) => apiGet<{ items: Connection[] }>(`/api/connections${query({ workspace_id: workspaceId })}`),
   getConnection: (id: string) => apiGet<Connection>(`/api/connections/${enc(id)}`),
   createConnection: (body: ConnectionCreate) => apiSend<Connection>("POST", "/api/connections", body),
   testConnection: (id: string) => apiSend<ConnectionTest>("POST", `/api/connections/${enc(id)}/test`),
@@ -250,9 +256,10 @@ export const api = {
   deleteSchedule: (connectionId: string) => apiSend<void>("DELETE", `/api/connections/${enc(connectionId)}/schedule`),
 
   createScan: (body: ScanCreate) => apiSend<Scan>("POST", "/api/scans", body),
-  uploadScan: (files: File[], sampleRows?: number) =>
-    request<Scan>("/api/scans/upload", { method: "POST", body: uploadForm(files, sampleRows) }),
-  listScans: (cursor?: string, limit = 25) => apiGet<Page<Scan>>(`/api/scans${query({ limit, cursor })}`),
+  uploadScan: (files: File[], sampleRows?: number, workspaceId?: string) =>
+    request<Scan>("/api/scans/upload", { method: "POST", body: uploadForm(files, sampleRows, workspaceId) }),
+  listScans: (cursor?: string, limit = 25, workspaceId?: string) =>
+    apiGet<Page<Scan>>(`/api/scans${query({ limit, cursor, workspace_id: workspaceId })}`),
   getScan: (id: string) => apiGet<Scan>(`/api/scans/${enc(id)}`),
   getReport: (id: string) => apiGet<ScanReport>(`/api/scans/${enc(id)}/report`),
   listFindings: async (id: string, filters: FindingFilters = {}) => {
@@ -286,9 +293,20 @@ export const api = {
   changeCheck: (check: Pick<StoredCheck, "id" | "version">, action: CheckAction) =>
     apiSend<StoredCheck>("POST", `/api/checks/${enc(check.id)}/${action}`, { version: check.version }),
 
-  listStoredFindings: (search: FindingsSearch, cursor?: string, limit = 50) =>
-    apiGet<Page<StoredFinding>>(`/api/findings${findingsQuery(search, cursor, limit)}`),
+  listStoredFindings: (search: FindingsSearch, cursor?: string, limit = 50, workspaceId?: string) =>
+    apiGet<Page<StoredFinding>>(`/api/findings${findingsQuery(search, cursor, limit, workspaceId)}`),
   getStoredFinding: (id: string) => apiGet<StoredFindingDetail>(`/api/findings/${enc(id)}`),
   changeFinding: (finding: Pick<StoredFinding, "id" | "version">, action: FindingAction, change: FindingChange = {}) =>
     apiSend<StoredFinding>("POST", `/api/findings/${enc(finding.id)}/${action}`, { version: finding.version, ...change }),
+
+  listWorkspaces: () => apiGet<Workspace[]>("/api/workspaces"),
+  createWorkspace: (name: string) => apiSend<Workspace>("POST", "/api/workspaces", { name }),
+  renameWorkspace: (id: string, name: string) => apiSend<Workspace>("PATCH", `/api/workspaces/${enc(id)}`, { name }),
+  listMembers: (id: string) => apiGet<Member[]>(`/api/workspaces/${enc(id)}/members`),
+  putMember: (id: string, userId: string, role: WorkspaceRole) =>
+    apiSend<Member>("PUT", `/api/workspaces/${enc(id)}/members/${enc(userId)}`, { role }),
+  removeMember: (id: string, userId: string) => apiSend<void>("DELETE", `/api/workspaces/${enc(id)}/members/${enc(userId)}`),
+  searchUsers: (q: string) => apiGet<UserMatch[]>(`/api/users${query({ q })}`),
+  moveConnection: (id: string, workspaceId: string) =>
+    apiSend<Connection>("PUT", `/api/connections/${enc(id)}/workspace`, { workspace_id: workspaceId }),
 };

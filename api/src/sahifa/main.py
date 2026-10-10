@@ -11,15 +11,28 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import text, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from . import __version__, jobs
 from .auth import CsrfMiddleware, NoAccessError, OidcClient, build_oidc, current_user, no_access_body
+from .auth.access import ForbiddenRoleError, WorkspaceRequiredError
 from .db import Database
 from .db.migrate import head_revision
+from .db.models import Organisation
 from .logging import configure, get_logger
-from .routers import assets, auth, checks, connections, findings, health, history, scans, schedules
+from .routers import (
+    assets,
+    auth,
+    checks,
+    connections,
+    findings,
+    health,
+    history,
+    scans,
+    schedules,
+    workspaces,
+)
 from .security import (
     MB,
     UPLOAD_PATH,
@@ -35,6 +48,7 @@ from .services.uploads import clean_uploads
 from .settings import Settings, get_settings, prod_problems
 
 log = get_logger("sahifa")
+EXIT_RLS = 4
 CLEAN_FIRST_S = 60
 CLEAN_EVERY_S = 3600
 SCHEDULES_EVERY_S = 60.0
@@ -45,7 +59,7 @@ async def clean_uploads_hourly(db: Database, settings: Settings) -> None:
     await asyncio.sleep(CLEAN_FIRST_S)
     while True:
         try:
-            await clean_uploads(db.sessions, settings)
+            await clean_uploads(db.system, settings)
         except Exception as e:
             log.error("uploads.clean_failed", error=str(e)[:300])
         await asyncio.sleep(CLEAN_EVERY_S)
@@ -57,9 +71,21 @@ async def run_schedules_every_minute(db: Database, settings: Settings, runner: S
     while True:
         await asyncio.sleep(SCHEDULES_EVERY_S - time.time() % SCHEDULES_EVERY_S)
         try:
-            await jobs.run_due_schedules(db.sessions, settings, runner=runner)
+            await jobs.run_due_schedules(db.system, settings, runner=runner)
         except Exception as e:
             log.error("schedule.run_failed", error=str(e)[:300])
+
+
+async def check_rls(db: Database, settings: Settings) -> None:
+    """Row-level security (spec 016) does not bind a superuser or a BYPASSRLS role: when the
+    role the API's transactions run as is one, prod refuses to start (exit 4) and dev warns."""
+    if not await db.bypasses_rls():
+        return
+    detail = "the API's database role (sahifa_app, or the login without it) bypasses row-level security"
+    if settings.env == "prod":
+        log.error("db.rls_bypassed", detail=detail)
+        sys.exit(EXIT_RLS)
+    log.warning("db.rls_bypassed", detail=detail)
 
 
 @asynccontextmanager
@@ -67,15 +93,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     db = Database(settings.database_url)
     app.state.db = db
-    app.state.runner = ScanRunner(db.sessions, settings)
+    app.state.runner = ScanRunner(db.system, settings)
     app.state.schema_revision = None
     try:
-        async with db.sessions() as s:
+        async with db.system() as s:
             revision = (await s.execute(text("SELECT version_num FROM alembic_version"))).scalar()
             app.state.schema_revision = revision
             if revision != head_revision():
                 log.error("db.schema_mismatch", database=revision, image=head_revision())
                 sys.exit(3)
+            await check_rls(db, settings)
+            await s.execute(update(Organisation).values(name=settings.org_name))
             # In queue mode the reaper owns interrupted scans (spec 008).
             if settings.scan_execution == "inline":
                 interrupted = await mark_interrupted(s)
@@ -160,6 +188,22 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
         """Signed in without access: 403 with a code, the email and a sentence (spec 006)."""
         return JSONResponse(status_code=403, content=no_access_body(exc.email))
 
+    @app.exception_handler(ForbiddenRoleError)
+    async def forbidden_role(request: Request, exc: ForbiddenRoleError) -> JSONResponse:
+        """The caller's role in the workspace is too low for the action (spec 016)."""
+        return JSONResponse(status_code=403, content=exc.body())
+
+    @app.exception_handler(WorkspaceRequiredError)
+    async def workspace_required(request: Request, exc: WorkspaceRequiredError) -> JSONResponse:
+        """The caller may act in several workspaces and named none (spec 016)."""
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "workspace_required",
+                "message": "You work in several workspaces; choose the one this belongs to.",
+            },
+        )
+
     # Public: health, version and the sign-in itself. Everything else acts for a user.
     app.include_router(health.router)
     app.include_router(auth.router)
@@ -171,6 +215,7 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     app.include_router(checks.router, dependencies=protected)
     app.include_router(findings.router, dependencies=protected)
     app.include_router(history.router, dependencies=protected)
+    app.include_router(workspaces.router, dependencies=protected)
     return app
 
 

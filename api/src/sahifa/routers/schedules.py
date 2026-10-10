@@ -11,10 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import current_user
-from ..auth.deps import Principal
+from ..auth.access import Access
 from ..db.models import Connection, ScanSchedule
-from ..deps import session, settings
+from ..deps import access, session, settings
 from ..logging import get_logger
 from ..schemas import ScheduleIn, ScheduleOut
 from ..services.schedules import ScheduleError, next_run, upcoming, validate
@@ -69,13 +68,13 @@ async def _schedule(db: AsyncSession, connection_id: uuid.UUID, *, lock: bool = 
 
 @router.get("/{connection_id}/schedule", response_model=ScheduleOut)
 async def get_schedule(
-    connection_id: uuid.UUID, db: AsyncSession = Depends(session)
+    connection_id: uuid.UUID, db: AsyncSession = Depends(session), caller: Access = Depends(access)
 ) -> ScheduleOut | JSONResponse:
     await _connection(db, connection_id)
     schedule = await _schedule(db, connection_id)
     if schedule is None:
         return JSONResponse(status_code=404, content=NO_SCHEDULE)
-    return to_out(schedule)
+    return caller.stamp(to_out(schedule), schedule.workspace_id)
 
 
 @router.put("/{connection_id}/schedule", response_model=ScheduleOut)
@@ -84,11 +83,12 @@ async def put_schedule(
     body: ScheduleIn,
     db: AsyncSession = Depends(session),
     cfg: Settings = Depends(settings),
-    principal: Principal = Depends(current_user),
+    caller: Access = Depends(access),
 ) -> ScheduleOut | JSONResponse:
     """Create or replace the schedule in one transaction: validate, lock the row, compare
     versions, store it with `next_run_at` computed from now (null while disabled)."""
     conn = await _connection(db, connection_id)
+    caller.require(conn.workspace_id, "editor", action="schedule.save")
     if conn.kind == "upload":
         error = ScheduleError(
             "upload_connection",
@@ -107,7 +107,7 @@ async def put_schedule(
     current = schedule.version if schedule else None
     if body.version != current:
         return stale(current)
-    actor = actor_of(principal)
+    actor = actor_of(caller.principal)
     if schedule is None:
         schedule = ScanSchedule(connection_id=connection_id, version=1)
         db.add(schedule)
@@ -133,20 +133,21 @@ async def put_schedule(
         enabled=body.enabled,
         actor=actor,
     )
-    return to_out(schedule)
+    return caller.stamp(to_out(schedule), schedule.workspace_id)
 
 
 @router.delete("/{connection_id}/schedule", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_schedule(
     connection_id: uuid.UUID,
     db: AsyncSession = Depends(session),
-    principal: Principal = Depends(current_user),
+    caller: Access = Depends(access),
 ) -> Response:
-    await _connection(db, connection_id)
+    conn = await _connection(db, connection_id)
+    caller.require(conn.workspace_id, "editor", action="schedule.delete")
     schedule = await _schedule(db, connection_id, lock=True)
     if schedule is None:
         return JSONResponse(status_code=404, content=NO_SCHEDULE)
     await db.delete(schedule)
     await db.commit()
-    log.info("schedule.deleted", connection_id=str(connection_id), actor=actor_of(principal))
+    log.info("schedule.deleted", connection_id=str(connection_id), actor=actor_of(caller.principal))
     return Response(status_code=status.HTTP_204_NO_CONTENT)

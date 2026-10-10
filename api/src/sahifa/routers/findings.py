@@ -14,10 +14,9 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
-from ..auth import current_user
-from ..auth.deps import Principal
+from ..auth.access import Access
 from ..db.models import FINDING_STATUSES, Asset, Check, Finding, FindingEvent, FindingOccurrence, Scan
-from ..deps import session
+from ..deps import access, session
 from ..logging import get_logger
 from ..schemas import (
     FindingActionIn,
@@ -144,7 +143,9 @@ async def list_findings(
     severity: list[str] | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = None,
+    workspace_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(session),
+    caller: Access = Depends(access),
 ) -> Page[FindingOut]:
     statuses = status or list(DEFAULT_STATUSES)
     if set(statuses) - set(FINDING_STATUSES):
@@ -158,6 +159,8 @@ async def list_findings(
         stmt = stmt.where(Asset.connection_id == connection_id)
     if asset_id is not None:
         stmt = stmt.where(Check.asset_id == asset_id)
+    if workspace_id is not None:
+        stmt = stmt.where(Finding.workspace_id == workspace_id)
     rank = _rank()
     if cursor:
         after, seen, fid = _after(cursor)
@@ -176,13 +179,19 @@ async def list_findings(
     stmt = stmt.order_by(rank, Finding.last_seen_at.desc(), Finding.id).limit(limit + 1)
     rows: list[Row] = [(r[0], r[1], r[2]) for r in (await db.execute(stmt)).all()]
     nxt = _cursor(rows[limit - 1][0]) if len(rows) > limit else None
-    return Page[FindingOut](items=await _items(db, rows[:limit]), next_cursor=nxt)
+    items = await _items(db, rows[:limit])
+    return Page[FindingOut](
+        items=[caller.stamp(item, f.workspace_id) for item, (f, _, _) in zip(items, rows, strict=False)],
+        next_cursor=nxt,
+    )
 
 
 @router.get("/{finding_id}", response_model=FindingDetail)
-async def get_finding(finding_id: uuid.UUID, db: AsyncSession = Depends(session)) -> FindingDetail:
+async def get_finding(
+    finding_id: uuid.UUID, db: AsyncSession = Depends(session), caller: Access = Depends(access)
+) -> FindingDetail:
     row = await _row(db, finding_id)
-    item = (await _items(db, [row]))[0]
+    item = caller.stamp((await _items(db, [row]))[0], row[0].workspace_id)
     occurrences = (
         await db.execute(
             select(FindingOccurrence, Scan)
@@ -235,7 +244,7 @@ async def change_finding(
     action: Action,
     body: FindingActionIn,
     db: AsyncSession = Depends(session),
-    principal: Principal = Depends(current_user),
+    caller: Access = Depends(access),
 ) -> FindingOut | JSONResponse:
     """One status change in one transaction: lock the row, compare versions, check the
     transition, change the status and record the event with the note (behaviour 4)."""
@@ -249,6 +258,8 @@ async def change_finding(
     finding = await db.scalar(select(Finding).where(Finding.id == finding_id).with_for_update())
     if finding is None:
         raise HTTPException(404, "finding not found")
+    caller.require(finding.workspace_id, "editor", action=f"finding.{action}")
+    principal = caller.principal
     if finding.version != body.version:
         return JSONResponse(
             status_code=409,
@@ -302,4 +313,4 @@ async def change_finding(
     )
     row = await _row(db, finding_id)
     await db.refresh(row[0])
-    return (await _items(db, [row]))[0]
+    return caller.stamp((await _items(db, [row]))[0], row[0].workspace_id)

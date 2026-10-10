@@ -13,6 +13,7 @@ import {
   type PresetId,
 } from "../schedule";
 import type { Schedule, ScheduleSave } from "../types";
+import { VIEWER_REASON } from "../workspace";
 import { ErrorPanel } from "./ErrorPanel";
 
 export const SCHEDULE_STALE_MESSAGE = "Someone changed this schedule; it is reloaded. Check it and save again.";
@@ -45,7 +46,7 @@ function errorsOf(error: unknown): Errors {
 
 /** The schedule of one connection (spec 010): presets or a cron, a time zone, on or off, the
  * next runs in local time and the last run. A 409 reloads it with a notice. */
-export function ScheduleSection({ connectionId, name }: { connectionId: string; name: string }) {
+export function ScheduleSection({ connectionId, name, readOnly = false }: { connectionId: string; name: string; readOnly?: boolean }) {
   const headingId = useId();
   const client = useQueryClient();
   const key = ["schedule", connectionId];
@@ -80,6 +81,7 @@ export function ScheduleSection({ connectionId, name }: { connectionId: string; 
           onRemoved={() => changed(null, "Schedule removed.")}
           onStale={stale}
           onEdit={() => setNotice(null)}
+          readOnly={readOnly}
         />
       )}
       <p role="status" aria-live="polite" className={notice === SCHEDULE_STALE_MESSAGE ? "text-warn" : "text-sm"}>
@@ -96,6 +98,7 @@ function ScheduleForm({
   onRemoved,
   onStale,
   onEdit,
+  readOnly,
 }: {
   connectionId: string;
   saved: Schedule | null;
@@ -103,6 +106,8 @@ function ScheduleForm({
   onRemoved: () => void;
   onStale: () => void;
   onEdit: () => void;
+  /** A viewer of the connection's workspace (spec 016): every field and button disabled. */
+  readOnly: boolean;
 }) {
   const id = useId();
   const initialCron = saved?.cron ?? SCHEDULE_PRESETS[0]!.cron;
@@ -150,6 +155,8 @@ function ScheduleForm({
 
   return (
     <form className="stack-sm" onSubmit={submit} noValidate>
+      {readOnly && <p className="muted text-sm">{VIEWER_REASON}</p>}
+      <fieldset className="fieldset stack-sm" disabled={readOnly}>
       <div className="schedule-fields">
         <div className="field">
           <label htmlFor={`${id}-preset`} className="field-label">
@@ -294,6 +301,7 @@ function ScheduleForm({
           </button>
         )}
       </div>
+      </fieldset>
     </form>
   );
 }

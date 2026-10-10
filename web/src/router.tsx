@@ -11,6 +11,7 @@ import { Login } from "./pages/Login";
 import { NewScan } from "./pages/NewScan";
 import { Report } from "./pages/Report";
 import { ScansList } from "./pages/ScansList";
+import { Workspaces } from "./pages/Workspaces";
 import { parseFindingFilters, parseFindingsSearch, parseNewScanSearch } from "./search";
 
 /** Fallback for unknown paths. */
@@ -70,6 +71,9 @@ const findingRoute = createRoute({ getParentRoute: () => appRoute, path: "/findi
 
 const connectionsRoute = createRoute({ getParentRoute: () => appRoute, path: "/connections", component: Connections });
 
+// Workspaces, members and moving connections (spec 016).
+const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: "/workspaces", component: Workspaces });
+
 const accountRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings/account",
@@ -96,6 +100,7 @@ export const routeTree = rootRoute.addChildren([
     findingsAcrossRoute,
     findingRoute,
     connectionsRoute,
+    workspacesRoute,
     accountRoute,
   ]),
   loginRoute,
