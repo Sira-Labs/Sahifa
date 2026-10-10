@@ -4,7 +4,7 @@ Sprint 4, story S4-5. Depends on: spec 012 (security baseline and its open items
 (licences), ADR-0012 (release pipeline). Packages: `.github/`, `web/Dockerfile`, `deploy/`,
 `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-10 by the owner; done.
 
 ## Goal
 
@@ -79,16 +79,17 @@ On every pull request and push to `main`, CI builds `web/Dockerfile` without pus
 
 ## Acceptance criteria
 
-- [ ] CI fails on a committed test secret: the self-test shows it in every run.
-- [ ] The repository's full history passes the scan, with the three fingerprints in
+- [x] CI fails on a committed test secret: the self-test shows it in every run.
+- [x] The repository's full history passes the scan, with the three fingerprints in
       `.gitleaksignore`, each with a reason.
-- [ ] The web image runs as non-root: CI's `web-image` job checks the user of every process
+- [x] The web image runs as non-root: CI's `web-image` job checks the user of every process
       and serves `/version.json` on port 80.
-- [ ] The compose bundle upgrades an existing `caddy_data` volume without a manual step.
-- [ ] `docs/security/baseline.md` ticks both items, naming the checks. Spec 012's open-items
+- [x] The compose bundle upgrades an existing `caddy_data` volume without a manual step.
+- [x] `docs/security/baseline.md` ticks both items, naming the checks. Spec 012's open-items
       line points here.
 - [ ] Staging serves the web app after the deploy, with the same headers as before.
-- [ ] `make lint` and `make test` pass.
+      Checked after the merge, when the release workflow deploys the image.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -102,6 +103,26 @@ On every pull request and push to `main`, CI builds `web/Dockerfile` without pus
 - **By hand, after the merge:**
   - staging's `/` and `/api/version` answer, and the response headers are unchanged;
   - `docker compose config` accepts the bundle.
+
+## Implementation notes
+
+- **The self-test reads the report, not only the exit status.** gitleaks exits 1 both for
+  findings and for errors, so the self-test asserts the `github-pat` rule in the JSON report;
+  a gitleaks that cannot run does not pass as "found".
+- **A fingerprint names one commit and line.** A later commit that changes one of those test
+  values is a new finding and needs its own fingerprint or a different value.
+- **Why `web-volume` is needed.** The base image's `/data/caddy` is world-writable, but the
+  certificates, keys and directories a root Caddy wrote inside are not. `web-volume` uses the
+  web image itself (as root, entrypoint `chown`), so there is no extra image to pull.
+- **The check runs the bundle's own service.** `web-image-check.sh` starts `web-volume` from
+  `deploy/compose.yaml` on a volume prepared as a root Caddy would leave it. It then starts
+  Caddy with `SAHIFA_DOMAIN=localhost`, which binds 443 and writes a local CA to the volume as
+  10001. That goes beyond the four checks above.
+- **Required checks.** `secrets` and `web image` are added to `.github/rulesets/protect-main.json`.
+  A repository admin applies the file to the live ruleset (CONTRIBUTING.md).
+- **Locally the full image build fails behind a TLS-intercepting proxy** (pnpm cannot verify
+  the registry). The final stage was built from a local SPA build and checked with the same
+  script; CI builds the whole Dockerfile.
 
 ## Out of scope
 

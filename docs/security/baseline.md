@@ -110,7 +110,11 @@ Last reviewed: 2026-10-03, at release 0.1 (spec 012).
 - [x] **No secrets in the repository.** Configuration comes from the environment; source
       credentials are only `SAHIFA_CONN_*` references (ADR-0006); secrets are `SecretStr`
       settings, never logged.
-- [ ] **Secret scanning in CI** (gitleaks or GitHub push protection): sprint 4.
+- [x] **Secret scanning in CI.** The `secrets` job scans the whole git history with gitleaks
+      (pinned release, checksum verified, values redacted in the log). A self-test first
+      shows that a committed token fails the scan and a clean commit passes
+      (`.github/scripts/secret-scan-selftest.sh`). Values that are not secrets are listed by
+      fingerprint, with the reason, in `.gitleaksignore` (spec 019).
 
 ## Logging
 
@@ -141,7 +145,11 @@ Last reviewed: 2026-10-03, at release 0.1 (spec 012).
       `api/Dockerfile`).
 - [x] **Build provenance.** Images are built with an SBOM and provenance, and promoted to
       production by digest (ADR-0012).
-- [ ] **The web image's Caddy runs as root.** It needs a non-root user with
-      `CAP_NET_BIND_SERVICE` and writable `/data` and `/config`: sprint 4.
+- [x] **Web.** Caddy runs as the non-root user `sahifa` (uid 10001). The file capability
+      `cap_net_bind_service` lets it bind 80 and 443, and it may write only `/data` and
+      `/config`. The compose bundle's one-shot `web-volume` service hands an older
+      `caddy_data` volume to that user. The `web image` CI job checks the user of every
+      process, serving on 80 and 443, and the volume upgrade
+      (`.github/scripts/web-image-check.sh`, spec 019).
 - [ ] **No signature check at deploy.** CapRover deploys verify no image signature: R2, with
       the production server.

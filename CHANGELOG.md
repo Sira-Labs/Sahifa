@@ -39,6 +39,11 @@ All notable changes to this project are documented here. The format follows
 - **A role matrix test** (spec 017) asks all 32 workspace routes as 7 kinds of caller and compares
   each answer with the role table. It fails when a route loses its role check or its workspace
   scope, and when a new route has no line in the matrix.
+- **Secret scanning in CI** (spec 019). gitleaks scans the whole history on every pull request.
+  A self-test shows that a committed token fails the build.
+- **The web container no longer runs as root.** Caddy runs as uid 10001 and still serves on
+  ports 80 and 443. In the compose bundle, a one-shot `web-volume` service hands an existing
+  certificate volume to that user, so upgrading needs no manual step.
 
 ## [0.1.0] - 2026-10-09
 
