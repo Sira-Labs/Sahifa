@@ -65,7 +65,8 @@ def add_member(owner: Engine, workspace_id: str, email: str, role: str) -> None:
 def make_tree(owner: Engine, workspace_id: str, *, scan_status: str = "succeeded") -> dict[str, str]:
     """A connection in the workspace with one row in each of the other ten tables."""
     ids = {
-        name: str(uuid.uuid4()) for name in ("connection", "scan", "asset", "check", "finding", "schedule")
+        name: str(uuid.uuid4())
+        for name in ("connection", "scan", "asset", "check", "finding", "schedule", "audit")
     }
     statements = (
         "INSERT INTO connections (id, name, kind, workspace_id) VALUES (:connection, :name, 'duckdb', :ws)",
@@ -90,6 +91,9 @@ def make_tree(owner: Engine, workspace_id: str, *, scan_status: str = "succeeded
         " evaluated, failed, ratio, low, high, summary, next_step)"
         " VALUES (gen_random_uuid(), :scan, :finding, 'sah.range', 't', 'accuracy', 'high', 10, 1, 0.9, 0.6,"
         " 0.98, 's', 'n')",
+        # An audit entry (spec 018); it is not in TABLES: entries stay where they were written.
+        "INSERT INTO audit_events (id, workspace_id, actor, action, object_type, object_id, summary)"
+        " VALUES (:audit, :ws, 'test', 'connection.created', 'connection', :connection, 'Registered')",
         "INSERT INTO scores (id, scan_id, connection_id, measured_at, checks, dimensions)"
         " VALUES (gen_random_uuid(), :scan, :connection, now(), 1, '{}'::jsonb)",
     )

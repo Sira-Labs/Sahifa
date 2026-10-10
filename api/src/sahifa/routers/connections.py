@@ -18,6 +18,7 @@ from ..db.models import Connection, ScanSchedule
 from ..deps import access, session, settings
 from ..logging import get_logger
 from ..schemas import ConnectionIn, ConnectionOut, ConnectionTest, Items, ScheduleSummary
+from ..services import audit
 from ..services.connections import list_visible, public_config, resolve
 from ..settings import CONNECTION_PREFIX, Settings
 
@@ -87,8 +88,20 @@ async def create_connection(
         secret_ref=body.secret_ref,
         config=body.config,
         workspace_id=workspace_id,
+        id=uuid.uuid4(),
     )
     db.add(conn)
+    # The credential by its variable's name only; the config is not recorded (spec 018).
+    audit.record(
+        db,
+        caller,
+        action="connection.created",
+        workspace_id=workspace_id,
+        object_type="connection",
+        object_id=conn.id,
+        summary=f"Registered the connection {conn.name}",
+        after={"name": conn.name, "kind": conn.kind, "secret_ref": conn.secret_ref},
+    )
     try:
         await db.commit()
     except IntegrityError as e:

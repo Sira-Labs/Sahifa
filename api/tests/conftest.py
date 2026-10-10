@@ -33,6 +33,8 @@ def drop_workspaces(engine: Engine) -> None:
     """Delete every workspace but the default one, with its connections and their rows (which
     cascade), so tests that assume one workspace keep it."""
     with engine.connect() as conn:
+        # Audit entries are append-only (spec 018); a workspace's own go with it, as a purge.
+        conn.execute(text("SET sahifa.audit_purge = 'on'"))
         others = "SELECT id FROM workspaces WHERE NOT is_default"
         conn.execute(text(f"DELETE FROM connections WHERE workspace_id IN ({others})"))
         conn.execute(text("DELETE FROM workspaces WHERE NOT is_default"))

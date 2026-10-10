@@ -324,3 +324,18 @@ class UserMatch(BaseModel):
 
 class MoveIn(BaseModel):
     workspace_id: uuid.UUID
+
+
+class AuditEntry(BaseModel):
+    """One change a person made (spec 018)."""
+
+    id: uuid.UUID
+    at: datetime
+    workspace: WorkspaceRef
+    actor: str
+    action: str
+    object_type: str
+    object_id: uuid.UUID
+    summary: str
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None

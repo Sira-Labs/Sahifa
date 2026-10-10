@@ -16,10 +16,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.access import Access
+from ..db import add_to_scope
 from ..db.models import Connection, Membership, Organisation, User, Workspace
 from ..deps import access, session
 from ..logging import get_logger
 from ..schemas import ConnectionOut, MemberIn, MemberOut, MoveIn, UserMatch, WorkspaceIn, WorkspaceOut
+from ..services import audit
 from ..services.workspaces import ScanRunningError, move_connection
 from .connections import to_out as connection_out
 
@@ -99,12 +101,27 @@ async def create_workspace(
 ) -> WorkspaceOut | JSONResponse:
     caller.require_org_admin(action="workspace.create")
     org = await db.scalar(select(Organisation.id).limit(1))
-    ws = Workspace(organisation_id=org, name=body.name.strip())
+    ws = Workspace(id=uuid.uuid4(), organisation_id=org, name=body.name.strip())
+    # The entry lives in the new workspace, which this request's scope does not hold yet.
+    await add_to_scope(db, ws.id)
     db.add(ws)
     try:
-        await db.commit()
+        # The workspace first: the entry refers to it, and a taken name fails here.
+        await db.flush()
     except IntegrityError:
+        await db.rollback()
         return JSONResponse(status_code=409, content=NAME_TAKEN)
+    audit.record(
+        db,
+        caller,
+        action="workspace.created",
+        workspace_id=ws.id,
+        object_type="workspace",
+        object_id=ws.id,
+        summary=f"Created the workspace {ws.name}",
+        after={"name": ws.name},
+    )
+    await db.commit()
     await db.refresh(ws)
     log.info("workspace.created", workspace_id=str(ws.id), name=ws.name, actor=_actor(caller))
     return await _out(db, caller, ws, role="admin")
@@ -123,6 +140,17 @@ async def rename_workspace(
     if ws is None:
         raise HTTPException(404, "workspace not found")
     before, ws.name = ws.name, body.name.strip()
+    audit.record(
+        db,
+        caller,
+        action="workspace.renamed",
+        workspace_id=ws.id,
+        object_type="workspace",
+        object_id=ws.id,
+        summary=f"Renamed the workspace {before} to {ws.name}",
+        before={"name": before},
+        after={"name": ws.name},
+    )
     try:
         await db.commit()
     except IntegrityError:
@@ -186,6 +214,20 @@ async def put_member(
         db.add(member)
     else:
         member.role = body.role
+    if before != body.role:
+        audit.record(
+            db,
+            caller,
+            action="membership.added" if before is None else "membership.changed",
+            workspace_id=workspace_id,
+            object_type="membership",
+            object_id=user_id,
+            summary=f"Added {user.email} as {body.role}"
+            if before is None
+            else f"Changed {user.email} from {before} to {body.role}",
+            before=None if before is None else {"role": before, "email": user.email},
+            after={"role": body.role, "email": user.email},
+        )
     await db.commit()
     log.info(
         "membership.changed",
@@ -217,6 +259,18 @@ async def delete_member(
     if member is None:
         raise HTTPException(404, "not a member")
     before = member.role
+    user = await db.get(User, user_id)
+    email = user.email if user else str(user_id)
+    audit.record(
+        db,
+        caller,
+        action="membership.removed",
+        workspace_id=workspace_id,
+        object_type="membership",
+        object_id=user_id,
+        summary=f"Removed {email} ({before})",
+        before={"role": before, "email": email},
+    )
     await db.delete(member)
     await db.commit()
     log.info(
@@ -267,7 +321,8 @@ async def move(
     conn = await db.get(Connection, connection_id)
     if conn is None or conn.kind == "upload":
         raise HTTPException(404, "connection not found")
-    if await db.get(Workspace, body.workspace_id) is None:
+    target = await db.get(Workspace, body.workspace_id)
+    if target is None:
         raise HTTPException(404, "workspace not found")
     before = conn.workspace_id
     try:
@@ -281,6 +336,22 @@ async def move(
                 "message": "A scan of this connection is queued or running; move it once the scan is done.",
             },
         )
+    if before != target.id:
+        moved_from = {"id": str(before), "name": caller.name_of(before)}
+        moved_to = {"id": str(target.id), "name": target.name}
+        # One entry in each workspace, so both admins see the move.
+        for workspace_id in (before, target.id):
+            audit.record(
+                db,
+                caller,
+                action="connection.moved",
+                workspace_id=workspace_id,
+                object_type="connection",
+                object_id=conn.id,
+                summary=f"Moved {conn.name} from {moved_from['name']} to {target.name}",
+                before={"workspace": moved_from},
+                after={"workspace": moved_to},
+            )
     await db.commit()
     log.info(
         "connection.moved",

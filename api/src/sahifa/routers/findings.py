@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..auth.access import Access
+from ..auth.deps import actor_of
 from ..db.models import FINDING_STATUSES, Asset, Check, Finding, FindingEvent, FindingOccurrence, Scan
 from ..deps import access, session
 from ..logging import get_logger
@@ -29,8 +30,9 @@ from ..schemas import (
     OccurrenceOut,
     Page,
 )
+from ..services import audit
 from ..services.findings import SEVERITIES, TRANSITIONS
-from .checks import actor_of, title_of
+from .checks import title_of
 
 router = APIRouter(prefix="/api/findings", tags=["findings"])
 log = get_logger("sahifa.findings")
@@ -280,6 +282,7 @@ async def change_finding(
                 "message": f"A {source} finding cannot be changed with {action}.",
             },
         )
+    muted_before = finding.muted_until
     finding.status = target
     # `muted_until` only means something while muted: mute sets it (null: indefinitely),
     # every other change clears it.
@@ -291,6 +294,23 @@ async def change_finding(
     finding.version += 1
     finding.updated_at = func.now()
     note = body.note if body.note and body.note.strip() else None
+    _, check, asset = await _row(db, finding_id)
+    audit.record(
+        db,
+        caller,
+        action=f"finding.{action}",
+        workspace_id=finding.workspace_id,
+        object_type="finding",
+        object_id=finding.id,
+        summary=f"{audit.VERBS[action]} finding of “{title_of(check.type)}” on "
+        f"{audit.where(asset.label, _column(check))}",
+        before={"status": source, "muted_until": muted_before.isoformat() if muted_before else None},
+        after={
+            "status": target,
+            "muted_until": finding.muted_until.isoformat() if finding.muted_until else None,
+            **({"note": note} if note else {}),
+        },
+    )
     db.add(
         FindingEvent(
             finding_id=finding.id,

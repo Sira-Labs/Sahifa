@@ -44,6 +44,11 @@ class Principal:
     admin: bool = False
 
 
+def actor_of(principal: Principal) -> str:
+    """Who an event names, as text that outlives the user: the email, or `dev` / `proxy`."""
+    return principal.email if principal.mode == "oidc" and principal.email else principal.mode
+
+
 DEV_PRINCIPAL = Principal(mode="dev", sign_in_method="dev", display_name="Developer", admin=True)
 PROXY_PRINCIPAL = Principal(mode="proxy", sign_in_method="proxy", display_name="Basic auth", admin=True)
 

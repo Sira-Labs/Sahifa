@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
@@ -12,13 +13,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.access import Access
+from ..auth.deps import actor_of
 from ..db.models import Connection, ScanSchedule
 from ..deps import access, session, settings
 from ..logging import get_logger
 from ..schemas import ScheduleIn, ScheduleOut
+from ..services import audit
 from ..services.schedules import ScheduleError, next_run, upcoming, validate
 from ..settings import Settings
-from .checks import actor_of
 
 router = APIRouter(prefix="/api/connections", tags=["schedules"])
 log = get_logger("sahifa.schedules")
@@ -41,6 +43,11 @@ def to_out(s: ScanSchedule) -> ScheduleOut:
         updated_at=s.updated_at,
         updated_by=s.updated_by,
     )
+
+
+def _fields(s: ScanSchedule) -> dict[str, Any]:
+    """What the audit log records of a schedule (spec 018)."""
+    return {"cron": s.cron, "timezone": s.timezone, "enabled": s.enabled, "sample_rows": s.sample_rows}
 
 
 def stale(version: int | None) -> JSONResponse:
@@ -108,8 +115,9 @@ async def put_schedule(
     if body.version != current:
         return stale(current)
     actor = actor_of(caller.principal)
+    before = _fields(schedule) if schedule else None
     if schedule is None:
-        schedule = ScanSchedule(connection_id=connection_id, version=1)
+        schedule = ScanSchedule(id=uuid.uuid4(), connection_id=connection_id, version=1)
         db.add(schedule)
     else:
         schedule.version += 1
@@ -118,6 +126,18 @@ async def put_schedule(
     schedule.sample_rows = body.sample_rows
     schedule.next_run_at = next_run(cron, body.timezone, now) if body.enabled else None
     schedule.updated_by = actor
+    was, now_ = audit.changed(before, _fields(schedule))
+    audit.record(
+        db,
+        caller,
+        action="schedule.saved",
+        workspace_id=conn.workspace_id,
+        object_type="schedule",
+        object_id=schedule.id,
+        summary=f"{'Changed' if before else 'Created'} the schedule of {conn.name}",
+        before=was,
+        after=now_,
+    )
     try:
         await db.commit()
     except IntegrityError:  # created by a concurrent request
@@ -147,6 +167,16 @@ async def delete_schedule(
     schedule = await _schedule(db, connection_id, lock=True)
     if schedule is None:
         return JSONResponse(status_code=404, content=NO_SCHEDULE)
+    audit.record(
+        db,
+        caller,
+        action="schedule.deleted",
+        workspace_id=conn.workspace_id,
+        object_type="schedule",
+        object_id=schedule.id,
+        summary=f"Removed the schedule of {conn.name}",
+        before=_fields(schedule),
+    )
     await db.delete(schedule)
     await db.commit()
     log.info("schedule.deleted", connection_id=str(connection_id), actor=actor_of(caller.principal))

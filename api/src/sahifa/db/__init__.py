@@ -75,6 +75,15 @@ def _apply_scope(session: Session, transaction: SessionTransaction, connection: 
     connection.execute(_SCOPE, {"system": system, "workspaces": workspaces})
 
 
+async def add_to_scope(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+    """Let a request session see a workspace created in it: now, and in its later transactions."""
+    if session.info.get(SYSTEM):
+        return
+    session.info[WORKSPACES] = (*session.info.get(WORKSPACES, ()), workspace_id)
+    _, workspaces = scope_of(session.info)
+    await session.execute(text("SELECT set_config('sahifa.workspaces', :w, true)"), {"w": workspaces})
+
+
 def make_engine(url: str, application_name: str | None = None) -> AsyncEngine:
     """`application_name` names the connections in `pg_stat_activity` (the worker's, spec 008)."""
     connect_args = {"application_name": application_name} if application_name else {}

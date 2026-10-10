@@ -23,6 +23,7 @@ from .db.models import Organisation
 from .logging import configure, get_logger
 from .routers import (
     assets,
+    audit,
     auth,
     checks,
     connections,
@@ -216,6 +217,7 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     app.include_router(findings.router, dependencies=protected)
     app.include_router(history.router, dependencies=protected)
     app.include_router(workspaces.router, dependencies=protected)
+    app.include_router(audit.router, dependencies=protected)
     return app
 
 
