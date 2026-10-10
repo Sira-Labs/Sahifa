@@ -15,7 +15,7 @@ import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 from sahifa_core.synth import write_shop
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 
@@ -35,7 +35,7 @@ from sahifa.services.schedules import (
 )
 from sahifa.settings import Settings
 
-from .conftest import CSRF, DB_URL, needs_db
+from .conftest import CSRF, DB_URL, DEFAULT_WORKSPACE, needs_db, owner_engine
 from .fake_idp import FakeIdp
 from .test_auth_flow import ADMIN, Env, auth_settings, browser, sign_in
 
@@ -143,7 +143,7 @@ def owner() -> Iterator[Engine]:
     with a clock in the future sees only this test's."""
     assert DB_URL
     upgrade(DB_URL)
-    engine = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    engine = owner_engine()
     sql(engine, "DELETE FROM scan_schedules")
     yield engine
     sql(engine, "DELETE FROM scan_schedules")
@@ -359,16 +359,14 @@ async def test_due_schedule_starts_one_scheduled_scan(
     created = await put(client, cid, sample_rows=0)
     due = parse(created["next_run_at"])
     settings = settings_for(tmp_path)
-    runner = ScanRunner(db.sessions, settings)
+    runner = ScanRunner(db.system, settings)
 
     # Not due yet: nothing happens.
-    assert (
-        await jobs.run_due_schedules(db.sessions, settings, due - timedelta(seconds=1), runner=runner) == []
-    )
+    assert await jobs.run_due_schedules(db.system, settings, due - timedelta(seconds=1), runner=runner) == []
     now = due + timedelta(minutes=1)
     runs = [
         r
-        for r in await jobs.run_due_schedules(db.sessions, settings, now, runner=runner)
+        for r in await jobs.run_due_schedules(db.system, settings, now, runner=runner)
         if r.connection_id == uuid.UUID(cid)
     ]
     assert [r.outcome for r in runs] == ["queued"]
@@ -412,9 +410,7 @@ async def test_a_running_scan_skips_the_run(
     settings = settings_for(tmp_path)
     try:
         now = due + timedelta(minutes=5)
-        runs = await jobs.run_due_schedules(
-            db.sessions, settings, now, runner=ScanRunner(db.sessions, settings)
-        )
+        runs = await jobs.run_due_schedules(db.system, settings, now, runner=ScanRunner(db.system, settings))
         assert [(r.outcome, r.scan_id) for r in runs if r.connection_id == uuid.UUID(cid)] == [
             ("skipped_running", None)
         ]
@@ -433,11 +429,11 @@ async def test_an_outage_collapses_to_one_run(
     cid = await connect(client, monkeypatch, tmp_path / "shop")
     due = parse((await put(client, cid))["next_run_at"])
     settings = settings_for(tmp_path)
-    runner = ScanRunner(db.sessions, settings)
+    runner = ScanRunner(db.system, settings)
     # The worker was down for three nights; it comes back at 09:00.
     now = due + timedelta(days=3, hours=7)
-    first = await jobs.run_due_schedules(db.sessions, settings, now, runner=runner)
-    again = await jobs.run_due_schedules(db.sessions, settings, now + timedelta(minutes=1), runner=runner)
+    first = await jobs.run_due_schedules(db.system, settings, now, runner=runner)
+    again = await jobs.run_due_schedules(db.system, settings, now + timedelta(minutes=1), runner=runner)
     assert [r.outcome for r in first if r.connection_id == uuid.UUID(cid)] == ["queued"]
     assert [r for r in again if r.connection_id == uuid.UUID(cid)] == []
     [(sid, _, _)] = scans_of(owner, cid)
@@ -462,7 +458,7 @@ async def test_a_schedule_that_no_longer_resolves_is_disabled(
     )
     settings = settings_for(tmp_path)
     now = due + timedelta(minutes=5)
-    runs = await jobs.run_due_schedules(db.sessions, settings, now, runner=ScanRunner(db.sessions, settings))
+    runs = await jobs.run_due_schedules(db.system, settings, now, runner=ScanRunner(db.system, settings))
     outcomes = {str(r.connection_id): (r.outcome, r.next_run_at) for r in runs}
     assert outcomes[bad] == ("invalid_schedule", None)
     assert outcomes[good] == ("queued", due + timedelta(days=1))
@@ -504,7 +500,7 @@ async def test_a_scan_that_cannot_start_fails_and_the_batch_goes_on(
     monkeypatch.setattr(jobs, "start_scan", flaky)
     settings = settings_for(tmp_path)
     runs = await jobs.run_due_schedules(
-        db.sessions, settings, due + timedelta(minutes=5), runner=ScanRunner(db.sessions, settings)
+        db.system, settings, due + timedelta(minutes=5), runner=ScanRunner(db.system, settings)
     )
     outcomes = {str(r.connection_id): r.outcome for r in runs}
     assert outcomes == {lost: "failed_to_queue", good: "queued"}
@@ -524,23 +520,22 @@ async def test_concurrent_runs_start_one_scan(
     cid = await connect(client, monkeypatch, tmp_path / "shop")
     due = parse((await put(client, cid))["next_run_at"])
     settings = settings_for(tmp_path)
-    runner = ScanRunner(db.sessions, settings)
+    runner = ScanRunner(db.system, settings)
     now = due + timedelta(minutes=1)
 
     # A row locked by another run is passed by (SKIP LOCKED), not waited for.
-    async with db.sessions() as other:
+    async with db.system() as other:
         await other.execute(
             text("SELECT id FROM scan_schedules WHERE connection_id = :c FOR UPDATE"), {"c": cid}
         )
         assert (
-            await asyncio.wait_for(jobs.run_due_schedules(db.sessions, settings, now, runner=runner), 10)
-            == []
+            await asyncio.wait_for(jobs.run_due_schedules(db.system, settings, now, runner=runner), 10) == []
         )
         await other.rollback()
 
     a, b = await asyncio.gather(
-        jobs.run_due_schedules(db.sessions, settings, now, runner=runner),
-        jobs.run_due_schedules(db.sessions, settings, now, runner=runner),
+        jobs.run_due_schedules(db.system, settings, now, runner=runner),
+        jobs.run_due_schedules(db.system, settings, now, runner=runner),
     )
     mine = [r for r in a + b if r.connection_id == uuid.UUID(cid)]
     assert [r.outcome for r in mine] == ["queued"]
@@ -557,7 +552,7 @@ async def test_queue_mode_defers_the_scheduled_scan(
     settings = settings_for(tmp_path, scan_execution="queue")
     sql(owner, "DELETE FROM procrastinate_jobs WHERE status = 'todo'")
     async with jobs.opened(settings, "api"):
-        runs = await jobs.run_due_schedules(db.sessions, settings, due + timedelta(minutes=1))
+        runs = await jobs.run_due_schedules(db.system, settings, due + timedelta(minutes=1))
     assert [r.outcome for r in runs if r.connection_id == uuid.UUID(cid)] == ["queued"]
     [(sid, status, trigger)] = scans_of(owner, cid)
     assert (status, trigger) == ("queued", "schedule")
@@ -566,7 +561,7 @@ async def test_queue_mode_defers_the_scheduled_scan(
         "SELECT j.queueing_lock FROM scans s JOIN procrastinate_jobs j ON j.id = s.job_id WHERE s.id = :s",
         s=sid,
     ) == [(f"scan:{sid}",)]
-    await jobs.work(settings, db.sessions, queues=(jobs.SCANS,), wait=False)
+    await jobs.work(settings, db.system, queues=(jobs.SCANS,), wait=False)
     assert (await finished(client, sid))["status"] == "succeeded"
 
     # A failure to defer leaves the scan failed and the schedule says so.
@@ -575,7 +570,7 @@ async def test_queue_mode_defers_the_scheduled_scan(
 
     monkeypatch.setattr(jobs, "_defer_scan", broken)
     async with jobs.opened(settings, "api"):
-        runs = await jobs.run_due_schedules(db.sessions, settings, due + timedelta(days=1, minutes=1))
+        runs = await jobs.run_due_schedules(db.system, settings, due + timedelta(days=1, minutes=1))
     [failed] = [r for r in runs if r.connection_id == uuid.UUID(cid)]
     assert failed.outcome == "failed_to_queue"
     scan = (await client.get(f"/api/scans/{failed.scan_id}")).json()
@@ -624,7 +619,13 @@ async def test_schedules_need_sign_in_and_csrf(owner: Engine, tmp_path: Path) ->
     app = create_app(auth_settings(tmp_path), oidc=idp.client())
     env = Env(idp=idp, app=app, make=None, owner=owner)
     cid = str(uuid.uuid4())
-    sql(owner, "INSERT INTO connections (id, name, kind) VALUES (:id, :n, 'duckdb')", id=cid, n=f"s-{cid}")
+    sql(
+        owner,
+        "INSERT INTO connections (id, name, kind, workspace_id)"
+        f" VALUES (:id, :n, 'duckdb', {DEFAULT_WORKSPACE})",
+        id=cid,
+        n=f"s-{cid}",
+    )
     url = f"/api/connections/{cid}/schedule"
     async with LifespanManager(app), browser(app) as c:
         assert (await c.get(url)).status_code == 401

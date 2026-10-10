@@ -185,8 +185,8 @@ class FindingOccurrence(Base):
 class User(Base):
     """A person who signed in through the realm (spec 006): one identity (issuer, subject).
 
-    Access is not stored: it follows `SAHIFA_ADMIN_EMAIL` and `SAHIFA_ALLOWED_EMAILS` at each
-    request, so editing the setting takes effect at the next restart.
+    Access comes from `memberships` (spec 016); the org admin is `SAHIFA_ADMIN_EMAIL`, read at
+    each request.
     """
 
     __tablename__ = "users"

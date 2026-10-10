@@ -31,7 +31,7 @@ EXIT_SCHEMA = 3
 
 async def _revision(db: Database) -> str | None:
     try:
-        async with db.sessions() as s:
+        async with db.system() as s:
             value = (await s.execute(text("SELECT version_num FROM alembic_version"))).scalar()
             return None if value is None else str(value)
     except (SQLAlchemyError, OSError) as e:
@@ -69,7 +69,7 @@ async def _run(settings: Settings, schema_wait_s: float) -> int:
             queues=list(QUEUES),
             concurrency=settings.max_concurrent_scans,
         )
-        await work(settings, db.sessions)
+        await work(settings, db.system)
         log.info("worker.stop", commit=settings.commit)
         return 0
     finally:

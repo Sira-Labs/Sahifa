@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     session_secret: SecretStr | None = None
     admin_email: str | None = None
     allowed_emails: str = ""
+    # Spec 016: the organisation's name, shown in the header and stored on start.
+    org_name: str = Field(default="Sahifa", min_length=1, max_length=200)
     sign_in_methods: str = ",".join(SIGN_IN_METHODS)
     session_idle: timedelta = timedelta(hours=12)
     session_absolute: timedelta = timedelta(days=30)

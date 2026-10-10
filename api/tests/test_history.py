@@ -15,13 +15,12 @@ import pytest
 from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
 from sahifa_core.synth import write_shop
-from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
 
-from .conftest import DB_URL, needs_db
+from .conftest import DB_URL, needs_db, owner_engine
 from .fake_idp import FakeIdp
 from .test_auth_flow import auth_settings, browser
 from .test_checks import asset_id, connect, make_asset, make_connection, scan, sql
@@ -35,7 +34,7 @@ T0 = datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
 def owner() -> Iterator[Engine]:
     assert DB_URL
     upgrade(DB_URL)
-    engine = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    engine = owner_engine()
     yield engine
     engine.dispose()
 

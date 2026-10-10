@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import Engine, create_engine
 
 from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
@@ -16,6 +17,16 @@ DB_URL = os.environ.get("SAHIFA_TEST_DATABASE_URL")
 needs_db = pytest.mark.skipif(not DB_URL, reason="SAHIFA_TEST_DATABASE_URL not set")
 # What the web app sends on every request; unsafe requests without it get 403 (spec 006).
 CSRF = {"X-Sahifa-Request": "1"}
+DEFAULT_WORKSPACE = "(SELECT id FROM workspaces WHERE is_default)"
+
+
+def owner_engine() -> Engine:
+    """The tests' own engine for direct SQL: autocommit, and every workspace visible under
+    row-level security (spec 016), as for the API's jobs."""
+    assert DB_URL
+    return create_engine(
+        DB_URL, isolation_level="AUTOCOMMIT", connect_args={"options": "-c sahifa.system=on"}
+    )
 
 
 @pytest.fixture

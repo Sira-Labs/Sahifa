@@ -14,7 +14,7 @@ from asgi_lifespan import LifespanManager
 from httpx import AsyncClient
 from sahifa_core.models import label_of
 from sahifa_core.synth import write_shop
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from sahifa.db import Database
@@ -22,7 +22,7 @@ from sahifa.db.migrate import upgrade
 from sahifa.main import create_app
 from sahifa.services.checks import TRANSITIONS, load_saved, persist_checks
 
-from .conftest import CSRF, DB_URL, needs_db
+from .conftest import CSRF, DB_URL, DEFAULT_WORKSPACE, needs_db, owner_engine
 from .fake_idp import FakeIdp
 from .test_auth_flow import ADMIN, Env, auth_settings, browser, sign_in
 
@@ -38,7 +38,7 @@ def owner() -> Iterator[Engine]:
     """A direct connection for setup and for reading the tables."""
     assert DB_URL
     upgrade(DB_URL)
-    engine = create_engine(DB_URL, isolation_level="AUTOCOMMIT")
+    engine = owner_engine()
     yield engine
     engine.dispose()
 
@@ -238,7 +238,13 @@ async def test_retired_check_is_not_evaluated_or_recreated(
 
 def make_connection(owner: Engine) -> str:
     cid = str(uuid.uuid4())
-    sql(owner, "INSERT INTO connections (id, name, kind) VALUES (:id, :n, 'duckdb')", id=cid, n=f"t-{cid}")
+    sql(
+        owner,
+        "INSERT INTO connections (id, name, kind, workspace_id)"
+        f" VALUES (:id, :n, 'duckdb', {DEFAULT_WORKSPACE})",
+        id=cid,
+        n=f"t-{cid}",
+    )
     return cid
 
 
@@ -380,7 +386,7 @@ async def test_lock_during_a_scan_survives_persistence(
     assert DB_URL
     db = Database(DB_URL)
     try:
-        async with db.sessions() as s:
+        async with db.system() as s:
             saved = await load_saved(s, uuid.UUID(cid))  # the scan's step 1
         # While the scan runs, a person locks one check and approves another.
         locked = await act(
@@ -391,7 +397,7 @@ async def test_lock_during_a_scan_survives_persistence(
         for spec in report["checks"]:
             if spec["id"] in (locked["key"], approved["key"]):
                 spec["params"] = {"min": -1, "max": 1}
-        async with db.sessions() as s:
+        async with db.system() as s:
             out = await persist_checks(
                 s,
                 scan_id=uuid.UUID(report["scan_id"]),

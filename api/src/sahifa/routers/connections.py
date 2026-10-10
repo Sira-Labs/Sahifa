@@ -1,4 +1,6 @@
-"""Connections (spec 004): registered sources, never uploads, never credentials."""
+"""Connections (spec 004): registered sources, never uploads, never credentials.
+
+Each belongs to a workspace (spec 016); creating one needs the admin role there."""
 
 from __future__ import annotations
 
@@ -11,8 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..auth.access import Access
 from ..db.models import Connection, ScanSchedule
-from ..deps import session, settings
+from ..deps import access, session, settings
 from ..logging import get_logger
 from ..schemas import ConnectionIn, ConnectionOut, ConnectionTest, Items, ScheduleSummary
 from ..services.connections import list_visible, public_config, resolve
@@ -55,28 +58,43 @@ async def schedules_of(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID
 
 
 @router.get("", response_model=Items[ConnectionOut])
-async def list_connections(db: AsyncSession = Depends(session)) -> Items[ConnectionOut]:
-    conns = await list_visible(db)
+async def list_connections(
+    workspace_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(session),
+    caller: Access = Depends(access),
+) -> Items[ConnectionOut]:
+    conns = await list_visible(db, workspace_id)
     schedules = await schedules_of(db, [c.id for c in conns])
-    return Items[ConnectionOut](items=[to_out(c, schedules.get(c.id)) for c in conns])
+    return Items[ConnectionOut](
+        items=[caller.stamp(to_out(c, schedules.get(c.id)), c.workspace_id) for c in conns]
+    )
 
 
 @router.post("", response_model=ConnectionOut, status_code=status.HTTP_201_CREATED)
-async def create_connection(body: ConnectionIn, db: AsyncSession = Depends(session)) -> ConnectionOut:
+async def create_connection(
+    body: ConnectionIn, db: AsyncSession = Depends(session), caller: Access = Depends(access)
+) -> ConnectionOut:
+    workspace_id = caller.pick(body.workspace_id, "admin", action="connection.create")
     if not body.secret_ref.startswith(CONNECTION_PREFIX):
         raise HTTPException(
             422, f"secret_ref must name an environment variable starting with {CONNECTION_PREFIX}"
         )
     if not os.environ.get(body.secret_ref, "").strip():
         raise HTTPException(422, f"{body.secret_ref} is not set on the server")
-    conn = Connection(name=body.name, kind=body.kind, secret_ref=body.secret_ref, config=body.config)
+    conn = Connection(
+        name=body.name,
+        kind=body.kind,
+        secret_ref=body.secret_ref,
+        config=body.config,
+        workspace_id=workspace_id,
+    )
     db.add(conn)
     try:
         await db.commit()
     except IntegrityError as e:
         raise HTTPException(409, f"a connection named {body.name!r} exists") from e
     await db.refresh(conn)
-    return to_out(conn)
+    return caller.stamp(to_out(conn), conn.workspace_id)
 
 
 async def _get(db: AsyncSession, connection_id: uuid.UUID) -> Connection:
@@ -87,9 +105,11 @@ async def _get(db: AsyncSession, connection_id: uuid.UUID) -> Connection:
 
 
 @router.get("/{connection_id}", response_model=ConnectionOut)
-async def get_connection(connection_id: uuid.UUID, db: AsyncSession = Depends(session)) -> ConnectionOut:
+async def get_connection(
+    connection_id: uuid.UUID, db: AsyncSession = Depends(session), caller: Access = Depends(access)
+) -> ConnectionOut:
     conn = await _get(db, connection_id)
-    return to_out(conn, (await schedules_of(db, [conn.id])).get(conn.id))
+    return caller.stamp(to_out(conn, (await schedules_of(db, [conn.id])).get(conn.id)), conn.workspace_id)
 
 
 @router.post("/{connection_id}/test", response_model=ConnectionTest)
