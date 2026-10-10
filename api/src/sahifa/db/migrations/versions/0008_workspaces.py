@@ -30,7 +30,6 @@ down_revision = "0007"
 branch_labels = None
 depends_on = None
 
-APP_ROLE = "sahifa_app"
 # (table, parent table, column naming the parent); `connections` has no parent.
 OWNED: tuple[tuple[str, str | None, str | None], ...] = (
     ("connections", None, None),
@@ -67,7 +66,9 @@ END
 $$
 """
 
-# Created when the migrating login may create roles; a login that cannot is warned, not failed.
+# Created when the migrating login may create roles. The table owner grants the privileges in
+# any case, then joins the role; a login that may neither create nor join it is warned, not
+# failed, and row-level security then relies on FORCE (a non-superuser owner).
 APP_ROLE_SQL = """
 DO $$
 BEGIN
@@ -79,14 +80,18 @@ BEGIN
       RETURN;
     END IF;
   END IF;
-  IF NOT pg_has_role(current_user, 'sahifa_app', 'MEMBER') THEN
-    EXECUTE format('GRANT sahifa_app TO %I', current_user);
-  END IF;
   GRANT USAGE ON SCHEMA public TO sahifa_app;
   GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO sahifa_app;
   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO sahifa_app;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO sahifa_app;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO sahifa_app;
+  IF NOT pg_has_role(current_user, 'sahifa_app', 'MEMBER') THEN
+    BEGIN
+      EXECUTE format('GRANT sahifa_app TO %I', current_user);
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'sahifa: % may not join sahifa_app; row-level security relies on FORCE', current_user;
+    END;
+  END IF;
 END
 $$
 """
