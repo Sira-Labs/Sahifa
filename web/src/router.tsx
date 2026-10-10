@@ -3,6 +3,7 @@ import { setUnauthorizedHandler } from "./api";
 import { Account } from "./pages/Account";
 import { isPasskeyStatus, type PasskeyStatus } from "./auth";
 import { AssetReport } from "./pages/AssetReport";
+import { Audit } from "./pages/Audit";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
 import { FindingPage, FindingsAcross } from "./pages/FindingsAcross";
@@ -74,6 +75,9 @@ const connectionsRoute = createRoute({ getParentRoute: () => appRoute, path: "/c
 // Workspaces, members and moving connections (spec 016).
 const workspacesRoute = createRoute({ getParentRoute: () => appRoute, path: "/workspaces", component: Workspaces });
 
+// The audit log (spec 018).
+const auditRoute = createRoute({ getParentRoute: () => appRoute, path: "/audit", component: Audit });
+
 const accountRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings/account",
@@ -101,6 +105,7 @@ export const routeTree = rootRoute.addChildren([
     findingRoute,
     connectionsRoute,
     workspacesRoute,
+    auditRoute,
     accountRoute,
   ]),
   loginRoute,

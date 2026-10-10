@@ -81,9 +81,14 @@ export function Layout({ children }: { children?: React.ReactNode }) {
               Connections
             </Link>
             {administers(me.data) && (
-              <Link to="/workspaces" className="nav-link" activeProps={activeProps}>
-                Workspaces
-              </Link>
+              <>
+                <Link to="/workspaces" className="nav-link" activeProps={activeProps}>
+                  Workspaces
+                </Link>
+                <Link to="/audit" className="nav-link" activeProps={activeProps}>
+                  Audit
+                </Link>
+              </>
             )}
             {signedIn && (
               <>

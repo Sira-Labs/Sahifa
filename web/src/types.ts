@@ -33,6 +33,23 @@ export type Workspace = {
 
 export type Member = { user_id: string; email: string; display_name: string; role: WorkspaceRole; last_login_at: string | null };
 
+/** One change a person made (spec 018). */
+export type AuditEntry = {
+  id: string;
+  at: string;
+  workspace: { id: string; name: string };
+  actor: string;
+  action: string;
+  object_type: string;
+  object_id: string;
+  summary: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+};
+
+/** Filters of `GET /api/audit`: an action prefix (`check.`) and a person. */
+export type AuditFilters = { action?: string; actor?: string };
+
 /** A person who has signed in, to add as a member. */
 export type UserMatch = { id: string; email: string; display_name: string };
 
