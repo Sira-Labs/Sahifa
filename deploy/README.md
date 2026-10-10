@@ -46,7 +46,9 @@ docker compose up -d
 
 Caddy obtains a TLS certificate automatically when `SAHIFA_DOMAIN` is set and ports 80/443
 are reachable. Without a domain it serves plain HTTP on port 80 for use behind your own
-load balancer.
+load balancer. Caddy runs as the unprivileged user 10001. On every start, the one-shot
+`web-volume` service gives the certificate volume (`caddy_data`) to that user, so a volume
+from an older release, which a root Caddy created, keeps working.
 
 ## Sign-in, or an access gate
 
