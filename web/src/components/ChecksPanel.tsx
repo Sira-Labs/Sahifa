@@ -3,6 +3,7 @@ import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { ApiError, api } from "../api";
 import { formatParams } from "../format";
 import type { AssetReport, CheckAction, CheckStatus, StoredCheck } from "../types";
+import { VIEWER_REASON, allows } from "../workspace";
 import { SeverityChip, StatusChip } from "./Chips";
 
 const TABS: { id: CheckStatus; label: string; empty: string }[] = [
@@ -81,6 +82,8 @@ export function ChecksPanel({ scanId, label, asset }: { scanId: string; label: s
   for (const c of checks.data ?? []) counts[c.status] += 1;
   const tab = chosen ?? (counts.proposed > 0 ? "proposed" : "active");
   const shown = (checks.data ?? []).filter((c) => c.status === tab);
+  // All checks of an asset share its workspace; a viewer there sees the actions disabled (spec 016).
+  const readOnly = (checks.data ?? []).some((c) => !allows(c.role));
   const results = new Map(asset.checks.map((r) => [r.spec.id, r]));
   const unevaluated = new Map((asset.unevaluated ?? []).map((u) => [u.spec.id, u.reason]));
 
@@ -142,6 +145,7 @@ export function ChecksPanel({ scanId, label, asset }: { scanId: string; label: s
               {notice}
             </p>
           )}
+          {readOnly && <p className="muted text-sm">{VIEWER_REASON}</p>}
           {change.isError && !isStale(change.error) && (
             <p role="alert" className="text-bad">
               {change.error.message}
@@ -176,7 +180,8 @@ export function ChecksPanel({ scanId, label, asset }: { scanId: string; label: s
                             key={a.action}
                             type="button"
                             className={`btn btn-small${a.action === "approve" ? " btn-primary" : ""}`}
-                            disabled={change.isPending}
+                            disabled={change.isPending || readOnly}
+                            title={readOnly ? VIEWER_REASON : undefined}
                             onClick={() => change.mutate({ check: c, action: a.action })}
                           >
                             {a.label}

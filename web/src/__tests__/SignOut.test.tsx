@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "../auth";
-import { ME, renderApp, stubFetch } from "./helpers";
+import { DEV_ME, ME, renderApp, stubFetch } from "./helpers";
 
 describe("Sign out", () => {
   it("shows the user, posts the logout with the CSRF header, then goes to the IdP's logout URL", async () => {
@@ -27,7 +27,7 @@ describe("Sign out", () => {
 
   it("offers no sign-out behind the proxy's basic auth", async () => {
     stubFetch(() => ({ items: [], next_cursor: null }), {
-      me: { mode: "proxy", user: { id: null, email: null, display_name: "Basic auth" }, sign_in_method: "proxy", admin: true },
+      me: { ...DEV_ME, mode: "proxy", user: { id: null, email: null, display_name: "Basic auth" }, sign_in_method: "proxy" },
     });
     renderApp("/");
     await screen.findByRole("heading", { name: "No scans yet" });

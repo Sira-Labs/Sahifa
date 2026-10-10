@@ -4,6 +4,7 @@ import { useId, useState, type FormEvent } from "react";
 import { ApiError, api } from "../api";
 import { assetColumn, formatCount, formatFailedShare, formatLocalTime, titleCase } from "../format";
 import type { FindingAction, FindingChange, FindingEvent, FindingStatus, StoredFinding } from "../types";
+import { VIEWER_REASON, allows } from "../workspace";
 import { SeverityChip, StatusChip } from "./Chips";
 import { Examples } from "./Examples";
 import { SqlBlock } from "./SqlBlock";
@@ -191,6 +192,8 @@ export function StoredFindingCard({
   }
 
   const summary = finding.latest?.summary ?? finding.check.title;
+  // Viewers see the actions disabled, with the reason (spec 016); the API refuses them too.
+  const readOnly = !allows(finding.role);
   const where = assetColumn(finding.asset.label, finding.check.column);
   const error = change.isError && !isStaleFinding(change.error) ? change.error.message : null;
 
@@ -261,13 +264,14 @@ export function StoredFindingCard({
                 key={a.action}
                 type="button"
                 className="btn btn-small"
-                disabled={change.isPending}
+                disabled={change.isPending || readOnly}
+                title={readOnly ? VIEWER_REASON : undefined}
                 onClick={() => (a.action === "mute" ? setMuting(true) : run(a.action))}
               >
                 {a.label}
               </button>
             ))}
-            {!noting && (
+            {!noting && !readOnly && (
               <button type="button" className="btn btn-small btn-quiet" onClick={() => setNoting(true)}>
                 Add a note
               </button>
@@ -278,6 +282,7 @@ export function StoredFindingCard({
           </div>
         </>
       )}
+      {readOnly && <p className="muted text-sm">{VIEWER_REASON}</p>}
       {error && (
         <p role="alert" className="text-bad">
           {error}

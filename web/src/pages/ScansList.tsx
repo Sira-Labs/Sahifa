@@ -8,6 +8,7 @@ import { POLL_INTERVAL_MS, SCANS_PAGE_SIZE, SEVERITIES } from "../constants";
 import { formatDuration, formatLocalTime, scanSource, secondsBetween } from "../format";
 import { isTerminal } from "../hooks/useScanPolling";
 import type { Scan } from "../types";
+import { useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
 
 /** Open findings by severity, words included: "2 critical · 5 high". */
 function FindingCounts({ scan }: { scan: Scan }) {
@@ -27,9 +28,11 @@ function FindingCounts({ scan }: { scan: Scan }) {
 
 /** `/`: scans, newest first, with "Load more"; running scans refresh every 2 s. */
 export function ScansList() {
+  const workspace = useWorkspaceFilter();
+  const showWorkspace = useShowsWorkspaces();
   const scans = useInfiniteQuery({
-    queryKey: ["scans"],
-    queryFn: ({ pageParam }) => api.listScans(pageParam, SCANS_PAGE_SIZE),
+    queryKey: ["scans", workspace ?? null],
+    queryFn: ({ pageParam }) => api.listScans(pageParam, SCANS_PAGE_SIZE, workspace),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
     refetchInterval: (q) =>
@@ -73,6 +76,7 @@ export function ScansList() {
               <tr>
                 <th scope="col">When</th>
                 <th scope="col">Source</th>
+                {showWorkspace && <th scope="col">Workspace</th>}
                 <th scope="col">Status</th>
                 <th scope="col">Score</th>
                 <th scope="col">Findings</th>
@@ -98,6 +102,7 @@ export function ScansList() {
                       </>
                     )}
                   </td>
+                  {showWorkspace && <td data-label="Workspace">{scan.workspace?.name ?? "—"}</td>}
                   <td data-label="Status">
                     <StatusChip status={scan.status} />
                   </td>

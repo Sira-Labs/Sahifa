@@ -13,10 +13,33 @@ export type ConnectionKind = "postgres" | "duckdb" | "upload";
 /** A keyset-paginated list. */
 export type Page<T> = { items: T[]; next_cursor: string | null };
 
+// --- Workspaces and roles (spec 016) ---------------------------------------------------------
+
+export type WorkspaceRole = "viewer" | "editor" | "admin";
+
+/** What every workspace-owned object carries: its workspace and the caller's role there. */
+export type InWorkspace = { workspace?: { id: string; name: string } | null; role?: WorkspaceRole | null };
+
+/** `GET /api/workspaces`: a workspace with the caller's role and its size. */
+export type Workspace = {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+  is_default: boolean;
+  connections: number;
+  members: number;
+  created_at: string;
+};
+
+export type Member = { user_id: string; email: string; display_name: string; role: WorkspaceRole; last_login_at: string | null };
+
+/** A person who has signed in, to add as a member. */
+export type UserMatch = { id: string; email: string; display_name: string };
+
 export type Version = { version: string; commit: string; schema_revision: string };
 export type Health = { status: "ok" | "degraded"; database: "ok" | "unavailable"; version: string };
 
-export type Connection = {
+export type Connection = InWorkspace & {
   id: string;
   name: string;
   kind: ConnectionKind;
@@ -37,7 +60,7 @@ export type ScheduleSummary = { cron: string; timezone: string; enabled: boolean
 
 /** `GET/PUT /api/connections/{id}/schedule`. Times are ISO strings in UTC; `next_runs` is empty
  * while the schedule is disabled. */
-export type Schedule = ScheduleSummary & {
+export type Schedule = ScheduleSummary & InWorkspace & {
   sample_rows: number | null;
   next_runs: string[];
   last_run_at: string | null;
@@ -65,7 +88,7 @@ export type FindingCounts = Record<Severity, number>;
 
 export type ScanTrigger = "manual" | "schedule";
 
-export type Scan = {
+export type Scan = InWorkspace & {
   id: string;
   connection_id: string;
   connection_name: string;
@@ -262,7 +285,7 @@ export type FindingFilters = { severity?: Severity; dimension?: Dimension; asset
 export type CheckCounts = Record<CheckStatus, number>;
 
 /** An asset stored by the scans of a connection. */
-export type Asset = {
+export type Asset = InWorkspace & {
   id: string;
   connection_id: string;
   namespace: string;
@@ -275,7 +298,7 @@ export type Asset = {
 };
 
 /** A stored check with its lifecycle status; `key` is the report's `CheckSpec.id`. */
-export type StoredCheck = {
+export type StoredCheck = InWorkspace & {
   id: string;
   key: string;
   type: string;
@@ -302,7 +325,7 @@ export type FindingStatus = "open" | "acknowledged" | "resolved" | "muted";
 export type FindingAction = "acknowledge" | "resolve" | "mute" | "unmute" | "reopen";
 
 /** One finding per failing check across scans, with its latest occurrence. */
-export type StoredFinding = {
+export type StoredFinding = InWorkspace & {
   id: string;
   status: FindingStatus;
   severity: Severity;

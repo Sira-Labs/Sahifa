@@ -18,7 +18,7 @@ describe("NoAccess", () => {
 
     expect(await screen.findByRole("heading", { name: "No access yet" })).toBeTruthy();
     expect(screen.getByText("bo@example.org")).toBeTruthy();
-    expect(screen.getByText("SAHIFA_ALLOWED_EMAILS")).toBeTruthy();
+    expect(screen.getByText(/Ask a workspace admin to add you/)).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     expect(fetch.mock.calls.some(([url]) => String(url).startsWith("/api/scans"))).toBe(false);
 

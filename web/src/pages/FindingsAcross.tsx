@@ -8,6 +8,7 @@ import { SEVERITIES } from "../constants";
 import { titleCase } from "../format";
 import { parseFindingsSearch } from "../search";
 import type { FindingsSearch, FindingsView, Page, StoredFinding } from "../types";
+import { useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
 
 const listRoute = getRouteApi("/_app/findings");
 const detailRoute = getRouteApi("/_app/findings/$findingId");
@@ -67,11 +68,13 @@ export function FindingsAcross() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
-  const connections = useQuery({ queryKey: ["connections"], queryFn: api.listConnections });
-  const key = ["stored-findings", search.status ?? "attention", search.severity ?? null, search.connection ?? null];
+  const workspace = useWorkspaceFilter();
+  const showWorkspace = useShowsWorkspaces();
+  const connections = useQuery({ queryKey: ["connections", workspace ?? null], queryFn: () => api.listConnections(workspace) });
+  const key = ["stored-findings", search.status ?? "attention", search.severity ?? null, search.connection ?? null, workspace ?? null];
   const findings = useInfiniteQuery({
     queryKey: key,
-    queryFn: ({ pageParam }) => api.listStoredFindings(search, pageParam, PAGE_SIZE),
+    queryFn: ({ pageParam }) => api.listStoredFindings(search, pageParam, PAGE_SIZE, workspace),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   });
@@ -155,14 +158,18 @@ export function FindingsAcross() {
               : `${items.length}${findings.hasNextPage ? "+" : ""} ${items.length === 1 ? "finding" : "findings"}, most severe first.`}
           </p>
           <div className="stack">
-            {items.map((f) => (
+            {items.map((f) => {
+              // Where it is: the workspace when the person sees several, the connection unless filtered to one.
+              const where = [showWorkspace ? f.workspace?.name : null, search.connection ? null : names.get(f.asset.connection_id)]
+                .filter(Boolean)
+                .join(" · ");
+              return (
               <div key={f.id} className="stack-sm">
-                {!search.connection && names.get(f.asset.connection_id) && (
-                  <p className="eyebrow">{names.get(f.asset.connection_id)}</p>
-                )}
+                {where && <p className="eyebrow">{where}</p>}
                 <StoredFindingCard finding={f} onChanged={changed} onStale={stale} />
               </div>
-            ))}
+              );
+            })}
           </div>
           {findings.hasNextPage && (
             <button type="button" className="btn" disabled={findings.isFetchingNextPage} onClick={() => void findings.fetchNextPage()}>

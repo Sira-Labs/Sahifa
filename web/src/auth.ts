@@ -2,6 +2,7 @@
 // backend-for-frontend: the browser holds only an HttpOnly session cookie, and sign-in and
 // sign-out are full-page navigations through the identity provider.
 import { ApiError, apiGet, apiSend } from "./api";
+import type { WorkspaceRole } from "./types";
 
 export type SignInMethod = "google" | "github" | "passkey";
 
@@ -20,8 +21,15 @@ export type Me = {
   user: { id: string | null; email: string | null; display_name: string };
   /** `google`, `github`, `passkey`, or `dev` / `proxy` when the server runs without sign-in. */
   sign_in_method: string;
+  /** The org admin (spec 016); the same as `org_admin`. */
   admin: boolean;
+  org_admin: boolean;
+  organisation: string;
+  /** The workspaces the person sees, with their role in each; all of them for the org admin. */
+  workspaces: MeWorkspace[];
 };
+
+export type MeWorkspace = { id: string; name: string; role: WorkspaceRole; is_default: boolean };
 
 export type Device = {
   id: string;
