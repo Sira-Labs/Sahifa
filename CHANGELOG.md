@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Invitations by link** (spec 020). A workspace admin creates a link for an address and a role
+  on `/workspaces`, copies it and sends it any way they like; the invited person opens it, signs
+  in and lands in the workspace. Links work once, for that address, for 7 days
+  (`SAHIFA_INVITATION_TTL_DAYS`), and can be revoked. No email is sent yet.
+- **Deleting a workspace** (org admin), after typing its name: its uploads, scans, findings,
+  members, invitations and audit entries go with it; the deletion stays in the default
+  workspace's audit log.
 - **Audit log** (spec 018). Every change a person makes is recorded with who, when, the
   workspace, and the state before and after, in the change's own transaction:
   - checks, findings and schedules;
@@ -22,6 +29,10 @@ All notable changes to this project are documented here. The format follows
   the workspace and manage its members. The org admin (`SAHIFA_ADMIN_EMAIL`) creates
   workspaces and moves connections between them. A new page `/workspaces`, a workspace filter
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
+
+### Deprecated
+- `SAHIFA_ALLOWED_EMAILS`: invitation links replace it. It still works in this release and logs a
+  warning at start; the next release removes it.
 
 ### Changed
 - **Access comes from memberships.** A signed-in person needs a workspace (or to be the org

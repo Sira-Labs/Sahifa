@@ -4,7 +4,7 @@ Sprint 4b, story S4b-1 (replaces S4-3). Depends on: spec 006 (sign-in), spec 016
 memberships, row-level security), spec 017 (role matrix), spec 018 (audit log). Packages:
 `api/` (model, migration 0010, service, router), `web/`, `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-10 by the owner; done.
 
 ## Goal
 
@@ -135,20 +135,20 @@ Google, GitHub or a passkey, and see our workspace, with nobody editing a server
 
 ## Acceptance criteria
 
-- [ ] An admin creates an invitation and copies the link; the invited person opens it, signs
+- [x] An admin creates an invitation and copies the link; the invited person opens it, signs
       in, accepts and lands in the workspace with the invited role (the sprint plan's "done when").
-- [ ] Only the SHA-256 of the token is stored. No token or link appears in the audit log, the
+- [x] Only the SHA-256 of the token is stored. No token or link appears in the audit log, the
       structured logs or a later `GET`.
-- [ ] Expired, revoked, unknown and used tokens are refused with the codes above. Unknown,
+- [x] Expired, revoked, unknown and used tokens are refused with the codes above. Unknown,
       revoked and expired look the same.
-- [ ] Accepting with another email is refused. Accepting never lowers an existing role.
-- [ ] Invitations are admin-only; the role matrix covers the new routes, and RLS keeps another
+- [x] Accepting with another email is refused. Accepting never lowers an existing role.
+- [x] Invitations are admin-only; the role matrix covers the new routes, and RLS keeps another
       workspace's invitations invisible.
-- [ ] The org admin deletes a non-default workspace without connections. Its rows and its
+- [x] The org admin deletes a non-default workspace without connections. Its rows and its
       uploaded files are gone, and `workspace.deleted` stays in the default workspace.
-- [ ] `SAHIFA_ALLOWED_EMAILS` still works and logs its deprecation.
-- [ ] Migration 0010 is reversible and `alembic check` is clean.
-- [ ] `make lint` and `make test` pass.
+- [x] `SAHIFA_ALLOWED_EMAILS` still works and logs its deprecation.
+- [x] Migration 0010 is reversible and `alembic check` is clean.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -176,6 +176,24 @@ Google, GitHub or a passkey, and see our workspace, with nobody editing a server
   - signed in, it accepts and opens the workspace;
   - the error texts;
   - the delete dialog needs the name.
+
+## Implementation notes
+
+- **Lookup is a POST.** The token stays in request bodies, like the link's fragment keeps it out
+  of the server's view; `/invite` moves it to `sessionStorage` and drops it from the address
+  before any sign-in redirect, so it never reaches `next`, the login flow or an access log.
+- **A rate-limit bucket of its own** (`invitations`, 20 a minute per session) instead of the
+  sign-in bucket, which counts by address and which a whole office shares.
+- **Accepting reads as the system.** The invited person is in no workspace yet, so row-level
+  security would hide the invitation; the token is the proof. The audit entries of accepting
+  name the person who accepted (`audit.record` takes a principal for that).
+- **Outside oidc mode** creating and accepting invitations answer 409 `sign_in_required`: dev and
+  proxy modes have no personal accounts to invite.
+- **Deleting** removes the workspace's connections first (they cascade to everything under
+  them), then the workspace (memberships, invitations and audit entries cascade), all with the
+  purge setting set for this transaction only. A workspace with a queued or running scan answers
+  409 `scan_running`.
+- **The no-access message** now asks for an invitation link instead of being added.
 
 ## Out of scope
 

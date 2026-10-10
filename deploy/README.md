@@ -56,9 +56,10 @@ An install can read every source it is connected to, so with `SAHIFA_ENV=prod` t
 refuses to start unless one of two things keeps strangers out (spec 006, ADR-0010):
 
 - **Sign-in through Keycloak** (`SAHIFA_AUTH_MODE=oidc`): Google, GitHub and passkeys through
-  a realm `sahifa`; `SAHIFA_ADMIN_EMAIL` and members of a workspace get access (addresses in
-  `SAHIFA_ALLOWED_EMAILS` become editors of the `Default` workspace, spec 016). The
-  settings are in `.env.example`; the realm set-up is `caprover.md`, section 4a.
+  a realm `sahifa`; `SAHIFA_ADMIN_EMAIL` and members of a workspace get access. Workspace
+  admins bring people in with an invitation link from `/workspaces`, which they copy and send
+  themselves (spec 020); `SAHIFA_ALLOWED_EMAILS` still works in this release but is deprecated.
+  The settings are in `.env.example`; the realm set-up is `caprover.md`, section 4a.
 - **An access gate** (`SAHIFA_AUTH_MODE=proxy` with `SAHIFA_ACCESS_GATE=basic-auth-at-proxy`):
   something in front asks for a password. On CapRover that is the web app's HTTP basic auth
   (`caprover.md`, section 4a, "Interim"); on a compose host it is your load balancer or

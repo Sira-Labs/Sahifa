@@ -164,7 +164,7 @@ sprint ahead of sprint 5 on 10 Oct; production stays postponed, and staging serv
 
 | ID | Story | Prio | Done when | Status |
 |---|---|---|---|---|
-| S4b-1 | Invitations by a link an admin copies (no SMTP yet; email can be added later), replacing `SAHIFA_ALLOWED_EMAILS`; deleting workspaces | M | an invited person opens the link, signs in and lands in the right workspace with the right role | |
+| S4b-1 | Invitations by a link an admin copies (no SMTP yet; email can be added later), replacing `SAHIFA_ALLOWED_EMAILS`; deleting workspaces | M | an invited person opens the link, signs in and lands in the right workspace with the right role | ✅ spec 020 |
 | S4b-2 | Install in your own environment: a quick start for the compose bundle against the user's own databases and folders of files; the connection check shows what the login may read and warns when it may write (the database role should be read-only) | M | on a fresh machine the quick start scans a Postgres database and a folder of files, and a login with write rights is flagged | |
 | S4b-3 | First run: demo data in one click, a guided first scan, empty states and error texts that say what to do | S | a new person reaches a first report without reading the docs | |
 | S4b-4 | Stable for test users: versioned images to install, error reporting, a backup and restore guide for self-hosters, a short note on uploaded data, a feedback link | S | a test user installs a tagged version, and an error in the API is visible to the operator with its request id | |

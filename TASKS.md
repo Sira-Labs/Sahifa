@@ -215,7 +215,12 @@ next session reads). Sprint priorities, actual dates and the forecast live in
 Production is postponed. Test users install Sahifa in their own environment, with their own
 databases and files, and get in by invitation link; staging serves demos.
 
-- [ ] **020 Invitations by link, deleting workspaces** — `docs/specs/020-invitation-links.md` (S4b-1)
+- [x] **020 Invitations by link, deleting workspaces** — `docs/specs/020-invitation-links.md` (S4b-1)
+      - The token never reaches a URL the server sees: link fragment, then sessionStorage, then
+        request bodies; only its SHA-256 is stored. Accepting reads as the system, the token
+        being the proof.
+      - Token tries have their own rate-limit bucket per session, not the sign-in bucket per address.
+      - `SAHIFA_ALLOWED_EMAILS` still works and logs a deprecation; the next release removes it.
 - [ ] S4b-2 install in your own environment; the connection check shows what the login may read
       and warns when it may write.
 - [ ] S4b-3 first run: demo data, guided first scan, empty states, error texts.

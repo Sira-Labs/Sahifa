@@ -156,7 +156,8 @@ Rules:
     | `SAHIFA_OIDC_CLIENT_SECRET` | the `sahifa-api` client's secret from Keycloak (Clients → `sahifa-api` → Credentials) |
     | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32`; changing it signs everyone out |
     | `SAHIFA_ADMIN_EMAIL` | the administrator's address; always has access |
-    | `SAHIFA_ALLOWED_EMAILS` | optional: further addresses, comma-separated; each becomes an editor of the `Default` workspace at its first sign-in |
+    | `SAHIFA_ALLOWED_EMAILS` | deprecated (removed in the next release): further addresses, each an editor of `Default` at its first sign-in; invite people by link on `/workspaces` instead |
+    | `SAHIFA_INVITATION_TTL_DAYS` | optional, default `7`: how long an invitation link works |
     | `SAHIFA_ORG_NAME` | optional, default `Sahifa`: the organisation's name in the header |
     | `SAHIFA_SIGN_IN_METHODS` | optional, default `google,github,passkey` |
     | `SAHIFA_SESSION_IDLE` / `SAHIFA_SESSION_ABSOLUTE` | optional, defaults `12h` / `30d` |
@@ -350,10 +351,11 @@ sequenceDiagram
    | `SAHIFA_OIDC_CLIENT_SECRET` | from step 2 |
    | `SAHIFA_SESSION_SECRET` | `openssl rand -hex 32` |
    | `SAHIFA_ADMIN_EMAIL` | the administrator's address |
-   | `SAHIFA_ALLOWED_EMAILS` | optional, comma-separated |
+   | `SAHIFA_ALLOWED_EMAILS` | deprecated, optional: comma-separated |
 
-   Remove `SAHIFA_ACCESS_GATE`, then Save & Update. Only `SAHIFA_ADMIN_EMAIL` and the allowed
-   addresses get in; anyone else who signs in sees "No access yet" and gets 403 from the API.
+   Remove `SAHIFA_ACCESS_GATE`, then Save & Update. `SAHIFA_ADMIN_EMAIL` gets in; everyone else
+   needs an invitation link from `/workspaces` (or, until it is removed, an address in
+   `SAHIFA_ALLOWED_EMAILS`). Anyone else who signs in sees "No access yet" and gets 403 from the API.
    A changed list takes effect at the next restart.
 6. **Basic auth off.** `sahifa-web` → HTTP Settings → untick **Password protect**, and delete
    the GitHub secret `CAPROVER_WEB_BASIC_AUTH` of that environment. Keep the API on **Do not
@@ -606,7 +608,8 @@ none of it: its data can be rebuilt.
 | API log: `refusing to start in prod` naming `SAHIFA_ACCESS_GATE` | neither the sign-in nor the access gate is set up (spec 006, ADR-0010) | Set the Keycloak rows (section 4a), or turn on basic auth for the web app and set `SAHIFA_ACCESS_GATE=basic-auth-at-proxy` (section 4a, "Interim") |
 | API log: `refusing to start in prod` naming `SAHIFA_OIDC_*`, `SAHIFA_SESSION_SECRET` or `SAHIFA_ADMIN_EMAIL` | `SAHIFA_AUTH_MODE=oidc` with a missing, short or placeholder setting | Fill in the rows of section 4a, step 5; the session secret needs 32 characters (`openssl rand -hex 32`) |
 | Sign-in page: "Sign-in failed (invalid_token)" | the realm's issuer differs from `SAHIFA_OIDC_ISSUER`, or the user's email is not verified | Copy the issuer from `https://<kc>/realms/<realm>/.well-known/openid-configuration`; verify the email at Google or GitHub |
-| Signed in, "No access yet" | the address is neither `SAHIFA_ADMIN_EMAIL` nor in `SAHIFA_ALLOWED_EMAILS` | Add it to `SAHIFA_ALLOWED_EMAILS`, Save & Update |
+| Signed in, "No access yet" | the person is not the admin and has no workspace yet | A workspace admin creates an invitation link on `/workspaces` and sends it; the person opens it while signed in with the invited address |
+| Invitation page: "This invitation is for …" | signed in with another address than the invited one | Sign out and sign in with the invited address, or ask for a link for this address |
 | API log: `refusing to start in prod` naming a `SAHIFA_CONN_*` variable | that source URL carries a placeholder password | Put the generated `sahifa_reader` password in it |
 | Web log: `dial tcp: lookup api ... no such host` | `SAHIFA_API_UPSTREAM` missing or misspelled on the **web** app | Set it to `srv-captain--sahifa-api:8000` (two dashes) and Save & Update |
 | Web log: `lookup srv-captain--... no such host` | the API app has a different name (on staging: `-stg`) | Match the upstream to `srv-captain--<api app name>:8000` |
