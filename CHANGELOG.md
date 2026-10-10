@@ -20,12 +20,16 @@ All notable changes to this project are documented here. The format follows
   the `Default` workspace; everything that existed before moves to `Default`.
 - Creating a connection needs the admin role in its workspace; uploads and new connections name
   their workspace when the person works in several.
+- Every role check goes through one access object (spec 017).
 
 ### Security
 - **Row-level security in Postgres** on every workspace-owned table, failing closed, so a query
   that forgets its filter still sees nothing of another workspace. The API switches to the
   role `sahifa_app` in each transaction, and refuses to start in prod when its database login
   would bypass row-level security.
+- **A role matrix test** (spec 017) asks all 32 workspace routes as 7 kinds of caller and compares
+  each answer with the role table. It fails when a route loses its role check or its workspace
+  scope, and when a new route has no line in the matrix.
 
 ## [0.1.0] - 2026-10-09
 

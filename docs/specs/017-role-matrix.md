@@ -3,7 +3,7 @@
 Sprint 4, story S4-2. Depends on: spec 006 (sign-in, `Principal`), spec 016 (workspaces, roles,
 row-level security). Packages: `api/` (tests only, unless the matrix finds a defect), `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-10 by the owner; done.
 
 ## Goal
 
@@ -44,8 +44,8 @@ Every operation in the app's OpenAPI document is in exactly one class:
 
 | Class | Operations | Expected |
 |---|---|---|
-| **public** | `/healthz`, `/api/version`, `/api/auth/options`, `/api/auth/login`, `/api/auth/passkey/add`, `/api/auth/callback`, `/api/auth/backchannel-logout` | not part of the matrix; their own tests cover them (spec 006) |
-| **session** | `/api/auth/sessions` (list, revoke, revoke others), `/api/auth/logout` | `anonymous` 401; every signed-in caller, `no_access` included, gets through |
+| **public** | `/healthz`, `/api/version`, `/api/auth/options`, `/api/auth/login`, `/api/auth/passkey/add`, `/api/auth/callback`, `/api/auth/backchannel-logout`, `/api/auth/logout` | not part of the matrix; their own tests cover them (spec 006). Logout is idempotent: it ends a session if there is one and answers 200 either way |
+| **session** | `/api/auth/sessions` (list, revoke, revoke others) | `anonymous` 401; every signed-in caller, `no_access` included, gets through |
 | **workspace** | the other 32 operations, `/api/auth/me` included | the matrix below |
 
 For each workspace operation, the matrix in `api/tests/test_matrix.py` records:
@@ -97,7 +97,7 @@ code, so a check that goes missing from a route shows up as a difference.
    - with the role check switched off (`Access.require` and `Access.pick` let everything
      through), every operation whose minimum role is above `viewer`;
    - with request sessions scoped to every workspace (as if a route forgot its scope), every
-     object operation for the outsider;
+     object and list operation on a table under row-level security, for the outsider;
    - with sign-in switched off (every request as the org admin), every operation for
      `anonymous` and `no_access`.
 6. **A defect the matrix finds** is fixed in this spec, with a line in the implementation
@@ -105,14 +105,14 @@ code, so a check that goes missing from a route shows up as a difference.
 
 ## Acceptance criteria
 
-- [ ] `test_matrix` covers all 32 workspace operations for the 7 callers, plus the session
+- [x] `test_matrix` covers all 32 workspace operations for the 7 callers, plus the session
       operations, and is green.
-- [ ] `test_every_route_is_classified` fails for an unclassified operation. A deliberately
+- [x] `test_every_route_is_classified` fails for an unclassified operation. A deliberately
       added test route shows this.
-- [ ] The three meta-tests show the matrix fails when the role check, the workspace scope or
+- [x] The three meta-tests show the matrix fails when the role check, the workspace scope or
       the sign-in is removed.
-- [ ] The matrix runs in under 60 seconds in CI.
-- [ ] `make lint` and `make test` pass.
+- [x] The matrix runs in under 60 seconds in CI.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -125,6 +125,24 @@ code, so a check that goes missing from a route shows up as a difference.
   - `test_matrix_catches_a_missing_sign_in`.
 - **Fixtures** reuse `tests/tenancy.py` (trees, members) and the fake identity provider of the
   sign-in tests, to sign in as each caller.
+
+## Implementation notes
+
+- **No route was found without its check.** The matrix agreed with spec 016's table for all 32
+  operations and 7 callers on the first full run. The only differences were in the test itself:
+  - lists answered beyond their first page;
+  - the fixture's scan had no report, so the report route answered 409.
+- **Every role check is an `Access` method** (`require`, `require_any`, `require_org_admin`,
+  `pick`). The user search and the org-admin routes had their own checks before. With one place
+  for them, the meta-test can switch them all off, and a new route has one way to check a role.
+- **Logout is public, not a session route.** It is idempotent (spec 006): without a session it
+  answers 200 and clears the cookie. The interface table above is edited.
+- **The workspace routes are outside the scope meta-test.** Workspaces and memberships are not
+  under row-level security, so scoping the session cannot change their answers. Their isolation
+  is the API check, which the role meta-test covers.
+- **A server error is a difference.** With the role checks off, the outsider's create in
+  workspace A is refused by row-level security in Postgres (an error, not 404). The matrix
+  records it rather than crashing; that refusal is the second line of spec 016 at work.
 
 ## Out of scope
 
