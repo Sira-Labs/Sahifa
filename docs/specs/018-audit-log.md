@@ -4,7 +4,7 @@ Sprint 4, story S4-4. Depends on: spec 007 (check lifecycle), spec 009 (finding 
 010 (schedules), spec 016 (workspaces, roles, row-level security), spec 017 (role matrix).
 Packages: `api/` (model, migration 0009, service, router), `web/`, `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-10 by the owner; done.
 
 ## Goal
 
@@ -124,20 +124,20 @@ The role matrix (spec 017) gains the operation as a `list` with minimum role `ad
 
 ## Acceptance criteria
 
-- [ ] Approving a check and muting a finding each appear in `GET /api/audit` with the actor,
+- [x] Approving a check and muting a finding each appear in `GET /api/audit` with the actor,
       the time, and status before and after (the sprint plan's "done when").
-- [ ] Every action in the table is recorded by its route, in the same transaction. A change
+- [x] Every action in the table is recorded by its route, in the same transaction. A change
       whose commit fails leaves no entry.
-- [ ] Workspace admins see only their workspaces' entries. Editors and viewers get 403. The
+- [x] Workspace admins see only their workspaces' entries. Editors and viewers get 403. The
       matrix of spec 017 covers the route.
-- [ ] `UPDATE` and `DELETE` on `audit_events` fail for the API role and the owner.
-- [ ] Migration 0009 backfills the people's check and finding events, is reversible, and
+- [x] `UPDATE` and `DELETE` on `audit_events` fail for the API role and the owner.
+- [x] Migration 0009 backfills the people's check and finding events, is reversible, and
       `alembic check` is clean.
-- [ ] No secret value or data example appears in any entry. A test scans every recorded
+- [x] No secret value or data example appears in any entry. A test scans every recorded
       entry for the test credential's value.
-- [ ] The web page lists, filters and pages entries for an admin, and is not linked for
+- [x] The web page lists, filters and pages entries for an admin, and is not linked for
       others.
-- [ ] `make lint` and `make test` pass.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -158,6 +158,25 @@ The role matrix (spec 017) gains the operation as a `list` with minimum role `ad
   - the filters send their query parameters;
   - "Load more" works;
   - no link for a viewer.
+
+## Implementation notes
+
+- **A deleted user's entries stay.** `ON DELETE SET NULL` clears `user_id`; the trigger lets
+  exactly that update through, and the entry keeps the actor's email.
+- **The purge setting.** `sahifa.audit_purge` is transaction- or session-local. Today only the
+  tests' clean-up uses it, to remove the workspaces they create; workspace deletion (S4-3) will
+  use it too.
+- **A new workspace's entry.** The request's scope does not hold the new workspace, so the route
+  widens it (`db.add_to_scope`). It also flushes the workspace before recording: the entry has no
+  ORM relationship that would order the two inserts, and a taken name must still answer 409.
+- **No entry without a change.** Setting a member's role to the role they already have records
+  nothing.
+- **The connection's config is not recorded,** only its name, kind and the credential's variable
+  name: the config is free-form and could hold anything.
+- **Backfilled summaries** name the check type (`sah.range`) and the asset without the core's
+  quoting of dotted names. New entries name the catalogue title (“Range”).
+- **The role matrix** knows that an outsider without the admin role is refused the audit list
+  (403), unlike the lists editors may read.
 
 ## Out of scope
 
