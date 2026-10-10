@@ -203,6 +203,11 @@ next session reads). Sprint priorities, actual dates and the forecast live in
       - People's changes only; the scanner's stay in each object's history. The existing check and
         finding history from people is backfilled.
       - Creating a workspace widens the request's scope and flushes the workspace before its entry.
+- [x] **019 Security follow-ups** — `docs/specs/019-security-followups.md` (S4-5)
+      - gitleaks binary with a pinned checksum rather than the action (which needs a licence key
+        for organisation repositories); a self-test with a generated token proves the gate.
+      - Caddy as uid 10001 with the bind capability; a one-shot `web-volume` service in compose
+        re-owns old certificate volumes. CapRover's web app has no volume, so nothing changes there.
 
 ## Owner
 
@@ -212,3 +217,5 @@ next session reads). Sprint priorities, actual dates and the forecast live in
 - [x] Keycloak realm `sahifa` on `miftachun.apps.data-and-ai-dude.ch`, Google and GitHub OAuth
       apps, then staging to `SAHIFA_AUTH_MODE=oidc` (`deploy/caprover.md`, section 4a).
 - [ ] Buy ISO/IEC 25024 so the catalogue can cite measure identifiers.
+- [ ] Apply `.github/rulesets/protect-main.json` to the live ruleset so `secrets` and
+      `web image` become required (CONTRIBUTING.md); optionally turn on push protection.

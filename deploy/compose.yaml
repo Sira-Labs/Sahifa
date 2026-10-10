@@ -21,8 +21,21 @@ services:
     volumes:
       - caddy_data:/data
     depends_on:
+      web-volume:
+        condition: service_completed_successfully
       api:
         condition: service_healthy
+
+  web-volume:
+    # Caddy runs as uid 10001 (spec 019), but a caddy_data volume made by an older image
+    # belongs to root. This one-shot container hands it to 10001 on each start and exits; it is
+    # the only root process in the bundle's web part, and it runs nothing but chown.
+    image: ${SAHIFA_WEB_IMAGE:-ghcr.io/sira-labs/sahifa-web:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}
+    user: "0:0"
+    entrypoint: ["chown", "-R", "10001:10001", "/data"]
+    restart: "no"
+    volumes:
+      - caddy_data:/data
 
   api:
     image: ${SAHIFA_API_IMAGE:-ghcr.io/sira-labs/sahifa-api:${SAHIFA_TAG:?set SAHIFA_TAG (a version or sha-<short>)}}

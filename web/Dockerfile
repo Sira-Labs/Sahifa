@@ -18,4 +18,14 @@ COPY --from=build /app/dist /srv
 # confirm a deploy went live. After the SPA build so a new commit keeps the build cached.
 ARG SAHIFA_COMMIT=unknown
 RUN printf '{"commit":"%s"}\n' "$SAHIFA_COMMIT" > /srv/version.json
-EXPOSE 80
+# Caddy runs as the unprivileged user sahifa (uid 10001, as in the api image; spec 019). The
+# file capability lets it bind 80 and 443 without root; the base image sets it too, it is set
+# again here so the image does not depend on that. It may write only its certificates (/data)
+# and autosaved config (/config); /srv and the Caddyfile stay root's.
+RUN addgroup -S -g 10001 sahifa \
+ && adduser -S -D -H -u 10001 -G sahifa -s /sbin/nologin sahifa \
+ && setcap cap_net_bind_service=+ep /usr/bin/caddy \
+ && mkdir -p /data/caddy /config/caddy \
+ && chown -R 10001:10001 /data /config
+USER 10001:10001
+EXPOSE 80 443

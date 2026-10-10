@@ -154,7 +154,7 @@ a workspace, and every change is in an audit log.
 | S4-2 | Role matrix test: every route against every role, cross-workspace → 404 | M | the matrix test is green and fails when a route loses its check | ✅ spec 017 |
 | S4-3 | Invitations by email, replacing the allowed-emails list; deleting workspaces (member management moved to S4-1 by the owner, 10 Oct) | S | an invited person signs in and lands in the right workspace | |
 | S4-4 | Audit log of changes (who, what, when, before and after) with a page for admins | S | approving a check or muting a finding appears in the log | ✅ spec 018 |
-| S4-5 | Security follow-ups from spec 012: secret scanning in CI; Caddy as a non-root user | S | CI fails on a committed test secret; the web image runs as non-root | |
+| S4-5 | Security follow-ups from spec 012: secret scanning in CI; Caddy as a non-root user | S | CI fails on a committed test secret; the web image runs as non-root | ✅ spec 019 |
 
 ## Sprint 5 — metric history, anomalies, drift (R2)
 

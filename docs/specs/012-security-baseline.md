@@ -202,7 +202,8 @@ buckets live in one API process; several API replicas each count on their own (d
 ## Out of scope
 
 - Caddy as a non-root user, image signing checks at deploy, and secret scanning in CI: listed
-  as follow-ups in the baseline.
+  as follow-ups in the baseline. Secret scanning and the non-root Caddy are done in spec 019;
+  image signing checks remain for R2.
 - Rate limits shared across several API replicas (Postgres- or Redis-backed): when the API
   scales out (R3).
 - A web application firewall, and DDoS protection beyond these limits: the operator's edge.
