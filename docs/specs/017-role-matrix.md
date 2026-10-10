@@ -87,7 +87,9 @@ code, so a check that goes missing from a route shows up as a difference.
    - The test collects every difference from the expected answer and fails listing all of them,
      not only the first.
 3. **Lists.** For a list operation the test also checks the content: A's object is in the
-   answer for the members of A and the org admin, and absent for the outsider.
+   answer for the members of A and the org admin, and absent for the outsider. Where a list
+   can hold B's matching row (connections, scans, workspaces), that row is absent for A's
+   members.
 4. **Every route is classified.**
    - A second test reads the app's OpenAPI document and fails for any operation that is in no
      class, or in more than one.

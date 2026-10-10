@@ -75,6 +75,7 @@ class World:
     a: str
     b: str
     tree: dict[str, str]
+    other: dict[str, str]  # B's tree
     target: str
 
     def fresh(self) -> dict[str, str]:
@@ -97,6 +98,8 @@ class Op:
     request: Callable[[World], Call]
     # For lists: the id of A's object that the answer must hold for members and not for others.
     listed: Callable[[World], str] | None = None
+    # For lists: the id of B's matching object, which A's members must never get.
+    foreign: Callable[[World], str] | None = None
     # Whether the object is in a table under row-level security (the workspace routes are not).
     rls: bool = True
     before: Callable[[World], None] | None = field(default=None)
@@ -125,6 +128,7 @@ OPS: tuple[Op, ...] = (
         200,
         lambda w: ("/api/connections", {}),
         listed=lambda w: w.tree["connection"],
+        foreign=lambda w: w.other["connection"],
     ),
     Op(
         "POST",
@@ -202,6 +206,7 @@ OPS: tuple[Op, ...] = (
         200,
         lambda w: ("/api/scans", {"params": {"limit": 100}}),
         listed=lambda w: w.tree["scan"],
+        foreign=lambda w: w.other["scan"],
     ),
     Op(
         "POST",
@@ -323,6 +328,7 @@ OPS: tuple[Op, ...] = (
         200,
         lambda w: ("/api/workspaces", {}),
         listed=lambda w: w.a,
+        foreign=lambda w: w.b,
         rls=False,
     ),
     Op(
@@ -449,7 +455,10 @@ async def run_matrix(world: World, clients: dict[str, AsyncClient]) -> list[Diff
                 )
                 continue
             if listed is not None and op.listed:
-                present = op.listed(world) in _ids(r.json())
+                ids = _ids(r.json())
+                if caller in ("viewer", "editor", "admin") and op.foreign and op.foreign(world) in ids:
+                    differences.append(Difference(op, caller, "no row of B", "a row of B"))
+                present = op.listed(world) in ids
                 if present != listed:
                     differences.append(
                         Difference(
@@ -484,9 +493,9 @@ async def setup(
             a=a,
             b=b,
             tree=make_tree(env.owner, a),
+            other=make_tree(env.owner, b),
             target=user_id(env.owner, TARGET),
         )
-        make_tree(env.owner, b)
         yield world, clients
 
 
@@ -566,17 +575,19 @@ async def test_matrix_catches_a_missing_scope(setup: tuple[World, dict[str, Asyn
 
     world.app.dependency_overrides[deps.session] = unscoped
     try:
-        caught = {
-            (d.op.method, d.op.path) for d in await run_matrix(world, clients) if d.caller == "outsider"
-        }
+        differences = await run_matrix(world, clients)
     finally:
         world.app.dependency_overrides.pop(deps.session, None)
+    caught = {(d.op.method, d.op.path) for d in differences if d.caller == "outsider"}
     secured = {
         (op.method, op.path)
         for op in OPS
         if op.rls and op.scope in ("object", "list") and op.needs != "org_admin"
     }
     assert secured <= caught, secured - caught
+    # A's viewer now also gets B's rows in the lists that can hold them.
+    leaked = {(d.op.method, d.op.path) for d in differences if d.caller == "viewer" and d.got == "a row of B"}
+    assert leaked == {(op.method, op.path) for op in OPS if op.rls and op.foreign}, leaked
 
 
 async def test_matrix_catches_a_missing_sign_in(
