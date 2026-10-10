@@ -15,7 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth.access import RANK, Access, ForbiddenRoleError
+from ..auth.access import Access
 from ..db.models import Connection, Membership, Organisation, User, Workspace
 from ..deps import access, session
 from ..logging import get_logger
@@ -36,15 +36,6 @@ OWN_MEMBERSHIP = {
 
 def _actor(caller: Access) -> str | None:
     return str(caller.principal.user_id) if caller.principal.user_id else caller.principal.mode
-
-
-def require_org_admin(caller: Access, *, action: str) -> None:
-    """403 `forbidden_role` (needs `org_admin`) unless the caller is the org admin."""
-    if caller.org_admin:
-        return
-    best = max((w.role for w in caller.workspaces.values()), key=RANK.__getitem__, default=None)
-    log.info("rbac.denied", user_id=_actor(caller), action=action, role=best, needs="org_admin")
-    raise ForbiddenRoleError(best, "org_admin")
 
 
 def _visible(caller: Access, workspace_id: uuid.UUID) -> None:
@@ -106,7 +97,7 @@ async def list_workspaces(
 async def create_workspace(
     body: WorkspaceIn, db: AsyncSession = Depends(session), caller: Access = Depends(access)
 ) -> WorkspaceOut | JSONResponse:
-    require_org_admin(caller, action="workspace.create")
+    caller.require_org_admin(action="workspace.create")
     org = await db.scalar(select(Organisation.id).limit(1))
     ws = Workspace(organisation_id=org, name=body.name.strip())
     db.add(ws)
@@ -252,10 +243,7 @@ async def search_users(
     caller: Access = Depends(access),
 ) -> list[UserMatch]:
     """People who have signed in, by email or name, to add as members (workspace admins)."""
-    if not caller.org_admin and not any(w.role == "admin" for w in caller.workspaces.values()):
-        best = max((w.role for w in caller.workspaces.values()), key=RANK.__getitem__, default=None)
-        log.info("rbac.denied", user_id=_actor(caller), action="users.search", role=best, needs="admin")
-        raise ForbiddenRoleError(best, "admin")
+    caller.require_any("admin", action="users.search")
     pattern = _like(q.strip())
     rows = await db.scalars(
         select(User)
@@ -275,7 +263,7 @@ async def move(
 ) -> ConnectionOut | JSONResponse:
     """Move a connection with its scans, assets, checks, findings, schedule and scores to
     another workspace, in one transaction (org admin)."""
-    require_org_admin(caller, action="connection.move")
+    caller.require_org_admin(action="connection.move")
     conn = await db.get(Connection, connection_id)
     if conn is None or conn.kind == "upload":
         raise HTTPException(404, "connection not found")
