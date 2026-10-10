@@ -115,8 +115,9 @@ jobs:
       GITLEAKS_VERSION: 8.24.3
       GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
     steps:
+      # The scan reads the local history only; no job step needs the token afterwards.
       - uses: actions/checkout@v7
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 0, persist-credentials: false }
       - name: install gitleaks
         run: |
           curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
@@ -135,6 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - name: build
         run: docker build -f web/Dockerfile --build-arg SAHIFA_COMMIT="$GITHUB_SHA" -t sahifa-web:ci .
       - name: non-root and serving
