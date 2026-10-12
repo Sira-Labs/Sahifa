@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../api";
 import type { ConnectionTest as Result } from "../types";
+import { AccessResult } from "./AccessNote";
 import { StatusChip } from "./Chips";
 
 /** "3 assets" from a test answer that carries a count or the names. */
@@ -22,6 +23,12 @@ export function ConnectionTest({ connectionId, name }: { connectionId: string; n
           (test.data.ok ? (
             <>
               <StatusChip status="available" /> <span className="num">{assetCount(test.data)}</span>
+              {test.data.access && (
+                <>
+                  {" "}
+                  <AccessResult access={test.data.access} />
+                </>
+              )}
             </>
           ) : (
             <>

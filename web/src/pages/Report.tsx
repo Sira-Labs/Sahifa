@@ -1,5 +1,6 @@
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { SeverityChip, StatusChip } from "../components/Chips";
+import { AccessWarning } from "../components/AccessNote";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { FindingCard } from "../components/FindingCard";
 import { ScoreCard } from "../components/ScoreCard";
@@ -289,6 +290,7 @@ export function Report() {
       )}
       {report.data && (
         <>
+          <AccessWarning access={report.data.source_access} />
           <ScoreCard
             title="Store score"
             score={report.data.score}

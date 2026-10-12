@@ -857,6 +857,17 @@ summary {
   overflow-wrap: anywhere;
 }
 .row-actions,
+/* A note that needs attention but is not an error (spec 021: a login that could write). */
+.callout {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.callout-warn {
+  border-left-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+}
 .conn-test {
   display: flex;
   flex-wrap: wrap;
