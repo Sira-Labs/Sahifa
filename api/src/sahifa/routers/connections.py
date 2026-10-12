@@ -9,6 +9,7 @@ import uuid
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, status
+from sahifa_core.models import SourceAccess
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,17 +135,25 @@ async def test_connection(
     if source is None:
         return ConnectionTest(ok=False, assets=0, error=f"{conn.secret_ref} is not set on the server")
 
-    def probe() -> int:
+    def probe() -> tuple[int, SourceAccess]:
         from sahifa_core.connectors import open_source
 
         with open_source(
             source, statement_timeout_s=cfg.statement_timeout_s, application_name="sahifa/test"
         ) as src:
-            return len(src.list_assets())
+            return len(src.list_assets()), src.access_report()
 
     try:
-        count = await anyio.to_thread.run_sync(probe)
+        count, access_report = await anyio.to_thread.run_sync(probe)
     except Exception as e:
         log.warning("conn.failed", connection=conn.name, error=str(e)[:300])
         return ConnectionTest(ok=False, assets=0, error=str(e)[:500])
-    return ConnectionTest(ok=True, assets=count)
+    if access_report.verdict == "can_write":
+        log.warning(
+            "conn.can_write",
+            connection=conn.name,
+            writable=access_report.writable_count,
+            create=len(access_report.can_create_in),
+            flags=access_report.role_flags,
+        )
+    return ConnectionTest(ok=True, assets=count, access=access_report)

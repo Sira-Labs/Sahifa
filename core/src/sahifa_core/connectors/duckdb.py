@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import contextlib
 import glob
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal
 
 import duckdb
 
+from ..access import files_access
 from ..errors import SourceError, UsageError
-from ..models import AssetInfo, AssetRef, ColumnInfo, ForeignKey, LogicalType
+from ..models import AssetInfo, AssetRef, ColumnInfo, ForeignKey, LogicalType, SourceAccess
 from ..sql import DuckDBDialect
 from .base import Connector, Relation
 
@@ -131,6 +133,7 @@ class DuckDBConnector(Connector):
         except duckdb.Error as e:
             raise SourceError(f"cannot open DuckDB: {e}") from e
         self._database = database
+        self._files = list(files or [])
         if files:
             self._register_files(files, names or {})
 
@@ -248,9 +251,27 @@ class DuckDBConnector(Connector):
         except duckdb.Error as e:
             raise SourceError(_clean(str(e))) from e
 
+    def access_report(self) -> SourceAccess:
+        """Whether this process could change the files or the `.duckdb` file it reads (spec 021):
+        the file itself, or its folder, where a file could be replaced or deleted."""
+        paths = [self._database] if self._database is not None else self._files
+        folders = sorted({p.parent for p in paths})
+        writable = [p.name for p in paths if _writable(p)]
+        writable += [f"{f}/" for f in folders if _writable(f)]
+        return files_access(
+            readable=sum(1 for p in paths if os.access(p, os.R_OK)),
+            unreadable=sum(1 for p in paths if not os.access(p, os.R_OK)),
+            writable=writable,
+        )
+
     def close(self) -> None:
         self.con.close()
 
 
 def _clean(message: str) -> str:
     return re.sub(r"\s+", " ", message).strip()[:500]
+
+
+def _writable(path: Path) -> bool:
+    """Whether this process may change `path` (a read-only mount answers no, even for root)."""
+    return os.access(path, os.W_OK)

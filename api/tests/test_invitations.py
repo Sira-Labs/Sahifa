@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -212,3 +213,25 @@ def test_migration_0010_round_trips(env: Env) -> None:
         (True,)
     ]
     command.check(build_config(DB_URL))
+
+
+async def test_two_admins_inviting_the_same_address_at_once(env: Env) -> None:
+    """Spec 021 (from the spec 020 review): the second waits and replaces the first."""
+    wid = make_workspace(env.owner)
+    async with AsyncExitStack() as stack:
+        first = await person(env, stack, ADMIN)
+        second = await person(env, stack, ADMIN)
+        answers = await asyncio.gather(
+            *(
+                c.post(f"/api/workspaces/{wid}/invitations", json={"email": NEW, "role": "viewer"})
+                for c in (first, second, first, second)
+            )
+        )
+    assert [a.status_code for a in answers] == [201] * 4, [a.text for a in answers]
+    open_rows = sql(
+        env.owner,
+        "SELECT count(*) FROM invitations"
+        " WHERE workspace_id = :w AND accepted_at IS NULL AND revoked_at IS NULL",
+        w=wid,
+    )
+    assert open_rows == [(1,)]

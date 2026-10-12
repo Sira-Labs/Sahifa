@@ -1,0 +1,19 @@
+# Copy to compose.override.yaml next to compose.yaml; `docker compose` reads it automatically
+# (deploy/quickstart.md, spec 021).
+#
+# Folders of files to assess: mount each one READ-ONLY (`:ro`) into the api and the worker,
+# then name it in .env, e.g. SAHIFA_CONN_EXPORTS=/sources/exports. Sahifa's connection test
+# warns when a folder is writable.
+#
+# A database on this machine: use host.docker.internal as its host in SAHIFA_CONN_<NAME>.
+services:
+  api:
+    volumes:
+      - ./exports:/sources/exports:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway
+  worker:
+    volumes:
+      - ./exports:/sources/exports:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway

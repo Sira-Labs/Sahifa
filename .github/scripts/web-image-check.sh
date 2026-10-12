@@ -7,7 +7,9 @@
 # 1. The image's configured user is 10001:10001.
 # 2. Plain HTTP on :80: every process runs as uid 10001; /version.json answers 200 with the
 #    commit and the CSP of spec 012; Caddy may write /data but not /srv.
-# 3. The compose upgrade: a caddy_data volume left behind by a root Caddy is handed to 10001 by
+# 3. The password gate (spec 021): with SAHIFA_EDGE_AUTH=basic every path asks for it; with
+#    it half set, the container refuses to start and names the missing variable.
+# 4. The compose upgrade: a caddy_data volume left behind by a root Caddy is handed to 10001 by
 #    the bundle's own `web-volume` service, then Caddy binds :443 with SAHIFA_DOMAIN=localhost
 #    and writes its local certificates to that volume.
 #
@@ -19,6 +21,7 @@ commit=${2:?usage: web-image-check.sh <image> <commit>}
 project="sahifa-check-$$"
 http="$project-http"
 https="$project-https"
+gate="$project-gate"
 work=$(mktemp -d)
 
 compose() {
@@ -29,11 +32,11 @@ compose() {
 cleanup() {
   local status=$?
   if ((status != 0)); then
-    for c in "$http" "$https"; do
+    for c in "$http" "$https" "$gate"; do
       docker logs "$c" 2>&1 | tail -n 40 | sed "s/^/[$c] /" >&2 || true
     done
   fi
-  docker rm -f "$http" "$https" >/dev/null 2>&1 || true
+  docker rm -f "$http" "$https" "$gate" >/dev/null 2>&1 || true
   compose down -v >/dev/null 2>&1 || true
   rm -rf "$work"
   [[ $made_env == yes ]] && rm -f deploy/.env
@@ -72,8 +75,10 @@ user=$(docker image inspect -f '{{.Config.User}}' "$image")
 [[ $user == 10001:10001 ]] || fail "the image's user is '$user', want 10001:10001"
 echo "web-image: configured user 10001:10001"
 
-# The API upstream is a closed port: only the static part is checked.
-docker run -d --name "$http" -p 127.0.0.1:18080:80 -e SAHIFA_API_UPSTREAM=127.0.0.1:9 "$image" >/dev/null
+# The API upstream is a closed port: only the static part is checked. SAHIFA_DOMAIN and
+# SAHIFA_EDGE_AUTH are empty, as compose passes them without a domain or a gate.
+docker run -d --name "$http" -p 127.0.0.1:18080:80 -e SAHIFA_API_UPSTREAM=127.0.0.1:9 \
+  -e SAHIFA_DOMAIN= -e SAHIFA_EDGE_AUTH= "$image" >/dev/null
 wait_for http://127.0.0.1:18080/version.json
 all_10001 "$http"
 echo "web-image: every process runs as uid 10001"
@@ -94,6 +99,25 @@ if docker exec "$http" sh -c 'echo >> /etc/caddy/Caddyfile' 2>/dev/null; then
   fail "Caddy can write its Caddyfile"
 fi
 echo "web-image: /data writable, /srv and the Caddyfile not"
+
+# Passwords made up here, so none is written in the repository (the secret scan, spec 019).
+right=$(openssl rand -hex 12)
+wrong=$(openssl rand -hex 12)
+hash=$(docker run --rm --entrypoint caddy "$image" hash-password --plaintext "$right")
+docker run -d --name "$gate" -p 127.0.0.1:18081:80 -e SAHIFA_API_UPSTREAM=127.0.0.1:9 \
+  -e SAHIFA_EDGE_AUTH=basic -e SAHIFA_BASIC_AUTH_USER=tester -e "SAHIFA_BASIC_AUTH_HASH=$hash" "$image" >/dev/null
+wait_for -u "tester:$right" http://127.0.0.1:18081/version.json
+for path in /version.json /healthz /api/version /; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:18081$path")
+  [[ $code == 401 ]] || fail "the gate let $path through without a password ($code)"
+done
+code=$(curl -s -o /dev/null -w '%{http_code}' -u "tester:$wrong" http://127.0.0.1:18081/version.json)
+[[ $code == 401 ]] || fail "the gate accepted a wrong password ($code)"
+if docker run --rm -e SAHIFA_EDGE_AUTH=basic -e SAHIFA_BASIC_AUTH_USER=tester "$image" 2>"$work/refused"; then
+  fail "a gate without a hash started"
+fi
+grep -q SAHIFA_BASIC_AUTH_HASH "$work/refused" || fail "the refusal does not name SAHIFA_BASIC_AUTH_HASH"
+echo "web-image: the password gate covers every path and refuses half a configuration"
 
 # The compose bundle reads deploy/.env for the api; an empty one is enough to start web-volume.
 if [[ ! -e deploy/.env ]]; then

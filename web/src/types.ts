@@ -124,7 +124,25 @@ export type ConnectionCreate = {
 };
 
 /** Result of `POST /api/connections/{id}/test`. `assets` is a count or the asset names. */
-export type ConnectionTest = { ok: boolean; assets: number | string[] | null; error: string | null };
+/** What a source's login (or Sahifa's process, for files) may do (spec 021). */
+export type SourceAccess = {
+  verdict: "read_only" | "can_write" | "unknown";
+  readable: number;
+  unreadable: number;
+  writable: string[];
+  writable_count: number;
+  can_create_in: string[];
+  role_flags: string[];
+  advice: string | null;
+  reason: string | null;
+};
+
+export type ConnectionTest = {
+  ok: boolean;
+  assets: number | string[] | null;
+  error: string | null;
+  access?: SourceAccess | null;
+};
 
 export type FindingCounts = Record<Severity, number>;
 
@@ -317,6 +335,8 @@ export type ScanReport = {
   checks?: CheckSpec[];
   stats: ScanStats;
   iso_25012: Partial<Record<Dimension, string>>;
+  /** What the scan's login may do (spec 021); absent for uploads and older reports. */
+  source_access?: SourceAccess | null;
 };
 
 /** Filters of `GET /api/scans/{id}/findings` and the findings page's search params. */

@@ -103,7 +103,12 @@ def delete_folder(root: Path, folder: Path) -> int | None:
     if real.parent != root or not real.is_dir():
         log.warning("uploads.refused", folder=target.name, reason="not a folder inside the uploads folder")
         return None
-    size = folder_size(real)
+    try:
+        size = folder_size(real)
+    except OSError as e:
+        # A file vanished or became unreadable while measuring: remove the folder anyway.
+        log.warning("uploads.size_unknown", folder=real.name, reason=str(e)[:200])
+        size = 0
     try:
         # rmtree removes symlinks inside the tree as links and refuses a symlinked top.
         shutil.rmtree(real)

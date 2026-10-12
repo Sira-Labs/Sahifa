@@ -65,6 +65,8 @@ class ScanOptions:
     # DuckDB source keeps its samples as temporary tables of one connection and parallelises
     # each query itself.
     workers: int = 2
+    # Record what the source's login may do (spec 021); off for uploads, Sahifa's own copies.
+    access: bool = True
 
 
 @dataclass
@@ -152,6 +154,7 @@ def run_scan(
                 for i in range(1, max(1, options.workers)):
                     extra.append(connect(i))
             pool = _Pool(src, extra)
+            access = src.access_report() if options.access else None
             refs = src.list_assets()
             if options.assets:
                 wanted = set(options.assets)
@@ -251,6 +254,7 @@ def run_scan(
         proposed=[r for r in results_all if not r.spec.status.scores],
         checks=specs_all,
         stats=stats,
+        source_access=access,
     )
 
 

@@ -494,30 +494,14 @@ ever becomes private, add the registry under CapRover → Cluster → Docker Reg
 Sahifa reads sources only, and stores only the name of the variable that holds the
 credentials (ADR-0006). For each Postgres database:
 
-1. **A read-only login on the source.** As an owner or admin of that database, with a
-   password from `openssl rand -hex 24` (hex, because it sits in a URL):
-
-   ```sql
-   CREATE ROLE sahifa_reader LOGIN PASSWORD '<generated>';
-   GRANT CONNECT ON DATABASE <db> TO sahifa_reader;
-
-   -- for every schema Sahifa should assess (here: public and sales)
-   GRANT USAGE ON SCHEMA public, sales TO sahifa_reader;
-   GRANT SELECT ON ALL TABLES IN SCHEMA public, sales TO sahifa_reader;
-   -- tables the owning role creates later become readable too
-   ALTER DEFAULT PRIVILEGES FOR ROLE <owner role> IN SCHEMA public, sales
-     GRANT SELECT ON TABLES TO sahifa_reader;
-
-   -- optional: table and index statistics for the store-health items
-   GRANT pg_read_all_stats TO sahifa_reader;
-   ```
-
-   No `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` or `CREATE`. Sahifa additionally opens every
-   session as a read-only transaction with a statement timeout
-   (`SAHIFA_STATEMENT_TIMEOUT_S`, 60 s), a lock timeout (2 s) and the application name
-   `sahifa/<scan id>`, so a scan cannot write, cannot wait on a lock for long, and shows up
-   in the source's `pg_stat_activity`. The grants are the first line of defence; the session
-   settings are the second.
+1. **A read-only login on the source.** Create it as `docs/guides/read-only-login.md`
+   describes: `CONNECT`, `USAGE` and `SELECT` only, and no write grant, ownership, `CREATE` or
+   role attribute. Sahifa additionally opens every session as a read-only transaction with a
+   statement timeout (`SAHIFA_STATEMENT_TIMEOUT_S`, 60 s), a lock timeout (2 s) and the
+   application name `sahifa/<scan id>`, so a scan cannot write, cannot wait on a lock for long,
+   and shows up in the source's `pg_stat_activity`. The grants are the first line of defence;
+   the session settings are the second. The connection's *Test* says which kind of login
+   Sahifa has (spec 021).
 2. **Network.** The source must accept connections from the CapRover server: another app on
    the same server is `srv-captain--<app>:5432`; a database elsewhere needs its firewall and
    `pg_hba.conf` opened for the server's IP only, and TLS (add `sslmode=require`, or
@@ -617,7 +601,8 @@ none of it: its data can be rebuilt.
 | API log: `conn.failed` with `password authentication failed` | wrong password in `SAHIFA_CONN_*`, or the role lacks `LOGIN` | Reset it with `ALTER ROLE sahifa_reader PASSWORD ...` on the source and update the variable |
 | API log: `conn.failed` with `no pg_hba.conf entry` or a timeout | the source does not accept the CapRover server | Open its firewall and `pg_hba.conf` for the server's IP (section 6, step 2) |
 | API log: `conn.failed` with `could not translate host name` | a wrong host, or `srv-captain--<app>` of another server | Use the source's public name, or the app name on this server |
-| API log: `scan.failed` with `permission denied for table` or `for schema` | the login lacks `USAGE` or `SELECT`, or the table is newer than the grant | Run the grants of section 6 again, with `ALTER DEFAULT PRIVILEGES` for the role that creates tables |
+| API log: `scan.failed` with `permission denied for table` or `for schema` | the login lacks `USAGE` or `SELECT`, or the table is newer than the grant | Run the grants of `docs/guides/read-only-login.md` again, with `ALTER DEFAULT PRIVILEGES` for the role that creates tables |
+| *Test* says "This login could write" (API log `conn.can_write`) | the login has a write grant, owns a table, may `CREATE`, or has a role attribute | Revoke what the advice names (`docs/guides/read-only-login.md`); scans still run read-only meanwhile |
 | API log: `scan.failed` with `canceling statement due to statement timeout` or `lock timeout` | a table too large for the sample query in 60 s, or a long lock on the source | Lower `SAHIFA_SAMPLE_ROWS` or raise `SAHIFA_STATEMENT_TIMEOUT_S`; scan outside the source's busy hours |
 | Upload answers `413` | the file is larger than `SAHIFA_MAX_UPLOAD_MB`, or than nginx in front allows | Raise the limit, and `client_max_body_size` in the web app's HTTP Settings → nginx configuration |
 | The api restarts during a scan; the scan shows `failed: interrupted` | the container ran out of memory (DuckDB) | Give it more memory, or lower `SAHIFA_DUCKDB_MEMORY` or `SAHIFA_MAX_CONCURRENT_SCANS` |

@@ -18,6 +18,10 @@ services:
       SAHIFA_API_UPSTREAM: api:8000
       # Caddy obtains a certificate for this name; empty means plain HTTP on :80.
       SAHIFA_DOMAIN: ${SAHIFA_DOMAIN:-}
+      # The optional password gate (spec 021): `basic` with a user and a bcrypt hash.
+      SAHIFA_EDGE_AUTH: ${SAHIFA_EDGE_AUTH:-off}
+      SAHIFA_BASIC_AUTH_USER: ${SAHIFA_BASIC_AUTH_USER:-}
+      SAHIFA_BASIC_AUTH_HASH: ${SAHIFA_BASIC_AUTH_HASH:-}
     volumes:
       - caddy_data:/data
     depends_on:

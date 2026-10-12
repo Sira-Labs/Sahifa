@@ -184,6 +184,8 @@ def _execute(
         memory_limit=settings.duckdb_memory,
         statement_timeout_s=settings.statement_timeout_s,
         workers=settings.scan_workers,
+        # Uploads are Sahifa's own copies: what their files allow says nothing (spec 021).
+        access=isinstance(source, str),
     )
     report = run_scan(source, options, scan_id=str(scan_id), names=names, saved=saved)
     data: dict[str, Any] = report.model_dump(mode="json")

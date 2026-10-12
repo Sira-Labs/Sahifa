@@ -34,6 +34,9 @@ staging-tested digest after the owner's approval (ADR-0012).
 
 ## Run on any Docker host
 
+To try Sahifa on your own machine or server against your own databases and folders, follow
+[quickstart.md](quickstart.md): about 15 minutes, a password at the edge instead of Keycloak.
+
 ```bash
 mkdir -p ~/sahifa && cd ~/sahifa
 curl -fsSL https://raw.githubusercontent.com/Sira-Labs/Sahifa/main/deploy/compose.yaml -o compose.yaml
@@ -160,7 +163,7 @@ registers a connection named `<name>` in lower case; Sahifa's database stores on
 variable's name, never the credentials (ADR-0006). Every session against a source is a
 read-only transaction with a statement timeout (`SAHIFA_STATEMENT_TIMEOUT_S`, 60 s), a lock
 timeout and the application name `sahifa/<scan id>`, so it is visible in the source's
-`pg_stat_activity`. Grant Sahifa a login with `SELECT` only: `caprover.md`, section 6. In
+`pg_stat_activity`. Grant Sahifa a login with `SELECT` only: `docs/guides/read-only-login.md`. In
 prod the api refuses to start when a `SAHIFA_CONN_*` value carries a placeholder password.
 
 ## Schema migrations

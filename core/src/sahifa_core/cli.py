@@ -1,5 +1,5 @@
-"""`sahifa` command line: scan a source, write the demo shop, list the catalogue (spec 003), and
-the performance and accuracy benchmarks (specs 013, 014)."""
+"""`sahifa` command line: scan a source, write the demo shop, list the catalogue (spec 003), the
+performance and accuracy benchmarks (specs 013, 014), and what a source's login may do (spec 021)."""
 
 from __future__ import annotations
 
@@ -44,6 +44,46 @@ def pretty(report: dict) -> str:  # type: ignore[type-arg]
     return "\n".join(lines)
 
 
+# Exit codes of `sahifa access`: a setup script stops on a login that could write (spec 021).
+ACCESS_EXIT = {"read_only": 0, "can_write": 3, "unknown": 1}
+
+
+def access_command(source: list[str], *, as_json: bool) -> int:
+    from .connectors import open_source
+
+    try:
+        with open_source(source if len(source) > 1 else source[0], application_name="sahifa/access") as src:
+            report = src.access_report()
+    except UsageError as e:
+        print(f"sahifa: {e}", file=sys.stderr)
+        return 2
+    except SahifaError as e:
+        print(f"sahifa: {e}", file=sys.stderr)
+        return 1
+    if as_json:
+        print(report.model_dump_json())
+    else:
+        verdict = {
+            "read_only": "Read-only: this login can read but not change the source.",
+            "can_write": "This login could write to the source.",
+            "unknown": f"Could not tell what this login may do: {report.reason}",
+        }[report.verdict]
+        print(verdict)
+        print(f"  readable: {report.readable}, not readable: {report.unreadable}")
+        if report.writable_count:
+            shown = ", ".join(report.writable)
+            more = report.writable_count - len(report.writable)
+            print(f"  writable: {report.writable_count} ({shown}{f' and {more} more' if more else ''})")
+        for line in (
+            *(f"  may create in {c}" for c in report.can_create_in),
+            *(f"  role: {f}" for f in report.role_flags),
+        ):
+            print(line)
+        if report.advice:
+            print(f"  {report.advice}")
+    return ACCESS_EXIT[report.verdict]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sahifa", description="Assess the quality of a data store.")
     parser.add_argument("--version", action="version", version=f"sahifa {__version__}")
@@ -75,6 +115,13 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--seed", type=int, default=7)
 
     sub.add_parser("checks", help="list the check catalogue")
+
+    access = sub.add_parser(
+        "access",
+        help="what the login or process may do on a source; exit 0 read-only, 3 could write, 1 unknown",
+    )
+    access.add_argument("source", nargs="+", help="as for scan")
+    access.add_argument("--json", action="store_true", help="print the report as JSON")
 
     bench = sub.add_parser(
         "bench-schema", help="create the wide Postgres schema of the performance run (spec 013)"
@@ -131,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps(result.as_dict(), indent=2) if args.json else render_markdown(result))
         return 0
+    if args.command == "access":
+        return access_command(args.source, as_json=args.json)
     if args.command == "checks":
         from .checks import CATALOGUE
 

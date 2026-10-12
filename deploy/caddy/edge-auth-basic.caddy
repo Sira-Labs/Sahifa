@@ -1,0 +1,6 @@
+# HTTP basic auth on every path, /api/version and /healthz included (spec 021). The api then
+# runs with SAHIFA_AUTH_MODE=proxy and SAHIFA_ACCESS_GATE=basic-auth-at-proxy. The hash comes
+# from `caddy hash-password`; an unset variable leaves a placeholder Caddy refuses at start.
+basic_auth {
+	{$SAHIFA_BASIC_AUTH_USER:SAHIFA_BASIC_AUTH_USER_is_not_set} {$SAHIFA_BASIC_AUTH_HASH:SAHIFA_BASIC_AUTH_HASH_is_not_set}
+}

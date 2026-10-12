@@ -11,6 +11,10 @@
 }
 
 {$SAHIFA_DOMAIN::80} {
+	# A password on every path for installs without Keycloak (spec 021): SAHIFA_EDGE_AUTH=basic
+	# with SAHIFA_BASIC_AUTH_USER and SAHIFA_BASIC_AUTH_HASH. Off by default.
+	import edge-auth-{$SAHIFA_EDGE_AUTH:off}.caddy
+
 	encode zstd gzip
 
 	header {
