@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
+from sahifa_core.models import SourceAccess
 
 T = TypeVar("T")
 ROLE_PATTERN = r"^(viewer|editor|admin)$"
@@ -84,6 +85,8 @@ class ConnectionTest(BaseModel):
     ok: bool
     assets: int
     error: str | None = None
+    # What the connection's login may do (spec 021); None when the test failed.
+    access: SourceAccess | None = None
 
 
 class ScanScore(BaseModel):
