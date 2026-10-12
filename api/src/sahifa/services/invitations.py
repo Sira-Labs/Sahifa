@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.access import RANK
@@ -99,6 +99,11 @@ async def create(
     if member_role is not None and RANK[member_role] >= RANK[role]:
         raise AlreadyMemberError(member_role)
     now = datetime.now(UTC)
+    # Two admins inviting the same address at once: the second waits, then replaces the first
+    # instead of failing on the one-open-invitation index.
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"invitation:{workspace_id}:{email}"}
+    )
     await db.execute(
         update(Invitation)
         .where(
