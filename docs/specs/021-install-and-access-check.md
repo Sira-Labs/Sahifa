@@ -184,6 +184,12 @@ A job that follows the quick start on a fresh runner:
   so the tests join each role they create before handing it a table or dropping what it owns.
 - **The quick-start job edits `.env` like a person would**: the variable's own line first, then a
   commented example; the example's prose no longer starts a line with `NAME=`.
+- **The quick-start job found an older bug.** Compose passed `SAHIFA_DOMAIN` as an empty string
+  without a domain, and Caddy uses a placeholder's default only for an unset variable, so the web
+  container of the compose bundle never started without a domain (CapRover leaves it unset). The
+  start script now unsets empty settings and reads the config once before `caddy run`, which
+  exits on a bad config without saying why; `web-image-check.sh` starts the image with empty
+  settings as compose does.
 - **The full image build cannot run in this sandbox** (pnpm and uv behind a TLS-intercepting
   proxy). The final web stage and the access checks against a local Postgres were run here;
   the `quickstart` job runs the whole path.

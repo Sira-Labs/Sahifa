@@ -75,8 +75,10 @@ user=$(docker image inspect -f '{{.Config.User}}' "$image")
 [[ $user == 10001:10001 ]] || fail "the image's user is '$user', want 10001:10001"
 echo "web-image: configured user 10001:10001"
 
-# The API upstream is a closed port: only the static part is checked.
-docker run -d --name "$http" -p 127.0.0.1:18080:80 -e SAHIFA_API_UPSTREAM=127.0.0.1:9 "$image" >/dev/null
+# The API upstream is a closed port: only the static part is checked. SAHIFA_DOMAIN and
+# SAHIFA_EDGE_AUTH are empty, as compose passes them without a domain or a gate.
+docker run -d --name "$http" -p 127.0.0.1:18080:80 -e SAHIFA_API_UPSTREAM=127.0.0.1:9 \
+  -e SAHIFA_DOMAIN= -e SAHIFA_EDGE_AUTH= "$image" >/dev/null
 wait_for http://127.0.0.1:18080/version.json
 all_10001 "$http"
 echo "web-image: every process runs as uid 10001"
