@@ -12,7 +12,8 @@ RUN pnpm build
 # Caddy serves the static SPA (fonts included, nothing loaded from third parties) with security
 # headers and proxies /api and /healthz to the API container.
 FROM caddy:2-alpine AS web
-COPY deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/caddy/Caddyfile deploy/caddy/edge-auth-*.caddy /etc/caddy/
+COPY --chmod=755 deploy/caddy/start.sh /usr/local/bin/sahifa-web
 COPY --from=build /app/dist /srv
 # /version.json names the commit this image was built from; the release workflow reads it to
 # confirm a deploy went live. After the SPA build so a new commit keeps the build cached.
@@ -29,3 +30,5 @@ RUN addgroup -S -g 10001 sahifa \
  && chown -R 10001:10001 /data /config
 USER 10001:10001
 EXPOSE 80 443
+# Checks the optional password gate's settings, then runs Caddy (spec 021).
+CMD ["sahifa-web"]

@@ -1,0 +1,14 @@
+# The CI job `quickstart` only (spec 021): a Postgres source next to the bundle, holding the
+# faulty shop, reachable from the api and the worker as `source`.
+services:
+  source:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: owner
+      POSTGRES_PASSWORD: ${SOURCE_OWNER_PASSWORD:?}
+      POSTGRES_DB: shop
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U owner -d shop"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

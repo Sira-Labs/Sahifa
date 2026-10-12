@@ -100,11 +100,15 @@ jobs:
         run: |
           pnpm audit --prod --json > "$RUNNER_TEMP/audit.json" || true
           python3 ../.github/scripts/security_policy.py --ignores ../security/audit-ignore.toml audit pnpm < "$RUNNER_TEMP/audit.json"
-      # The web image's edge config must parse (headers, proxies, cache rules).
+      # The web image's edge config must parse (headers, proxies, cache rules), with the password
+      # gate off and on (spec 021).
       - name: caddy validate
-        run: >-
-          docker run --rm -v "$GITHUB_WORKSPACE/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine
-          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+        run: |
+          for auth in off basic; do
+            docker run --rm -v "$GITHUB_WORKSPACE/deploy/caddy:/etc/caddy:ro" -e SAHIFA_EDGE_AUTH=$auth \
+              -e SAHIFA_BASIC_AUTH_USER=ci -e 'SAHIFA_BASIC_AUTH_HASH=$2a$14$x2bYbrGwAz2BCXcI2HoVpu7bAByzmZcuDZrn7w0v1EOGdwZ.uuVwe' \
+              caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done
 
   # Something that looks like a credential anywhere in the history fails the build (spec 019).
   # Values that are not secrets are listed by fingerprint in .gitleaksignore.
@@ -141,6 +145,21 @@ jobs:
         run: docker build -f web/Dockerfile --build-arg SAHIFA_COMMIT="$GITHUB_SHA" -t sahifa-web:ci .
       - name: non-root and serving
         run: .github/scripts/web-image-check.sh sahifa-web:ci "$GITHUB_SHA"
+
+  # deploy/quickstart.md on a fresh runner: the bundle behind its password gate, a Postgres
+  # source with a read-only and a writing login, a read-only folder of files (spec 021).
+  quickstart:
+    name: quickstart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - name: build the images
+        run: |
+          docker build -f api/Dockerfile --build-arg SAHIFA_COMMIT="$GITHUB_SHA" -t sahifa-api:ci .
+          docker build -f web/Dockerfile --build-arg SAHIFA_COMMIT="$GITHUB_SHA" -t sahifa-web:ci .
+      - name: follow the quick start
+        run: .github/scripts/quickstart-check.sh sahifa-api:ci sahifa-web:ci
 
   # Runtime dependencies of core, api and web against ADR-0008 and ADR-0015 (spec 012).
   licences:
