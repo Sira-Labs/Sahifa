@@ -69,11 +69,11 @@ setenv SAHIFA_CONN_WRITER "postgresql://writer:$writer_password@source:5432/shop
 setenv SAHIFA_CONN_EXPORTS /sources/exports
 setenv SOURCE_OWNER_PASSWORD "$owner_password"
 
-# The folder the quick start mounts read-only, with the faulty shop in it.
+# The folder the quick start mounts read-only, with the faulty shop in it, written by the
+# image's own user (10001) into a folder it may write; the files come out world-readable.
 mkdir exports
 chmod 777 exports
-"${compose[@]}" run --rm --no-deps --user 0:0 -v "$work/exports:/out" api python -m sahifa_core.cli synth /out --rows 2000 >/dev/null
-chmod -R a+rX exports
+"${compose[@]}" run --rm --no-deps -v "$work/exports:/out" api python -m sahifa_core.cli synth /out --rows 2000 >/dev/null
 
 # The source database: the shop, a read-only login and a writing one.
 "${compose[@]}" up -d --wait source
