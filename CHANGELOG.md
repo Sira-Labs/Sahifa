@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Run it on your own machine** (spec 021): `deploy/quickstart.md`, a compose override for
+  read-only folders and databases on the host, and an optional password gate in the web
+  container (`SAHIFA_EDGE_AUTH=basic`), so a small install needs no Keycloak.
+- **What the login may do** (spec 021). The connection's *Test*, every scan report and the new
+  `sahifa access` command say whether the database login (or, for files, Sahifa's process) can
+  only read or could write, with the tables and what to revoke. `docs/guides/read-only-login.md`
+  is the one page on read-only logins.
 - **Invitations by link** (spec 020). A workspace admin creates a link for an address and a role
   on `/workspaces`, copies it and sends it any way they like; the invited person opens it, signs
   in and lands in the workspace. Links work once, for that address, for 7 days
@@ -29,6 +36,10 @@ All notable changes to this project are documented here. The format follows
   the workspace and manage its members. The org admin (`SAHIFA_ADMIN_EMAIL`) creates
   workspaces and moves connections between them. A new page `/workspaces`, a workspace filter
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
+
+### Fixed
+- Two admins inviting the same address at once no longer make one of them fail, and cleanup
+  after deleting a workspace no longer fails when a file vanishes while it is measured.
 
 ### Deprecated
 - `SAHIFA_ALLOWED_EMAILS`: invitation links replace it. It still works in this release and logs a

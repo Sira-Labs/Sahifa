@@ -221,8 +221,12 @@ databases and files, and get in by invitation link; staging serves demos.
         being the proof.
       - Token tries have their own rate-limit bucket per session, not the sign-in bucket per address.
       - `SAHIFA_ALLOWED_EMAILS` still works and logs a deprecation; the next release removes it.
-- [ ] S4b-2 install in your own environment; the connection check shows what the login may read
-      and warns when it may write.
+- [x] **021 Install in your own environment, and what the login may do** —
+      `docs/specs/021-install-and-access-check.md` (S4b-2)
+      - A password gate in the web image (`SAHIFA_EDGE_AUTH=basic`) instead of Keycloak for small
+        installs; off by default, so CapRover and staging do not change.
+      - The access report is advice: scans still run read-only with a login that could write.
+      - The CI job `quickstart` follows `deploy/quickstart.md` with a read-only and a writing login.
 - [ ] S4b-3 first run: demo data, guided first scan, empty states, error texts.
 - [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
       feedback link.

@@ -5,7 +5,7 @@ spec 012 (security baseline), spec 019 (the web image), ADR-0006 (read-only acce
 credentials by reference), ADR-0010 (identity). Packages: `core/` (access report, CLI),
 `api/`, `web/`, `deploy/`, `.github/`, `docs/`.
 
-Status: draft, waiting for the owner's approval.
+Status: approved 2026-10-12 by the owner; done.
 
 ## Goal
 
@@ -28,7 +28,8 @@ can only read, or that it could write and how to fix that.
 1. **Download** `compose.yaml`, `.env.example` (as `.env`) and `compose.override.example.yaml`.
 2. **Fill in `.env`.**
    - `POSTGRES_PASSWORD`, generated.
-   - `SAHIFA_TAG=main` for now; S4b-4 switches this to a released version.
+   - `SAHIFA_TAG=latest` (the default of `.env.example`, built from `main`) for now; S4b-4
+     switches this to a released version.
    - A password for the built-in gate (below).
    - One `SAHIFA_CONN_<NAME>` line per database or folder.
 3. **Folders and databases on the host,** in `compose.override.yaml`, which compose reads
@@ -135,19 +136,19 @@ A job that follows the quick start on a fresh runner:
 
 ## Acceptance criteria
 
-- [ ] On a fresh runner, the quick start (CI job `quickstart`) scans a Postgres database and a
+- [x] On a fresh runner, the quick start (CI job `quickstart`) scans a Postgres database and a
       folder of files, and flags the write-capable login (the sprint plan's "done when").
-- [ ] `access_report` gives `read_only` for the documented read-only login, and `can_write`
+- [x] `access_report` gives `read_only` for the documented read-only login, and `can_write`
       for a login with a write grant, a `CREATE` on a schema, ownership of a table, or a role
       flag; `unknown` when the check fails.
-- [ ] The *Test* button and the scan report show the verdict and the advice; `sahifa access`
+- [x] The *Test* button and the scan report show the verdict and the advice; `sahifa access`
       exits 0, 3 or 1.
-- [ ] The built-in gate asks for a password on every path when on, and nothing changes when
+- [x] The built-in gate asks for a password on every path when on, and nothing changes when
       off (staging's headers and behaviour are unchanged).
-- [ ] The read-only login guide is one page, linked from the quick start and the CapRover
+- [x] The read-only login guide is one page, linked from the quick start and the CapRover
       guide.
-- [ ] The two carried review fixes have tests.
-- [ ] `make lint` and `make test` pass.
+- [x] The two carried review fixes have tests.
+- [x] `make lint` and `make test` pass.
 
 ## Test cases
 
@@ -169,6 +170,23 @@ A job that follows the quick start on a fresh runner:
 - **CI:** the `quickstart` job; `caddy validate` with the gate off and on.
 - **The carried fixes:** `delete_folder` on a folder whose file vanishes while it is measured;
   two concurrent invitation creates.
+
+## Implementation notes
+
+- **The gate's switch** is a Caddyfile `import edge-auth-{$SAHIFA_EDGE_AUTH:off}.caddy`, resolved
+  when Caddy reads its config. A small start script (`sahifa-web`, the image's command) refuses
+  `basic` without a user or a hash, or an unknown mode, naming the variable, before Caddy would
+  fail with an error about base64.
+- **Writable means "this process may write"**: `os.access(W_OK)` on each file and its folder, which
+  a `:ro` mount answers with no even for root. For Postgres, write privileges count only where
+  the login also has `USAGE` on the schema; ownership counts as writing.
+- **Postgres 16 and CREATEROLE.** A CREATEROLE login is no longer a member of the roles it makes,
+  so the tests join each role they create before handing it a table or dropping what it owns.
+- **The quick-start job edits `.env` like a person would**: the variable's own line first, then a
+  commented example; the example's prose no longer starts a line with `NAME=`.
+- **The full image build cannot run in this sandbox** (pnpm and uv behind a TLS-intercepting
+  proxy). The final web stage and the access checks against a local Postgres were run here;
+  the `quickstart` job runs the whole path.
 
 ## Out of scope
 
