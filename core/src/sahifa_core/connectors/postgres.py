@@ -8,14 +8,18 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import psycopg
 
+from ..access import postgres_access
 from ..errors import SourceError
-from ..models import AssetInfo, AssetRef, ColumnInfo, ForeignKey, LogicalType
+from ..models import AssetInfo, AssetRef, ColumnInfo, ForeignKey, LogicalType, SourceAccess
 from ..sql import PostgresDialect
 from .base import Connector, Relation
 
 # Above this planner estimate the population is not counted exactly (count(*) is a full scan).
 EXACT_COUNT_LIMIT = 10_000_000
 SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
+# Built-in roles whose members may write data or reach the server's files (spec 021).
+WRITING_ROLES = ("pg_write_all_data", "pg_write_server_files", "pg_execute_server_program")
+ROLE_FLAGS = ("superuser", "bypassrls", "createrole", "createdb", "replication")
 
 _TYPES: dict[str, LogicalType] = {
     "smallint": LogicalType.INTEGER,
@@ -119,6 +123,52 @@ class PostgresConnector(Connector):
             params,
         )
         return [AssetRef(namespace=s, name=n, kind="view" if k == "v" else "table") for s, n, k in rows]
+
+    def access_report(self) -> SourceAccess:
+        """What this login may do in the scanned schemas (spec 021), from the catalog only."""
+        try:
+            flags = self._params(
+                "SELECT rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication "
+                "FROM pg_roles WHERE rolname = current_user",
+                [],
+            )
+            members = self._params(
+                "SELECT rolname FROM pg_roles"
+                " WHERE rolname = ANY(%s) AND pg_has_role(current_user, oid, 'MEMBER')",
+                [list(WRITING_ROLES)],
+            )
+            where, params = self._schema_filter()
+            tables = self._params(
+                "SELECT n.nspname, c.relname, "
+                "has_schema_privilege(n.oid, 'USAGE') AND has_table_privilege(c.oid, 'SELECT'), "
+                "has_schema_privilege(n.oid, 'USAGE') AND (pg_has_role(c.relowner, 'MEMBER') "
+                "OR has_table_privilege(c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE')) "
+                "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                f"WHERE c.relkind IN ('r', 'p', 'v', 'm') AND NOT c.relispartition AND {where} ORDER BY 1, 2",
+                params,
+            )
+            schemas = self._params(
+                f"SELECT n.nspname FROM pg_namespace n WHERE {where}"
+                " AND has_schema_privilege(n.oid, 'CREATE') ORDER BY 1",
+                params,
+            )
+            database = self._params(
+                "SELECT current_database(), has_database_privilege(current_database(), 'CREATE')", []
+            )
+        except SourceError as e:
+            return SourceAccess(verdict="unknown", reason=str(e))
+        role_flags = [name for name, on in zip(ROLE_FLAGS, flags[0] if flags else (), strict=False) if on]
+        role_flags += [f"member of {name}" for (name,) in members]
+        create_in = [f"schema {name}" for (name,) in schemas]
+        if database and database[0][1]:
+            create_in.append(f"database {database[0][0]}")
+        return postgres_access(
+            readable=sum(1 for t in tables if t[2]),
+            unreadable=sum(1 for t in tables if not t[2]),
+            writable=[f"{s}.{n}" for s, n, _r, w in tables if w],
+            can_create_in=create_in,
+            role_flags=role_flags,
+        )
 
     def describe(self, ref: AssetRef) -> AssetInfo:
         cols = self._params(

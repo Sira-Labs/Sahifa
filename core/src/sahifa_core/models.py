@@ -350,6 +350,29 @@ class SourceInfo(BaseModel):
     label: str
 
 
+AccessVerdict = Literal["read_only", "can_write", "unknown"]
+# Names listed in `SourceAccess.writable`; `writable_count` holds the full number.
+ACCESS_NAMES_SHOWN = 20
+
+
+class SourceAccess(BaseModel):
+    """What the login (Postgres) or the process (files) may do on the source (spec 021).
+
+    Advice only: scans run in read-only sessions whatever it says (ADR-0006). It names tables,
+    schemas and role flags, never a credential or a value from the data."""
+
+    verdict: AccessVerdict
+    readable: int = 0
+    unreadable: int = 0
+    writable: list[str] = Field(default_factory=list)
+    writable_count: int = 0
+    can_create_in: list[str] = Field(default_factory=list)
+    role_flags: list[str] = Field(default_factory=list)
+    advice: str | None = None
+    # Why the verdict is `unknown`.
+    reason: str | None = None
+
+
 class ScanOptionsModel(BaseModel):
     sample_rows: int
     seed: int
@@ -384,6 +407,8 @@ class ScanReport(BaseModel):
     # Every reconciled check of the scan, as generated or saved, before evaluation (spec 007).
     checks: list[CheckSpec] = Field(default_factory=list)
     stats: ScanStats = Field(default_factory=ScanStats)
+    # What the source's login may do (spec 021); None for uploads and older reports.
+    source_access: SourceAccess | None = None
     iso_25012: dict[Dimension, str] = Field(default_factory=lambda: dict(ISO_25012))
 
     def finding_counts(self) -> dict[str, int]:

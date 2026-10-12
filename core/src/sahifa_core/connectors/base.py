@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, Literal, Self
 
-from ..models import AssetInfo, AssetRef
+from ..models import AssetInfo, AssetRef, SourceAccess
 from ..sql import Dialect
 
 log = logging.getLogger("sahifa_core.connectors")
@@ -71,6 +71,10 @@ class Connector(ABC):
 
     def release(self, relation: Relation) -> None:  # noqa: B027 - optional hook
         """Free what `sample` created; the default does nothing."""
+
+    def access_report(self) -> SourceAccess:
+        """What this login or process may do on the source (spec 021); `unknown` by default."""
+        return SourceAccess(verdict="unknown", reason=f"no access check for {self.kind} sources")
 
     @abstractmethod
     def close(self) -> None: ...
