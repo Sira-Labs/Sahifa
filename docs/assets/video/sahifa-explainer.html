@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sahifa explainer</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  html, body { margin: 0; background: #080c17; }
+  canvas { display: block; width: 100vw; height: auto; max-width: 1920px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+"use strict";
+/* Sahifa product video. render(t) draws the frame at t seconds and depends on nothing else,
+   so capture.cjs can step through it frame by frame. Scene starts live in SCENES and are
+   retimed to the narration. */
+const W = 1920, H = 1080;
+const cv = document.getElementById("c");
+const g = cv.getContext("2d");
+
+const C = {
+  bg: "#0d1220", deep: "#080c17", surface: "#151c2e", surface2: "#1b2338", line: "#283350",
+  fg: "#e8ecf4", muted: "#a6b0c5", dim: "#6c7690", accent: "#93abff", accentDeep: "#2b4fb3",
+  ok: "#4cc38a", warn: "#e3a440", bad: "#f2777f",
+};
+const F = {
+  display: '"Bricolage Grotesque"', body: "Figtree", mono: '"IBM Plex Mono"', ar: '"Noto Kufi Arabic"',
+};
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const easeBack = (p) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function font(family, size, weight = 400) { g.font = `${weight} ${size}px ${family}`; }
+function text(s, x, y, o = {}) {
+  g.save();
+  g.globalAlpha *= o.alpha ?? 1;
+  font(o.family ?? F.body, o.size ?? 32, o.weight ?? 400);
+  g.fillStyle = o.color ?? C.fg;
+  g.textAlign = o.align ?? "left";
+  g.textBaseline = o.base ?? "alphabetic";
+  if (o.ls) g.letterSpacing = `${o.ls}px`;
+  if (o.dir) g.direction = o.dir;
+  g.fillText(s, x, y);
+  g.restore();
+}
+function measure(s, family, size, weight = 400, ls = 0) {
+  g.save(); font(family, size, weight); if (ls) g.letterSpacing = `${ls}px`;
+  const w = g.measureText(s).width; g.restore(); return w;
+}
+// Text that rises and fades in at local time `at`.
+function rise(s, x, y, L, at, o = {}) {
+  const p = easeOut(prog(L, at, at + (o.dur ?? 0.7)));
+  if (p <= 0) return;
+  text(s, x, y + (1 - p) * (o.dy ?? 24), { ...o, alpha: (o.alpha ?? 1) * p });
+}
+function rr(x, y, w, h, r) {
+  g.beginPath(); g.roundRect(x, y, w, h, r);
+}
+function chip(label, x, y, o = {}) {
+  const size = o.size ?? 22, padX = o.padX ?? 16, h = o.h ?? size * 1.9;
+  const w = measure(label, o.family ?? F.body, size, o.weight ?? 600, o.ls ?? 0) + padX * 2 + (o.dot ? 22 : 0);
+  const x0 = o.align === "center" ? x - w / 2 : o.align === "right" ? x - w : x;
+  g.save(); g.globalAlpha *= o.alpha ?? 1;
+  rr(x0, y - h / 2, w, h, h / 2);
+  g.fillStyle = o.fill ?? C.surface2; g.fill();
+  g.lineWidth = 1.5; g.strokeStyle = o.stroke ?? C.line; g.stroke();
+  let tx = x0 + padX;
+  if (o.dot) {
+    g.beginPath(); g.arc(tx + 6, y, 6, 0, Math.PI * 2); g.fillStyle = o.dot; g.fill(); tx += 22;
+  }
+  text(label, tx, y + 1, { family: o.family ?? F.body, size, weight: o.weight ?? 600, color: o.color ?? C.fg, base: "middle", ls: o.ls });
+  g.restore();
+  return w;
+}
+
+// ---------- the logo (from site/assets/logo.svg, 400 x 400 units) ----------
+const LOGO_PAGE = new Path2D("M96 48 H252 L320 116 V336 Q320 352 304 352 H96 Q80 352 80 336 V64 Q80 48 96 48 Z");
+const LOGO_FOLD = new Path2D("M252 48 V100 Q252 116 268 116 H320");
+const LOGO_LINES = [[132, 168, 156], [190, 168, 268], [132, 220, 156], [190, 220, 248], [132, 272, 156], [190, 272, 200]];
+const LOGO_STAR = new Path2D("M292 254 L305.47 267.47 L324.53 267.47 L324.53 286.53 L338 300 L324.53 313.47 L324.53 332.53 L305.47 332.53 L292 346 L278.53 332.53 L259.47 332.53 L259.47 313.47 L246 300 L259.47 286.53 L259.47 267.47 L278.53 267.47 Z");
+// p: 0 nothing, 1 complete. The page draws, the lines write, the seal stamps.
+function logo(cx, cy, size, p, alpha = 1) {
+  const s = size / 400;
+  g.save();
+  g.globalAlpha *= alpha;
+  g.translate(cx - 200 * s, cy - 200 * s);
+  g.scale(s, s);
+  g.lineJoin = "round"; g.lineCap = "round";
+  const pPage = easeInOut(prog(p, 0, 0.45));
+  const fill = prog(p, 0.3, 0.5);
+  if (fill > 0) { g.save(); g.globalAlpha *= fill; g.fillStyle = C.surface; g.fill(LOGO_PAGE); g.restore(); }
+  g.strokeStyle = C.fg; g.lineWidth = 22;
+  g.setLineDash([1240, 1240]); g.lineDashOffset = 1240 * (1 - pPage); g.stroke(LOGO_PAGE);
+  g.setLineDash([200, 200]); g.lineDashOffset = 200 * (1 - easeOut(prog(p, 0.35, 0.5))); g.stroke(LOGO_FOLD);
+  g.setLineDash([]);
+  LOGO_LINES.forEach(([x1, y, x2], i) => {
+    const q = easeOut(prog(p, 0.45 + i * 0.04, 0.55 + i * 0.04));
+    if (q <= 0) return;
+    g.beginPath(); g.moveTo(x1, y); g.lineTo(lerp(x1, x2, q), y); g.stroke();
+  });
+  const seal = prog(p, 0.72, 0.95);
+  if (seal > 0) {
+    const k = easeBack(seal);
+    g.save(); g.translate(292, 300); g.scale(k, k); g.rotate((1 - seal) * -0.8); g.translate(-292, -300);
+    g.beginPath(); g.arc(292, 300, 76, 0, Math.PI * 2);
+    g.fillStyle = C.accentDeep; g.fill(); g.lineWidth = 14; g.strokeStyle = C.fg; g.stroke();
+    g.fillStyle = C.fg; g.strokeStyle = C.fg; g.lineWidth = 4; g.fill(LOGO_STAR); g.stroke(LOGO_STAR);
+    g.restore();
+  }
+  g.restore();
+}
+
+// ---------- background ----------
+const DUST = (() => { const r = rng(7); return Array.from({ length: 90 }, () => ({ x: r() * W, y: r() * H, z: 0.3 + r() * 0.9, ph: r() * 6.28 })); })();
+function background(t) {
+  g.fillStyle = C.deep; g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(W * 0.5, H * 0.42, 50, W * 0.5, H * 0.5, W * 0.75);
+  glow.addColorStop(0, "#16213d"); glow.addColorStop(0.55, C.bg); glow.addColorStop(1, C.deep);
+  g.fillStyle = glow; g.fillRect(0, 0, W, H);
+  // A ruled sheet: faint horizontal lines, as on paper.
+  g.save(); g.globalAlpha = 0.05; g.strokeStyle = C.accent; g.lineWidth = 1;
+  const off = (t * 6) % 54;
+  for (let y = -54 + off; y < H; y += 54) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.restore();
+  for (const d of DUST) {
+    const x = (d.x + t * 14 * d.z) % W, y = d.y + Math.sin(t * 0.4 + d.ph) * 8;
+    g.globalAlpha = 0.10 + 0.18 * d.z * (0.6 + 0.4 * Math.sin(t + d.ph));
+    g.fillStyle = C.accent; g.beginPath(); g.arc(x, y, 1.2 + d.z * 1.4, 0, Math.PI * 2); g.fill();
+  }
+  g.globalAlpha = 1;
+}
+function vignette() {
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.72);
+  v.addColorStop(0, "rgba(8,12,23,0)"); v.addColorStop(1, "rgba(8,12,23,0.75)");
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+}
+
+// ---------- scene 1: tables everywhere ----------
+const TABLE_NAMES = ["orders", "customers", "invoices", "events", "payments", "stock", "shipments", "returns", "products",
+  "suppliers", "contracts", "sessions", "ledger", "prices", "addresses", "employees", "tickets", "campaigns", "refunds",
+  "sensors", "accounts", "budgets", "leads", "visits", "claims", "policies", "carts", "reviews", "routes", "orders_2025"];
+const CARDS = (() => {
+  const r = rng(42);
+  return Array.from({ length: 150 }, (_, i) => ({
+    x: r() * (W + 600) - 300, y: r() * (H + 200) - 100, z: 0.35 + r() * 1.05,
+    name: TABLE_NAMES[i % TABLE_NAMES.length], rows: 3 + Math.floor(r() * 4), cols: 2 + Math.floor(r() * 3),
+    kind: ["pg", "parquet", "csv", "json"][Math.floor(r() * 4)], bad: r() < 0.22, ph: r() * 6.28,
+  })).sort((a, b) => a.z - b.z);
+})();
+function tableCard(x, y, w, h, c, alpha, badGlow) {
+  g.save(); g.globalAlpha *= alpha;
+  rr(x, y, w, h, 8 * (w / 180)); g.fillStyle = C.surface; g.fill();
+  g.lineWidth = 1.2; g.strokeStyle = badGlow > 0 ? `rgba(242,119,127,${0.35 + 0.65 * badGlow})` : C.line; g.stroke();
+  const k = w / 180;
+  g.fillStyle = C.surface2; rr(x, y, w, 26 * k, [8 * k, 8 * k, 0, 0]); g.fill();
+  text(c.name, x + 10 * k, y + 18 * k, { family: F.mono, size: 13 * k, color: C.muted });
+  for (let r = 0; r < c.rows; r++) {
+    for (let col = 0; col < c.cols; col++) {
+      const cw = (w - 20 * k) / c.cols;
+      const bx = x + 10 * k + col * cw, by = y + 38 * k + r * 16 * k;
+      g.fillStyle = badGlow > 0 && r === 1 && col === 0 ? C.bad : "#2a3554";
+      g.fillRect(bx, by, cw * (0.45 + ((r * 7 + col * 3) % 5) * 0.1), 6 * k);
+    }
+  }
+  g.restore();
+}
+function scene1(L, a) {
+  const zoom = 1 + 0.12 * easeInOut(prog(L, 0, 12.6));
+  g.save(); g.globalAlpha = a;
+  g.translate(W / 2, H / 2); g.scale(zoom, zoom); g.translate(-W / 2, -H / 2);
+  for (const c of CARDS) {
+    const w = 180 * c.z, h = (44 + c.rows * 16) * c.z;
+    const x = ((c.x - L * 38 * c.z) % (W + 600) + (W + 600)) % (W + 600) - 300;
+    const y = c.y + Math.sin(L * 0.5 + c.ph) * 6 * c.z;
+    const appear = easeOut(prog(L, 0.1 + (1.3 - c.z) * 1.2, 1.2 + (1.3 - c.z) * 1.2));
+    const bad = c.bad ? prog(L, 6.5 + c.ph * 0.25, 7.2 + c.ph * 0.25) * (0.6 + 0.4 * Math.sin(L * 5 + c.ph)) : 0;
+    tableCard(x, y, w, h, c, appear * (0.25 + 0.6 * (c.z - 0.35)), bad);
+  }
+  g.restore();
+  // Readability band behind the words.
+  g.save(); g.globalAlpha = a;
+  const band = g.createLinearGradient(0, 330, 0, 760);
+  band.addColorStop(0, "rgba(8,12,23,0)"); band.addColorStop(0.3, "rgba(8,12,23,0.86)");
+  band.addColorStop(0.7, "rgba(8,12,23,0.86)"); band.addColorStop(1, "rgba(8,12,23,0)");
+  g.fillStyle = band; g.fillRect(0, 330, W, 430);
+  rise("Every company runs on tables.", W / 2, 520, L, 0.8, { family: F.display, size: 92, weight: 700, align: "center" });
+  rise("Thousands of them, in databases, warehouses and files.", W / 2, 600, L, 6.8, { size: 40, color: C.muted, align: "center" });
+  const kinds = ["Postgres", "Parquet", "CSV", "JSON", "warehouses", "lakehouse tables"];
+  let total = 0; const gap = 18;
+  const widths = kinds.map((k) => measure(k, F.mono, 22, 500) + 32);
+  total = widths.reduce((s, w) => s + w, 0) + gap * (kinds.length - 1);
+  let x = W / 2 - total / 2;
+  kinds.forEach((k, i) => {
+    const p = easeOut(prog(L, 8.0 + i * 0.22, 8.6 + i * 0.22));
+    chip(k, x, 680 + (1 - p) * 16, { family: F.mono, size: 22, weight: 500, alpha: p, color: i > 3 ? C.dim : C.accent });
+    x += widths[i] + gap;
+  });
+  g.restore();
+}
+
+// ---------- scene 2: data decays quietly ----------
+const COLS = [["order_id", 150], ["customer_id", 190], ["amount", 150], ["iban", 420], ["loaded_at", 160]];
+const ROWS = [
+  ["10477", "40012", "129.90", "DE89 3704 •••• •••• 0130 00", "06:12"],
+  ["10478", "40388", "54.00", "NL91 ABNA •••• •••• 4300", "06:12"],
+  ["10479", "88213", "310.50", "FR14 2004 •••• •••• 0606 789", "06:13"],
+  ["10480", "40107", "18.25", "CH93 0076 •••• •••• 3214 9", "06:13"],
+  ["10481", "40556", "", "AT61 1904 •••• •••• 3201", "06:14"],
+  ["10482", "41290", "77.10", "DE44 5001 •••• •••• 1300 01", "06:14"],
+  ["10478", "40388", "54.00", "NL91 ABNA •••• •••• 4300", "06:12"],
+  ["10483", "40871", "95.00", "BE68 5390 •••• •••• 7914", "02:31"],
+];
+// [row, col, label, colour, local start]
+const FAULTS = [
+  [2, 1, "customer 88213 does not exist", C.bad, 3.1],
+  [5, 3, "IBAN check digit fails", C.bad, 5.9],
+  [4, 2, "amount missing", C.warn, 4.6],
+  [6, 0, "same order twice", C.warn, 7.2],
+  [7, 4, "last load 3 h 40 min ago", C.warn, 8.3],
+];
+function scene2(L, a) {
+  g.save(); g.globalAlpha = a;
+  rise("Data decays quietly.", 160, 170, L, 0.3, { family: F.display, size: 76, weight: 700 });
+  const x0 = 160, y0 = 230, rowH = 52, tw = COLS.reduce((s, c) => s + c[1], 0);
+  const dimTable = 1 - 0.55 * easeInOut(prog(L, 10.0, 10.8));
+  g.save(); g.globalAlpha *= dimTable * easeOut(prog(L, 0.4, 1.2));
+  rr(x0 - 20, y0 - 20, tw + 40, rowH * (ROWS.length + 1) + 50, 16); g.fillStyle = C.surface; g.fill();
+  g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+  text("public.orders", x0, y0 + 14, { family: F.mono, size: 20, color: C.dim });
+  let cx = x0;
+  COLS.forEach(([name, w]) => { text(name, cx, y0 + 56, { family: F.mono, size: 22, weight: 500, color: C.muted }); cx += w; });
+  g.fillStyle = C.line; g.fillRect(x0, y0 + 72, tw, 1.5);
+  ROWS.forEach((row, r) => {
+    const p = easeOut(prog(L, 0.8 + r * 0.12, 1.3 + r * 0.12));
+    let cx2 = x0;
+    row.forEach((v, c) => {
+      const y = y0 + 72 + rowH * (r + 1) - 18;
+      text(v === "" ? "NULL" : v, cx2, y + (1 - p) * 10, { family: F.mono, size: 22, alpha: p, color: v === "" ? C.dim : C.fg });
+      cx2 += COLS[c][1];
+    });
+  });
+  g.restore();
+  // Faults: a box on the cell and a tag on the right.
+  FAULTS.forEach(([r, c, label, col, at], i) => {
+    const p = easeOut(prog(L, at, at + 0.5));
+    if (p <= 0) return;
+    let cx3 = x0; for (let k = 0; k < c; k++) cx3 += COLS[k][1];
+    const cw = COLS[c][1] - 16, cy = y0 + 72 + rowH * r + 10;
+    g.save(); g.globalAlpha *= dimTable;
+    const pulse = 0.5 + 0.5 * Math.sin((L - at) * 4);
+    rr(cx3 - 10, cy, cw + 8, rowH - 12, 8);
+    g.fillStyle = col === C.bad ? `rgba(242,119,127,${0.12 + 0.06 * pulse})` : `rgba(227,164,64,${0.12 + 0.06 * pulse})`;
+    g.globalAlpha *= p; g.fill(); g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+    const ty = 310 + i * 86, tx = x0 + tw + 90;
+    g.beginPath(); g.moveTo(cx3 + cw, cy + (rowH - 12) / 2);
+    g.bezierCurveTo(tx - 50, cy + (rowH - 12) / 2, tx - 60, ty, tx - 8, ty);
+    g.strokeStyle = col; g.globalAlpha *= 0.6; g.lineWidth = 1.5; g.setLineDash([5, 6]); g.stroke(); g.setLineDash([]);
+    g.restore();
+    g.save(); g.globalAlpha *= dimTable;
+    chip(label, x0 + tw + 90 + (1 - p) * 30, ty, { size: 24, weight: 600, alpha: p, dot: col, fill: "#18203a" });
+    g.restore();
+  });
+  // Coverage: almost nothing is tested.
+  const pc = easeOut(prog(L, 10.2, 11.0));
+  if (pc > 0) {
+    const bx = 160, by = 850, bw = 1600, bh = 46;
+    rise("Most tables were never tested.", bx, 818, L, 10.2, { family: F.display, size: 56, weight: 700 });
+    g.save(); g.globalAlpha *= pc;
+    rr(bx, by, bw, bh, 10); g.fillStyle = C.surface; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    g.save(); g.clip();
+    g.strokeStyle = "rgba(166,176,197,0.12)"; g.lineWidth = 10;
+    for (let x = bx - 60; x < bx + bw + 60; x += 26) { g.beginPath(); g.moveTo(x, by + bh + 4); g.lineTo(x + 50, by - 4); g.stroke(); }
+    g.restore();
+    const fillW = bw * 0.032 * easeOut(prog(L, 11.0, 11.8));
+    rr(bx, by, Math.max(fillW, 1), bh, 10); g.fillStyle = C.ok; g.fill();
+    text("41 tables with tests", bx, by + bh + 42, { family: F.mono, size: 24, color: C.ok });
+    text("1,243 tables nobody checks", bx + bw, by + bh + 42, { family: F.mono, size: 24, color: C.muted, align: "right" });
+    g.restore();
+  }
+  g.restore();
+}
+
+// ---------- scene 3: the name ----------
+function scene3(L, a) {
+  g.save(); g.globalAlpha = a;
+  const p = prog(L, 0.2, 3.0);
+  // A soft halo behind the seal once it stamps.
+  const halo = easeOut(prog(L, 2.4, 3.6));
+  if (halo > 0) {
+    const hg = g.createRadialGradient(610, 600, 10, 610, 600, 330);
+    hg.addColorStop(0, `rgba(43,79,179,${0.32 * halo})`); hg.addColorStop(1, "rgba(43,79,179,0)");
+    g.fillStyle = hg; g.fillRect(200, 200, 820, 820);
+  }
+  logo(520, 520, 420, p);
+  const tx = 860;
+  rise("Sahifa", tx, 450, L, 1.0, { family: F.display, size: 168, weight: 800, ls: -2 });
+  rise("صحيفة", tx + 4, 560, L, 1.6, { family: F.ar, size: 72, weight: 700, color: C.accent, dir: "ltr" });
+  rise("Know what your data promises,", tx, 680, L, 9.4, { family: F.display, size: 50, weight: 500 });
+  rise("and whether it keeps it.", tx, 742, L, 9.8, { family: F.display, size: 50, weight: 500, color: C.accent });
+  rise("Ṣaḥīfa: a written sheet. The charter of Medina set down", tx, 850, L, 2.8, { size: 28, color: C.muted });
+  rise("what each party could expect of the others.", tx, 892, L, 4.4, { size: 28, color: C.muted });
+  g.restore();
+}
+
+// ---------- scene 4: profile, check, score, explain ----------
+// The checks Sahifa writes today (core/src/sahifa_core/checks/catalogue.py); the catalogue of 30
+// lists ten more for later releases.
+const CHECKS = ["not_null", "not_blank", "row_count", "unique", "duplicate_rows", "type_conformance",
+  "semantic_format", "pattern", "accepted_values", "length", "whitespace", "non_printing", "range", "outliers",
+  "future_dates", "implausible_dates", "foreign_key", "column_order", "casing_variants", "freshness"];
+const DIMS = [["Completeness", 98.1, 97.8, 98.4], ["Validity", 90.3, 89.9, 90.8], ["Accuracy", 89.6, 88.1, 91.0],
+  ["Consistency", 94.2, 93.7, 94.6], ["Uniqueness", 99.4, 99.3, 99.5], ["Currentness", 85.0, 80.2, 88.9]];
+function scene4(L, a) {
+  g.save(); g.globalAlpha = a;
+  const steps = ["Profile", "Check", "Score", "Explain"];
+  const sw = steps.map((s) => measure(s + ".", F.display, 64, 700));
+  const total = sw.reduce((s, w) => s + w, 0) + 40 * 3;
+  let x = W / 2 - total / 2;
+  steps.forEach((s, i) => {
+    const on = [4.3, 6.2, 11.5, 12.9][i];
+    const lit = prog(L, on, on + 0.6);
+    rise(s + ".", x, 150, L, 0.3 + i * 0.25, { family: F.display, size: 64, weight: 700, color: lit > 0.5 ? C.fg : C.dim });
+    if (lit > 0) { g.fillStyle = C.accent; g.globalAlpha = a * lit; g.fillRect(x, 172, sw[i] * easeOut(lit), 5); g.globalAlpha = a; }
+    x += sw[i] + 40;
+  });
+  // Sources on the left.
+  const src = [["Postgres", "database"], ["Parquet", "folder on disk"], ["CSV · TSV", "exports"], ["JSON", "files"]];
+  const core = { x: 650, y: 280, w: 640, h: 650 };
+  src.forEach(([name, sub], i) => {
+    const y = 360 + i * 140, p = easeOut(prog(L, 0.8 + i * 0.2, 1.4 + i * 0.2));
+    g.save(); g.globalAlpha *= p;
+    rr(150 - (1 - p) * 40, y - 46, 300, 92, 14); g.fillStyle = C.surface; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    text(name, 178 - (1 - p) * 40, y - 4, { family: F.display, size: 32, weight: 700 });
+    text(sub, 178 - (1 - p) * 40, y + 30, { family: F.mono, size: 19, color: C.dim });
+    // The wire to the core and what travels on it.
+    const wy = core.y + 120 + i * 120;
+    const draw = easeInOut(prog(L, 1.6 + i * 0.15, 2.6 + i * 0.15));
+    g.beginPath(); g.moveTo(450, y);
+    g.bezierCurveTo(540, y, 560, wy, core.x, wy);
+    g.strokeStyle = C.line; g.lineWidth = 2; g.setLineDash([1000]); g.lineDashOffset = 1000 * (1 - draw); g.stroke(); g.setLineDash([]);
+    if (draw >= 1) {
+      for (let k = 0; k < 3; k++) {
+        const u = ((L * 0.45 + k / 3 + i * 0.13) % 1);
+        const bx = Math.pow(1 - u, 3) * 450 + 3 * Math.pow(1 - u, 2) * u * 540 + 3 * (1 - u) * u * u * 560 + u * u * u * core.x;
+        const by = Math.pow(1 - u, 3) * y + 3 * Math.pow(1 - u, 2) * u * y + 3 * (1 - u) * u * u * wy + u * u * u * wy;
+        g.beginPath(); g.arc(bx, by, 4, 0, Math.PI * 2); g.fillStyle = C.accent; g.fill();
+      }
+    }
+    g.restore();
+  });
+  // A lock on the wires: reading only.
+  const lockP = easeOut(prog(L, 2.6, 3.2));
+  if (lockP > 0) {
+    // "It only ever reads": the badge swells once.
+    const k = 1 + 0.25 * Math.sin(Math.PI * prog(L, 13.2, 14.0));
+    g.save(); g.translate(545, 290); g.scale(k, k); g.translate(-545, -290);
+    chip("read-only", 545, 290, { family: F.mono, size: 20, weight: 500, align: "center", alpha: lockP, color: C.ok, dot: C.ok });
+    g.restore();
+  }
+  // The core with the checks it writes.
+  const cp = easeOut(prog(L, 1.2, 2.0));
+  g.save(); g.globalAlpha *= cp;
+  rr(core.x, core.y, core.w, core.h, 20); g.fillStyle = "#121a2d"; g.fill(); g.strokeStyle = C.accentDeep; g.lineWidth = 2; g.stroke();
+  text("sahifa", core.x + 30, core.y + 52, { family: F.display, size: 34, weight: 700 });
+  text("profile → checks → score", core.x + core.w - 30, core.y + 50, { family: F.mono, size: 19, color: C.dim, align: "right" });
+  g.fillStyle = C.line; g.fillRect(core.x + 30, core.y + 76, core.w - 60, 1.5);
+  // Profile line first, then the checks appear in two columns.
+  const prof = easeOut(prog(L, 4.3, 5.1)) * (1 - easeOut(prog(L, 6.0, 6.5)));
+  if (prof > 0) {
+    const lines = ["orders.amount     numeric · 0.4 % null", "customers.iban    IBAN · 2.1 M rows", "events.loaded_at  timestamp · newest 06:14", "orders.customer_id  → customers.id"];
+    lines.forEach((l, i) => text(l, core.x + 40, core.y + 140 + i * 50, { family: F.mono, size: 22, color: C.muted, alpha: prof }));
+  }
+  CHECKS.forEach((name, i) => {
+    const col = Math.floor(i / 10), row = i % 10;
+    const p = easeOut(prog(L, 6.4 + i * 0.12, 6.8 + i * 0.12));
+    if (p <= 0) return;
+    const x2 = core.x + 40 + col * 300, y2 = core.y + 130 + row * 42;
+    text("✓", x2, y2, { family: F.mono, size: 21, color: C.ok, alpha: p });
+    text("sah." + name, x2 + 30 + (1 - p) * 12, y2, { family: F.mono, size: 21, color: C.fg, alpha: p });
+  });
+  const cnt = Math.round(20 * prog(L, 6.4, 8.8));
+  if (cnt > 0) text(`${cnt} kinds of checks today, written from the profile`, core.x + 40, core.y + core.h - 26, { family: F.body, size: 22, color: C.accent, weight: 600 });
+  g.restore();
+  // Scores on the right.
+  const ox = 1400;
+  DIMS.forEach(([name, v], i) => {
+    const p = easeOut(prog(L, 11.5 + i * 0.12, 12.2 + i * 0.12));
+    if (p <= 0) return;
+    const y = 360 + i * 92;
+    text(name, ox, y, { size: 24, weight: 600, alpha: p });
+    text(v.toFixed(1), ox + 380, y, { family: F.mono, size: 24, alpha: p, align: "right", color: v < 90 ? C.warn : C.ok });
+    g.save(); g.globalAlpha *= p;
+    rr(ox, y + 16, 380, 10, 5); g.fillStyle = C.surface2; g.fill();
+    rr(ox, y + 16, 380 * ((v - 60) / 40) * p, 10, 5); g.fillStyle = v < 90 ? C.warn : C.ok; g.fill();
+    g.restore();
+  });
+  const ex = easeOut(prog(L, 12.9, 13.5));
+  if (ex > 0) {
+    g.save(); g.globalAlpha *= ex;
+    chip("4 findings explained", ox, 940, { size: 22, dot: C.bad, alpha: ex });
+    g.restore();
+  }
+  g.restore();
+}
+
+// ---------- scene 5: a score with an error bar ----------
+function scene5(L, a) {
+  g.save(); g.globalAlpha = a;
+  rise("A score that says how sure it is.", 160, 170, L, 0.2, { family: F.display, size: 70, weight: 700 });
+  // Rows read climb; intervals narrow.
+  const n = easeInOut(prog(L, 2.2, 6.6));
+  const rows = Math.round(Math.exp(lerp(Math.log(10000), Math.log(41200000), n)));
+  const widen = lerp(9, 1, n);
+  const sp = easeOut(prog(L, 0.6, 1.4));
+  g.save(); g.globalAlpha *= sp;
+  rr(160, 250, 620, 640, 22); g.fillStyle = C.surface; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+  text("Store score · shop", 200, 310, { family: F.mono, size: 22, color: C.dim });
+  const score = lerp(91.4, 92.7, n);
+  text(score.toFixed(1), 200, 500, { family: F.display, size: 190, weight: 800 });
+  text("/ 100", 590, 500, { family: F.display, size: 44, weight: 500, color: C.dim });
+  const half = 0.4 * widen;
+  text("95 % interval", 200, 580, { size: 28, color: C.muted });
+  text(`${(score - half).toFixed(1)} – ${(score + half).toFixed(1)}`, 400, 580, { family: F.mono, size: 30, weight: 500, color: C.accent });
+  g.fillStyle = C.line; g.fillRect(200, 630, 540, 1.5);
+  text("rows read", 200, 700, { size: 26, color: C.muted });
+  text(rows.toLocaleString("en-US"), 740, 700, { family: F.mono, size: 34, weight: 500, align: "right" });
+  text("tables", 200, 770, { size: 26, color: C.muted });
+  text("1,284", 740, 770, { family: F.mono, size: 34, weight: 500, align: "right" });
+  text("ISO/IEC 25012 · 25024", 200, 850, { family: F.mono, size: 20, color: C.dim });
+  g.restore();
+  // Six dimensions with whiskers on an 80–100 axis.
+  const ax0 = 1050, ax1 = 1760, lo = 78, hi = 100;
+  const X = (v) => ax0 + ((clamp(v, lo, hi) - lo) / (hi - lo)) * (ax1 - ax0);
+  const axP = easeOut(prog(L, 1.0, 1.8));
+  g.save(); g.globalAlpha *= axP;
+  [80, 85, 90, 95, 100].forEach((v) => {
+    g.fillStyle = "rgba(166,176,197,0.12)"; g.fillRect(X(v), 260, 1.5, 600);
+    text(String(v), X(v), 900, { family: F.mono, size: 20, color: C.dim, align: "center" });
+  });
+  g.restore();
+  DIMS.forEach(([name, v, l, h], i) => {
+    const p = easeOut(prog(L, 1.2 + i * 0.15, 1.9 + i * 0.15));
+    if (p <= 0) return;
+    const y = 310 + i * 96;
+    text(name, ax0 - 30, y + 9, { size: 28, weight: 600, align: "right", alpha: p });
+    const hl = (v - l) * widen, hh = (h - v) * widen;
+    const col = v < 90 ? C.warn : C.ok;
+    g.save(); g.globalAlpha *= p;
+    g.fillStyle = col === C.ok ? "rgba(76,195,138,0.18)" : "rgba(227,164,64,0.2)";
+    rr(X(v - hl), y - 14, Math.max(X(v + hh) - X(v - hl), 4), 28, 6); g.fill();
+    g.strokeStyle = col; g.lineWidth = 2;
+    [X(v - hl), X(v + hh)].forEach((xx) => { g.beginPath(); g.moveTo(xx, y - 14); g.lineTo(xx, y + 14); g.stroke(); });
+    g.beginPath(); g.moveTo(X(v - hl), y); g.lineTo(X(v + hh), y); g.stroke();
+    g.beginPath(); g.arc(X(v), y, 9, 0, Math.PI * 2); g.fillStyle = col; g.fill();
+    text(v.toFixed(1), X(v), y - 26, { family: F.mono, size: 20, color: C.fg, align: "center" });
+    g.restore();
+  });
+  rise("A real drop, or sampling noise? The interval tells you.", 1050, 975, L, 5.4, { size: 30, color: C.muted });
+  g.restore();
+}
+
+// ---------- scene 6: a finding that explains itself ----------
+const SQL = [
+  ["SELECT", " o.order_id, o.customer_id"],
+  ["FROM", " public.orders AS o"],
+  ["LEFT JOIN", " public.customers AS c"],
+  ["  ON", " c.id = o.customer_id"],
+  ["WHERE", " o.customer_id IS NOT NULL"],
+  ["  AND", " c.id IS NULL"],
+];
+function scene6(L, a) {
+  g.save(); g.globalAlpha = a;
+  const p = easeOut(prog(L, 0.2, 1.0));
+  const x0 = 210, y0 = 150 + (1 - p) * 40, w = 1500, h = 800;
+  g.save(); g.globalAlpha *= p;
+  // Two cards behind, so this is one of several findings.
+  [2, 1].forEach((k) => { rr(x0 + k * 22, y0 - k * 22, w, h, 24); g.fillStyle = k === 2 ? "#10172a" : "#131b2f"; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1; g.stroke(); });
+  rr(x0, y0, w, h, 24); g.fillStyle = C.surface; g.fill(); g.strokeStyle = "rgba(242,119,127,0.55)"; g.lineWidth = 2; g.stroke();
+  g.fillStyle = C.bad; rr(x0, y0, 10, h, [24, 0, 0, 24]); g.fill();
+  chip("critical", x0 + 50, y0 + 60, { size: 22, dot: C.bad, fill: "rgba(242,119,127,0.12)", stroke: "rgba(242,119,127,0.4)" });
+  text("sah.foreign_key", x0 + w - 50, y0 + 68, { family: F.mono, size: 22, color: C.dim, align: "right" });
+  text("orders.customer_id refers to customers.id", x0 + 50, y0 + 150, { family: F.display, size: 50, weight: 700 });
+  g.restore();
+  // Count.
+  const cP = prog(L, 2.4, 3.6);
+  if (cP > 0) {
+    const n = Math.round(312 * easeOut(cP));
+    text(String(n), x0 + 50, y0 + 236, { family: F.display, size: 64, weight: 800, color: C.bad });
+    rise("orphan rows since 29 Sep · 94 % of them from source = pos_berlin", x0 + 190, y0 + 230, L, 2.6, { size: 30, color: C.muted, dy: 0 });
+  }
+  // Examples, masked.
+  const eP = easeOut(prog(L, 3.8, 4.4));
+  if (eP > 0) {
+    g.save(); g.globalAlpha *= eP;
+    const ex = x0 + 50, ey = y0 + 300;
+    text("EXAMPLES · personal values masked", ex, ey, { family: F.mono, size: 19, color: C.dim, ls: 1 });
+    const hdr = [["order_id", 0], ["customer_id", 160], ["email", 360]];
+    hdr.forEach(([s, dx]) => text(s, ex + dx, ey + 50, { family: F.mono, size: 21, color: C.muted }));
+    [["10479", "88213", "m•••@•••.de"], ["10502", "88213", "m•••@•••.de"], ["10511", "88240", "j•••@•••.ch"]].forEach((r, i) => {
+      const q = easeOut(prog(L, 4.1 + i * 0.2, 4.5 + i * 0.2));
+      r.forEach((s, j) => text(s, ex + hdr[j][1], ey + 100 + i * 46, { family: F.mono, size: 23, alpha: q, color: j === 1 ? C.bad : C.fg }));
+    });
+    g.restore();
+  }
+  // The SQL that found them, typed.
+  const sx = x0 + 760, sy = y0 + 300;
+  const sP = easeOut(prog(L, 5.8, 6.2));
+  if (sP > 0) {
+    g.save(); g.globalAlpha *= sP;
+    text("THE SQL THAT FOUND THEM", sx, sy, { family: F.mono, size: 19, color: C.dim, ls: 1 });
+    rr(sx, sy + 22, 690, 296, 14); g.fillStyle = "#0f1526"; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    const full = SQL.map(([k, r]) => k + r).join("\n");
+    let shown = Math.floor(full.length * prog(L, 6.1, 8.0));
+    SQL.forEach(([k, r], i) => {
+      const lineLen = (k + r).length;
+      const vis = Math.max(0, Math.min(lineLen, shown)); shown -= lineLen + 1;
+      const y = sy + 72 + i * 42;
+      text(k.slice(0, vis), sx + 26, y, { family: F.mono, size: 23, color: C.accent, weight: 500 });
+      if (vis > k.length) text(r.slice(0, vis - k.length), sx + 26 + measure(k, F.mono, 23, 500), y, { family: F.mono, size: 23 });
+    });
+    g.restore();
+  }
+  // Next step.
+  const nP = easeOut(prog(L, 8.0, 8.6));
+  if (nP > 0) {
+    g.save(); g.globalAlpha *= nP;
+    const ny = y0 + 640;
+    rr(x0 + 50, ny, w - 100, 110, 14); g.fillStyle = "rgba(147,171,255,0.08)"; g.fill();
+    g.fillStyle = C.accent; g.fillRect(x0 + 50, ny, 5, 110);
+    text("NEXT STEP", x0 + 84, ny + 42, { family: F.mono, size: 19, color: C.accent, ls: 1 });
+    text("Check the pos_berlin export since 29 Sep; the customers it refers to never arrived.", x0 + 84, ny + 84, { size: 29 });
+    g.restore();
+  }
+  g.restore();
+}
+
+// ---------- scene 7: what to expect ----------
+const TILES = [
+  ["home", "On your machine", "Docker compose, about 15 minutes from download to first report."],
+  ["lock", "Read-only", "Never writes to a source, and checks what its login could do."],
+  ["check", "Checks written for you", "20 kinds today, generated from the profile. You lock what you trust."],
+  ["bars", "Scores with error bars", "Six ISO/IEC 25012 dimensions, each with a 95 % interval."],
+  ["doc", "Findings that explain", "Counts, masked examples, the SQL and a next step."],
+  ["open", "Open source", "Apache-2.0. Postgres, CSV, Parquet and JSON today."],
+];
+function icon(kind, x, y, col) {
+  g.save(); g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 3.5; g.lineCap = "round"; g.lineJoin = "round";
+  g.beginPath();
+  if (kind === "home") { g.moveTo(x - 18, y + 2); g.lineTo(x, y - 16); g.lineTo(x + 18, y + 2); g.moveTo(x - 13, y - 3); g.lineTo(x - 13, y + 17); g.lineTo(x + 13, y + 17); g.lineTo(x + 13, y - 3); }
+  if (kind === "lock") { g.roundRect(x - 15, y - 3, 30, 22, 4); g.moveTo(x - 9, y - 3); g.arc(x, y - 7, 9, Math.PI, 0); g.lineTo(x + 9, y - 3); }
+  if (kind === "check") { g.moveTo(x - 15, y + 1); g.lineTo(x - 4, y + 12); g.lineTo(x + 16, y - 12); }
+  if (kind === "bars") { [[-14, 6], [-2, -4], [10, -14]].forEach(([dx, top]) => { g.moveTo(x + dx, y + 18); g.lineTo(x + dx, y + top); }); }
+  if (kind === "doc") { g.roundRect(x - 14, y - 18, 28, 36, 4); g.moveTo(x - 7, y - 6); g.lineTo(x + 7, y - 6); g.moveTo(x - 7, y + 3); g.lineTo(x + 7, y + 3); g.moveTo(x - 7, y + 11); g.lineTo(x + 2, y + 11); }
+  if (kind === "open") { g.moveTo(x - 6, y - 14); g.lineTo(x - 18, y); g.lineTo(x - 6, y + 14); g.moveTo(x + 6, y - 14); g.lineTo(x + 18, y); g.lineTo(x + 6, y + 14); }
+  g.stroke(); g.restore();
+}
+function wrap(s, maxW, family, size, weight) {
+  const words = s.split(" "), lines = []; let cur = "";
+  for (const w of words) { const t2 = cur ? cur + " " + w : w; if (measure(t2, family, size, weight) > maxW && cur) { lines.push(cur); cur = w; } else cur = t2; }
+  if (cur) lines.push(cur); return lines;
+}
+function scene7(L, a) {
+  g.save(); g.globalAlpha = a;
+  rise("What to expect", 160, 170, L, 0.2, { family: F.display, size: 76, weight: 700 });
+  const pv = easeOut(prog(L, 11.0, 11.6));
+  if (pv > 0) chip("Preview 0.1 · test users welcome", 1760, 145, { size: 24, align: "right", alpha: pv, color: C.accent, dot: C.accent });
+  TILES.forEach(([ic, title, sub], i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const x = 160 + col * 540, y = 250 + row * 300;
+    const at = [1.6, 5.4, 6.4, 7.2, 8.0, 9.6][i];
+    const p = easeOut(prog(L, at, at + 0.6));
+    if (p <= 0) return;
+    g.save(); g.globalAlpha *= p; g.translate(0, (1 - p) * 30);
+    rr(x, y, 500, 260, 20); g.fillStyle = C.surface; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    g.beginPath(); g.arc(x + 62, y + 66, 32, 0, Math.PI * 2); g.fillStyle = "rgba(147,171,255,0.12)"; g.fill();
+    icon(ic, x + 62, y + 66, C.accent);
+    text(title, x + 36, y + 152, { family: F.display, size: 36, weight: 700 });
+    wrap(sub, 430, F.body, 25, 400).forEach((l, k) => text(l, x + 36, y + 196 + k * 34, { size: 25, color: C.muted }));
+    g.restore();
+  });
+  // A terminal line at the bottom.
+  const tp = easeOut(prog(L, 2.4, 2.8));
+  if (tp > 0) {
+    g.save(); g.globalAlpha *= tp;
+    rr(160, 900, 1600, 84, 14); g.fillStyle = "#0f1526"; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    const cmd = "docker compose up -d";
+    const k = Math.floor(cmd.length * prog(L, 2.8, 3.8));
+    text("$", 196, 952, { family: F.mono, size: 28, color: C.dim });
+    text(cmd.slice(0, k), 232, 952, { family: F.mono, size: 28 });
+    const done = easeOut(prog(L, 4.2, 4.7));
+    if (done > 0) text("✓ web · api · worker · db    →   http://localhost", 1720, 952, { family: F.mono, size: 26, color: C.ok, align: "right", alpha: done });
+    g.restore();
+  }
+  g.restore();
+}
+
+// ---------- scene 8: close ----------
+function scene8(L, a) {
+  g.save(); g.globalAlpha = a;
+  logo(W / 2, 360, 300, prog(L, 0.1, 2.2));
+  rise("Sahifa", W / 2, 650, L, 0.8, { family: F.display, size: 128, weight: 800, align: "center", ls: -2 });
+  rise("Know what your data promises, and whether it keeps it.", W / 2, 740, L, 1.6, { family: F.display, size: 46, weight: 500, align: "center", color: C.accent });
+  rise("Sīra Labs  ·  github.com/Sira-Labs/Sahifa  ·  Apache-2.0", W / 2, 850, L, 3.4, { family: F.mono, size: 26, align: "center", color: C.muted });
+  g.restore();
+}
+
+// ---------- timeline ----------
+// [start, end, draw]; neighbours overlap by FADE for a crossfade.
+const FADE = 0.6;
+let SCENES = [
+  [0, 12.6, scene1],
+  [12.0, 26.6, scene2],
+  [26.0, 38.6, scene3],
+  [38.0, 52.8, scene4],
+  [52.2, 62.0, scene5],
+  [61.4, 72.2, scene6],
+  [71.6, 86.0, scene7],
+  [85.4, 93.4, scene8],
+];
+let DURATION = 93.4;
+function render(t) {
+  background(t);
+  for (const [s, e, draw] of SCENES) {
+    if (t < s || t > e) continue;
+    const a = Math.min(prog(t, s, s + FADE), 1 - prog(t, e - FADE, e));
+    if (s === 0) draw(t - s, Math.min(1, 1 - prog(t, e - FADE, e)) * prog(t, 0, 0.4));
+    else draw(t - s, a);
+  }
+  vignette();
+  const end = prog(t, DURATION - 1.2, DURATION);
+  if (end > 0) { g.fillStyle = `rgba(8,12,23,${end})`; g.fillRect(0, 0, W, H); }
+}
+window.render = render;
+window.setTimeline = (scenes, duration) => {
+  SCENES = scenes.map(([s, e], i) => [s, e, SCENES[i][2]]); DURATION = duration;
+};
+window.DURATION = () => DURATION;
+window.ready = Promise.all([
+  "700 92px \"Bricolage Grotesque\"", "800 92px \"Bricolage Grotesque\"", "500 40px \"Bricolage Grotesque\"",
+  "400 30px Figtree", "600 30px Figtree", "400 22px \"IBM Plex Mono\"", "500 22px \"IBM Plex Mono\"",
+  "700 72px \"Noto Kufi Arabic\"",
+].map((f) => document.fonts.load(f, f.includes("Kufi") ? "صحيفة" : "Sahifa ṢaḥīfaĪ"))).then(() => document.fonts.ready);
+if (!location.search.includes("capture=1")) {
+  window.ready.then(() => {
+    const t0 = performance.now();
+    const loop = () => { render(((performance.now() - t0) / 1000) % DURATION); requestAnimationFrame(loop); };
+    loop();
+  });
+}
+</script>
+</body>
+</html>

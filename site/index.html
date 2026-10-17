@@ -211,6 +211,10 @@ section { padding-block: 56px; }
 .eyebrow-top { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
 .tags { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
 .tags li { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; }
+/* The explainer video: always on the dark sheet it was drawn on, in either theme. */
+.film { margin: 0; border: 1px solid var(--line); border-radius: 22px; overflow: hidden; background: #080c17; aspect-ratio: 16 / 9; box-shadow: 0 24px 60px -36px rgba(20, 27, 45, 0.45); }
+.film video { display: block; width: 100%; height: 100%; }
+.film-note { font-size: 14px; color: var(--muted); margin-top: 12px; }
 .kicker { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
 
 /* Problem band */
@@ -280,6 +284,7 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
       Sahifa
     </a>
     <nav class="nav" aria-label="Main">
+      <a class="hide-sm" href="#video">Video</a>
       <a class="hide-sm" href="#why">Why</a>
       <a class="hide-sm" href="#how">How it works</a>
       <a class="hide-sm" href="#coverage">Checks</a>
@@ -367,6 +372,21 @@ td .iso { color: var(--muted); font-size: 13px; display: block; }
       </article>
     </section>
 
+
+    <section id="video" aria-labelledby="video-title">
+      <p class="kicker">In 90 seconds</p>
+      <h2 id="video-title">What Sahifa does, and what to expect.</h2>
+      <p class="section-intro">The problem it solves, how a scan works, and what you get when you run it on your own data. Narrated, with English captions.</p>
+      <figure class="film">
+        <video controls preload="none" playsinline poster="assets/video/sahifa-explainer-poster.jpg" aria-describedby="video-note">
+          <source src="assets/video/sahifa-explainer.mp4" type="video/mp4">
+          <source src="assets/video/sahifa-explainer.webm" type="video/webm">
+          <track kind="captions" src="assets/video/sahifa-explainer.en.vtt" srclang="en" label="English">
+          <a href="assets/video/sahifa-explainer.mp4">Download the video (MP4, 6 MB)</a>
+        </video>
+      </figure>
+      <p class="film-note" id="video-note">1 min 33 s · <a href="assets/video/sahifa-explainer.en.vtt">transcript</a> · the numbers on screen are example data.</p>
+    </section>
 
     <section id="why" aria-labelledby="why-title">
       <p class="kicker">The problem</p>
