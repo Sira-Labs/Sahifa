@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Explainer video on the product page**: 93 seconds on the problem Sahifa solves, how a scan
+  works and what to expect, narrated, with English captions (`site/assets/video/`). Its source and
+  how to re-render it are in `docs/assets/video/`.
 - **Run it on your own machine** (spec 021): `deploy/quickstart.md`, a compose override for
   read-only folders and databases on the host, and an optional password gate in the web
   container (`SAHIFA_EDGE_AUTH=basic`), so a small install needs no Keycloak.

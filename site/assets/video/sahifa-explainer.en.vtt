@@ -1,0 +1,129 @@
+WEBVTT
+
+1
+00:00:00.800 --> 00:00:03.110
+Every company runs on tables.
+
+2
+00:00:03.380 --> 00:00:06.810
+Orders, customers, invoices, events.
+
+3
+00:00:07.160 --> 00:00:08.330
+Thousands of them,
+
+4
+00:00:08.380 --> 00:00:11.930
+in databases, warehouses and folders of files.
+
+5
+00:00:12.740 --> 00:00:14.970
+And data decays quietly.
+
+6
+00:00:15.220 --> 00:00:17.870
+An order for a customer who doesn't exist.
+
+7
+00:00:18.100 --> 00:00:20.210
+An IBAN with a broken check digit.
+
+8
+00:00:20.480 --> 00:00:22.250
+A load that stopped in the night.
+
+9
+00:00:22.740 --> 00:00:24.630
+Most tables were never tested,
+
+10
+00:00:24.740 --> 00:00:26.030
+so nobody notices.
+
+11
+00:00:26.960 --> 00:00:28.550
+This is Sahifa.
+
+12
+00:00:28.740 --> 00:00:30.950
+From the Arabic for a written sheet:
+
+13
+00:00:31.180 --> 00:00:35.530
+the charter of Medina, which set down what each party could expect of the others.
+
+14
+00:00:35.840 --> 00:00:38.050
+Sahifa does the same for your data.
+
+15
+00:00:38.740 --> 00:00:42.050
+Point it at a Postgres database or a folder of files.
+
+16
+00:00:42.220 --> 00:00:45.430
+It profiles every column, writes the checks for you,
+
+17
+00:00:45.560 --> 00:00:48.510
+thirty kinds, from foreign keys to freshness,
+
+18
+00:00:48.680 --> 00:00:50.290
+and scores what it finds.
+
+19
+00:00:50.580 --> 00:00:52.310
+It only ever reads.
+
+20
+00:00:52.960 --> 00:00:55.650
+Every score comes with an honest error bar.
+
+21
+00:00:55.840 --> 00:01:00.990
+A score from a sample tells you how sure it is, so you can tell a real drop from noise.
+
+22
+00:01:02.120 --> 00:01:04.330
+And every finding explains itself:
+
+23
+00:01:04.640 --> 00:01:08.110
+how many rows, examples with personal values masked,
+
+24
+00:01:08.200 --> 00:01:11.030
+the SQL that found them, and what to do next.
+
+25
+00:01:12.370 --> 00:01:13.380
+What to expect?
+
+26
+00:01:13.630 --> 00:01:17.140
+Sahifa runs on your own machine, in about fifteen minutes.
+
+27
+00:01:17.310 --> 00:01:21.360
+It never writes to your data, and it tells you if its login could.
+
+28
+00:01:21.550 --> 00:01:23.740
+It's open source, and in preview.
+
+29
+00:01:23.890 --> 00:01:25.520
+Test users are welcome.
+
+30
+00:01:26.340 --> 00:01:27.210
+Sahifa.
+
+31
+00:01:27.360 --> 00:01:29.170
+Know what your data promises,
+
+32
+00:01:29.240 --> 00:01:30.870
+and whether it keeps it.
