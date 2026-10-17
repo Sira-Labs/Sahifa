@@ -317,11 +317,11 @@ function scene3(L, a) {
 }
 
 // ---------- scene 4: profile, check, score, explain ----------
-const CHECKS = ["not_null", "not_blank", "unique", "duplicate_rows", "near_duplicates", "foreign_key", "accepted_values",
-  "code_list", "range", "length", "pattern", "semantic_format", "type_conformance", "mixed_types", "whitespace",
-  "non_printing", "casing_variants", "future_dates", "implausible_dates", "outliers", "distribution_shift",
-  "functional_dependency", "aggregate_balance", "metric_anomaly", "row_count", "volume_trend", "freshness",
-  "schema_drift", "column_order", "custom_sql"];
+// The checks Sahifa writes today (core/src/sahifa_core/checks/catalogue.py); the catalogue of 30
+// lists ten more for later releases.
+const CHECKS = ["not_null", "not_blank", "row_count", "unique", "duplicate_rows", "type_conformance",
+  "semantic_format", "pattern", "accepted_values", "length", "whitespace", "non_printing", "range", "outliers",
+  "future_dates", "implausible_dates", "foreign_key", "column_order", "casing_variants", "freshness"];
 const DIMS = [["Completeness", 98.1, 97.8, 98.4], ["Validity", 90.3, 89.9, 90.8], ["Accuracy", 89.6, 88.1, 91.0],
   ["Consistency", 94.2, 93.7, 94.6], ["Uniqueness", 99.4, 99.3, 99.5], ["Currentness", 85.0, 80.2, 88.9]];
 function scene4(L, a) {
@@ -331,7 +331,7 @@ function scene4(L, a) {
   const total = sw.reduce((s, w) => s + w, 0) + 40 * 3;
   let x = W / 2 - total / 2;
   steps.forEach((s, i) => {
-    const on = [3.8, 5.6, 10.4, 12.8][i];
+    const on = [4.3, 6.2, 11.5, 12.9][i];
     const lit = prog(L, on, on + 0.6);
     rise(s + ".", x, 150, L, 0.3 + i * 0.25, { family: F.display, size: 64, weight: 700, color: lit > 0.5 ? C.fg : C.dim });
     if (lit > 0) { g.fillStyle = C.accent; g.globalAlpha = a * lit; g.fillRect(x, 172, sw[i] * easeOut(lit), 5); g.globalAlpha = a; }
@@ -366,7 +366,7 @@ function scene4(L, a) {
   const lockP = easeOut(prog(L, 2.6, 3.2));
   if (lockP > 0) {
     // "It only ever reads": the badge swells once.
-    const k = 1 + 0.25 * Math.sin(Math.PI * prog(L, 12.3, 13.1));
+    const k = 1 + 0.25 * Math.sin(Math.PI * prog(L, 13.2, 14.0));
     g.save(); g.translate(545, 290); g.scale(k, k); g.translate(-545, -290);
     chip("read-only", 545, 290, { family: F.mono, size: 20, weight: 500, align: "center", alpha: lockP, color: C.ok, dot: C.ok });
     g.restore();
@@ -379,26 +379,26 @@ function scene4(L, a) {
   text("profile → checks → score", core.x + core.w - 30, core.y + 50, { family: F.mono, size: 19, color: C.dim, align: "right" });
   g.fillStyle = C.line; g.fillRect(core.x + 30, core.y + 76, core.w - 60, 1.5);
   // Profile line first, then the checks appear in two columns.
-  const prof = easeOut(prog(L, 3.8, 4.6)) * (1 - easeOut(prog(L, 5.6, 6.2)));
+  const prof = easeOut(prog(L, 4.3, 5.1)) * (1 - easeOut(prog(L, 6.0, 6.5)));
   if (prof > 0) {
     const lines = ["orders.amount     numeric · 0.4 % null", "customers.iban    IBAN · 2.1 M rows", "events.loaded_at  timestamp · newest 06:14", "orders.customer_id  → customers.id"];
     lines.forEach((l, i) => text(l, core.x + 40, core.y + 140 + i * 50, { family: F.mono, size: 22, color: C.muted, alpha: prof }));
   }
   CHECKS.forEach((name, i) => {
-    const col = Math.floor(i / 15), row = i % 15;
-    const p = easeOut(prog(L, 6.0 + i * 0.1, 6.4 + i * 0.1));
+    const col = Math.floor(i / 10), row = i % 10;
+    const p = easeOut(prog(L, 6.4 + i * 0.12, 6.8 + i * 0.12));
     if (p <= 0) return;
-    const x2 = core.x + 40 + col * 300, y2 = core.y + 122 + row * 31;
-    text("✓", x2, y2, { family: F.mono, size: 18, color: C.ok, alpha: p });
-    text("sah." + name, x2 + 26 + (1 - p) * 12, y2, { family: F.mono, size: 18, color: C.fg, alpha: p });
+    const x2 = core.x + 40 + col * 300, y2 = core.y + 130 + row * 42;
+    text("✓", x2, y2, { family: F.mono, size: 21, color: C.ok, alpha: p });
+    text("sah." + name, x2 + 30 + (1 - p) * 12, y2, { family: F.mono, size: 21, color: C.fg, alpha: p });
   });
-  const cnt = Math.round(30 * prog(L, 6.0, 9.0));
-  if (cnt > 0) text(`${cnt} kinds of checks, written from the profile`, core.x + 40, core.y + core.h - 26, { family: F.body, size: 22, color: C.accent, weight: 600 });
+  const cnt = Math.round(20 * prog(L, 6.4, 8.8));
+  if (cnt > 0) text(`${cnt} kinds of checks today, written from the profile`, core.x + 40, core.y + core.h - 26, { family: F.body, size: 22, color: C.accent, weight: 600 });
   g.restore();
   // Scores on the right.
   const ox = 1400;
   DIMS.forEach(([name, v], i) => {
-    const p = easeOut(prog(L, 10.4 + i * 0.15, 11.1 + i * 0.15));
+    const p = easeOut(prog(L, 11.5 + i * 0.12, 12.2 + i * 0.12));
     if (p <= 0) return;
     const y = 360 + i * 92;
     text(name, ox, y, { size: 24, weight: 600, alpha: p });
@@ -408,7 +408,7 @@ function scene4(L, a) {
     rr(ox, y + 16, 380 * ((v - 60) / 40) * p, 10, 5); g.fillStyle = v < 90 ? C.warn : C.ok; g.fill();
     g.restore();
   });
-  const ex = easeOut(prog(L, 12.8, 13.4));
+  const ex = easeOut(prog(L, 12.9, 13.5));
   if (ex > 0) {
     g.save(); g.globalAlpha *= ex;
     chip("4 findings explained", ox, 940, { size: 22, dot: C.bad, alpha: ex });
@@ -479,7 +479,8 @@ const SQL = [
   ["FROM", " public.orders AS o"],
   ["LEFT JOIN", " public.customers AS c"],
   ["  ON", " c.id = o.customer_id"],
-  ["WHERE", " c.id IS NULL"],
+  ["WHERE", " o.customer_id IS NOT NULL"],
+  ["  AND", " c.id IS NULL"],
 ];
 function scene6(L, a) {
   g.save(); g.globalAlpha = a;
@@ -521,13 +522,13 @@ function scene6(L, a) {
   if (sP > 0) {
     g.save(); g.globalAlpha *= sP;
     text("THE SQL THAT FOUND THEM", sx, sy, { family: F.mono, size: 19, color: C.dim, ls: 1 });
-    rr(sx, sy + 22, 690, 270, 14); g.fillStyle = "#0f1526"; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
+    rr(sx, sy + 22, 690, 296, 14); g.fillStyle = "#0f1526"; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.5; g.stroke();
     const full = SQL.map(([k, r]) => k + r).join("\n");
     let shown = Math.floor(full.length * prog(L, 6.1, 8.0));
     SQL.forEach(([k, r], i) => {
       const lineLen = (k + r).length;
       const vis = Math.max(0, Math.min(lineLen, shown)); shown -= lineLen + 1;
-      const y = sy + 76 + i * 46;
+      const y = sy + 72 + i * 42;
       text(k.slice(0, vis), sx + 26, y, { family: F.mono, size: 23, color: C.accent, weight: 500 });
       if (vis > k.length) text(r.slice(0, vis - k.length), sx + 26 + measure(k, F.mono, 23, 500), y, { family: F.mono, size: 23 });
     });
@@ -551,7 +552,7 @@ function scene6(L, a) {
 const TILES = [
   ["home", "On your machine", "Docker compose, about 15 minutes from download to first report."],
   ["lock", "Read-only", "Never writes to a source, and checks what its login could do."],
-  ["check", "Checks written for you", "30 kinds, generated from the profile. You lock what you trust."],
+  ["check", "Checks written for you", "20 kinds today, generated from the profile. You lock what you trust."],
   ["bars", "Scores with error bars", "Six ISO/IEC 25012 dimensions, each with a 95 % interval."],
   ["doc", "Findings that explain", "Counts, masked examples, the SQL and a next step."],
   ["open", "Open source", "Apache-2.0. Postgres, CSV, Parquet and JSON today."],

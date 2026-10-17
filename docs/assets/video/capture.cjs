@@ -23,6 +23,8 @@ const fs = require("fs"), path = require("path");
   } else {
     const fps = Number(arg), dur = await page.evaluate(() => window.DURATION());
     const dir = path.join(__dirname, "frames"); fs.mkdirSync(dir, { recursive: true });
+    // A shorter render must not leave frames of an older one behind for ffmpeg to pick up.
+    for (const f of fs.readdirSync(dir)) if (/^f\d{5}\.jpg$/.test(f)) fs.unlinkSync(path.join(dir, f));
     const n = Math.round(dur * fps);
     for (let i = 0; i < n; i++) {
       await grab(i / fps, path.join(dir, `f${String(i).padStart(5, "0")}.jpg`), "image/jpeg");

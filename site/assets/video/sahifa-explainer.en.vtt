@@ -57,23 +57,23 @@ the charter of Medina, which set down what each party could expect of the others
 Sahifa does the same for your data.
 
 15
-00:00:38.740 --> 00:00:42.050
+00:00:38.300 --> 00:00:41.870
 Point it at a Postgres database or a folder of files.
 
 16
-00:00:42.220 --> 00:00:45.430
+00:00:42.340 --> 00:00:45.770
 It profiles every column, writes the checks for you,
 
 17
-00:00:45.560 --> 00:00:48.510
-thirty kinds, from foreign keys to freshness,
+00:00:46.080 --> 00:00:49.410
+twenty kinds today, from foreign keys to freshness,
 
 18
-00:00:48.680 --> 00:00:50.290
+00:00:49.620 --> 00:00:51.150
 and scores what it finds.
 
 19
-00:00:50.580 --> 00:00:52.310
+00:00:51.320 --> 00:00:52.750
 It only ever reads.
 
 20

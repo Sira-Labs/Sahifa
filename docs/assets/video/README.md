@@ -18,15 +18,16 @@ Needs Node with Playwright, Chromium and ffmpeg. Work in a scratch folder, not i
 3. **Frames:** `node capture.cjs frames 30` writes 2,802 JPEGs to `frames/` (a few minutes).
    Set `CHROMIUM` to the browser binary if Playwright's default is not installed.
 4. **Narration:** ElevenLabs, voice "Jonathan – Warm Executive Narrator" (the one the Tabayyun video
-   uses), model `eleven_v4`, the text of `narration.md` in one take. Each paragraph is cut at a
-   pause and placed at its scene, then the track is normalised to -16 LUFS:
+   uses), model `eleven_v4`, the text of `narration.md` in one take; paragraph 4 was voiced again on
+   its own when the check count changed to "twenty kinds today". Each paragraph is cut at a pause
+   and placed at its scene, then the track is normalised to -16 LUFS:
 
    | Paragraph | Cut from the take (s) | Placed at (s) |
    |---|---|---|
    | 1 | 0.00 – 11.10 | 0.8 |
    | 2 | 11.30 – 24.75 | 12.6 |
    | 3 | 25.20 – 36.42 | 26.8 |
-   | 4 | 36.50 – 50.20 | 38.6 |
+   | 4 | its own take: 0.00 – 14.70 without 12.75 – 13.25, raised 2.9 dB | 38.3 |
    | 5 | 50.30 – 58.48 | 52.8 |
    | 6 | 58.60 – 67.70 | 62.0 |
    | 7 | 67.85 – 81.23 | 72.2 |

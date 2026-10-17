@@ -6,7 +6,7 @@
 
 3. This is Sahifa. From the Arabic for a written sheet: the charter of Medina, which set down what each party could expect of the others. Sahifa does the same for your data.
 
-4. Point it at a Postgres database or a folder of files. It profiles every column, writes the checks for you, thirty kinds, from foreign keys to freshness, and scores what it finds. It only ever reads.
+4. Point it at a Postgres database or a folder of files. It profiles every column, writes the checks for you, twenty kinds today, from foreign keys to freshness, and scores what it finds. It only ever reads.
 
 5. Every score comes with an honest error bar. A score from a sample tells you how sure it is, so you can tell a real drop from noise.
 
