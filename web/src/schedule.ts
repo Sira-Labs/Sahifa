@@ -79,7 +79,7 @@ const FALLBACK_ZONES = [
 /** IANA time zones for the select: UTC first, then the browser's list (or a short one), plus
  * any of `include` (the saved and the browser's zone) the list lacks. */
 export function timeZoneOptions(...include: string[]): string[] {
-  let zones: string[] = [];
+  let zones: string[];
   try {
     const intl = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
     zones = intl.supportedValuesOf?.("timeZone") ?? [];

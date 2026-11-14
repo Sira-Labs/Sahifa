@@ -245,6 +245,12 @@ databases and files, and get in by invitation link; staging serves demos.
         `ScanOptions.now` (the clock when unset) is the scan's time and `started_at`; every test
         that scans the fixture shop passes the shop's time. No spec: a test fix with a small
         option, both needed in one PR because each alone leaves a required check red.
+- [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
+      `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
+- [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
+      `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
+      image does not build. Take it once the compiled dependencies publish cp315 wheels
+      (`@dependabot recreate` on #42); no compiler in the runtime image for it.
 
 ## Owner
 
