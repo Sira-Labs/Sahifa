@@ -70,6 +70,9 @@ docker compose ps        # web, api, worker and db up; web-volume exited 0
 
 Open `http://localhost` (or the server's address) and enter the password.
 
+The start page offers **Try the demo data**: one click scans a made-up web shop with faults
+put in on purpose, so you see a report before you connect anything of your own.
+
 ## 5. Check the logins, then scan
 
 - *Connections* → **Test** on each connection. It shows the number of tables or files it

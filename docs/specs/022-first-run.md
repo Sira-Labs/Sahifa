@@ -113,6 +113,11 @@ files by name).
     Other statuses get no second line: their message already says what is wrong.
 14. **Findings.** `/findings` with no finding and no filter says that findings appear after a
     scan and links to `/scans/new`.
+15. **The API is down.** When `/api/auth/me` fails with anything but 401 (sign in) or the 403
+    of an address without access, the page shows one `ErrorPanel` (*Sahifa could not check
+    your session*) with the message, the advice and *Retry*, and asks once. Before, the app
+    rendered anyway and every component asked for the session again, thousands of times a
+    minute against an API that was already failing (found on a database without migrations).
 
 ## Acceptance criteria
 
@@ -128,9 +133,13 @@ files by name).
 - [x] The scan page marks the current step, shows the demo note on a demo report and advice
       for a failed scan with a known reason.
 - [x] `ErrorPanel` shows advice for the statuses above and none for the others.
+- [x] A failing `/api/auth/me` shows the panel and is asked once until *Retry*.
+- [x] Deleting a workspace that holds a scanned upload with findings works (see Decisions).
 - [x] `make lint` and `make test` clean.
 
 ## Test cases
+
+Integration (`api/tests/test_workspaces.py`): `test_deleting_a_workspace_with_a_scanned_demo`.
 
 Integration (`api/tests/test_demo.py`):
 - `test_demo_scan_round_trip`: 202, `demo` true, succeeds, six assets, `sah.future_dates`
@@ -143,7 +152,8 @@ Role matrix (`api/tests/test_matrix.py`): `POST /api/scans/demo`, editor, kind `
 
 Unit (`web/src/__tests__`):
 - `ScansList.test.tsx`: the empty page has the steps and both buttons; the demo button posts
-  and navigates; a viewer's button is disabled; a failure shows the panel.
+  and navigates; a viewer's button is disabled; a failure shows the panel; a failing session
+  check shows the panel and is asked once.
 - `NewScan.test.tsx`: the upload tab's demo button posts with the picked workspace.
 - `Report.test.tsx`: steps while running, the demo note, advice on a failed scan.
 - `api.test.ts`: `errorAdvice` per status; `format.test.ts`: `scanSource` of a demo scan,
@@ -158,6 +168,17 @@ Unit (`web/src/__tests__`):
 - 5,000 rows: the size the tests use, where every rule check fires; the scan takes seconds.
 - The demo reads every row, so its intervals have zero width; the note says that a sample
   widens them.
+
+- **Found while testing: a workspace with a scanned upload could not be deleted** (spec 020).
+  A finding of a real scan points at that scan as first and last seen. Deleting the
+  connection set both to NULL and deleted the finding's check in one statement; Postgres then
+  re-checks the twice-updated finding against the deleted check and refuses. The tests of
+  spec 020 built their findings with one scan reference, so they passed. `delete_workspace`
+  now deletes the workspace's findings first; `test_deleting_a_workspace_with_a_scanned_demo`
+  covers it. No migration: the foreign keys are right for every other path.
+- The role matrix has 33 workspace operations now (spec 017 counted 32).
+- The matrix test scans a demo of 200 rows and waits for its scans before the workspaces are
+  dropped; the product's demo stays at 5,000.
 
 ## Out of scope
 
