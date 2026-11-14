@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import type { Me } from "../auth";
 import { DEFAULT_WORKSPACE, ME, json, makeScan, renderApp, stubFetch } from "./helpers";
 
@@ -163,7 +163,11 @@ describe("ScansList", () => {
     const { client } = renderApp("/");
     expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
     down = true;
-    await client.refetchQueries({ queryKey: ["me"] });
+    // The failed refetch reaches React through a queued notification: let it render first.
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["me"] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
     expect(client.getQueryState(["me"])?.status).toBe("error");
     expect(screen.getByRole("heading", { name: "No scans yet" })).toBeTruthy();
     expect(screen.queryByText("Sahifa could not check your session")).toBeNull();

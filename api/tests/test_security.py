@@ -57,6 +57,7 @@ def bare() -> Starlette:
         routes=[
             Route("/api/echo", echo, methods=["GET", "POST"]),
             Route("/api/scans/upload", echo, methods=["POST"]),
+            Route("/api/scans/demo", echo, methods=["POST"]),
             Route("/api/cached", cached),
             Route("/api/docs", cached),
             Route("/healthz", cached),
@@ -130,6 +131,16 @@ async def test_low_disk_refuses_an_upload_before_reading_it() -> None:
         assert (await c.post("/api/scans/upload", content=b"x" * 700)).status_code == 200
         # Other routes do not check the disk.
         assert (await c.post("/api/echo", content=b"x" * 10)).status_code == 200
+
+
+async def test_low_disk_counts_what_a_route_writes_itself() -> None:
+    """The demo scan (spec 022) has no body but generates files: they count against the reserve."""
+    demo = {"disk_paths": frozenset({"/api/scans/demo"}), "writes": {"/api/scans/demo": 300}}
+    async with client_for(limited(free=799, **demo)) as c:
+        r = await c.post("/api/scans/demo")
+        assert r.status_code == 507 and r.json()["detail"] == "insufficient_storage"
+    async with client_for(limited(free=800, **demo)) as c:
+        assert (await c.post("/api/scans/demo")).status_code == 200
 
 
 def test_rate_limiter_spends_and_refills() -> None:

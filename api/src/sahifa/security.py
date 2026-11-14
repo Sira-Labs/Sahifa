@@ -89,6 +89,7 @@ class BodyLimitMiddleware:
         disk_paths: frozenset[str],
         min_free_bytes: int,
         disk_usage: Callable[[Path], int] | None = None,
+        writes: dict[str, int] | None = None,
     ) -> None:
         self.app = app
         self.default_bytes = default_bytes
@@ -96,6 +97,8 @@ class BodyLimitMiddleware:
         self.disk_dir = disk_dir
         self.disk_paths = disk_paths
         self.min_free_bytes = min_free_bytes
+        # Bytes a path writes beyond its request body (the demo scan generates its files).
+        self.writes = writes or {}
         self.free_bytes = disk_usage or (lambda p: shutil.disk_usage(p).free)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -110,7 +113,7 @@ class BodyLimitMiddleware:
             return
         if path in self.disk_paths:
             free = self.free_bytes(self.disk_dir)
-            if free - (declared or 0) < self.min_free_bytes:
+            if free - (declared or 0) - self.writes.get(path, 0) < self.min_free_bytes:
                 log.warning("upload.disk_full", free_mb=free // MB, declared_mb=(declared or 0) // MB)
                 body = {"detail": "insufficient_storage", "message": "The server is low on disk space."}
                 await JSONResponse(status_code=507, content=body)(scope, receive, send)
@@ -231,6 +234,8 @@ INVITATION_PATHS = frozenset({"/api/invitations/lookup", "/api/invitations/accep
 # The demo scan (spec 022) writes files and starts a scan, like an upload: the same scan limit
 # and the same free-disk reserve.
 DEMO_PATH = "/api/scans/demo"
+# What the demo scan writes, rounded up: six CSV files of about 1 MB together.
+DEMO_BYTES = 2 * MB
 SCAN_PATHS = frozenset({"/api/scans", UPLOAD_PATH, DEMO_PATH})
 
 

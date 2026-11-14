@@ -67,7 +67,8 @@ files by name).
    `jobs.start_scan`), in inline and in queue mode.
 4. The audit entry is `scan.demo` with the summary "Started a scan of the demo data".
    The request counts against the scan rate limit, and is refused with 507 when the uploads
-   folder is below the free-disk reserve (`SAHIFA_MIN_FREE_DISK_MB`), as an upload is.
+   folder would fall below the free-disk reserve (`SAHIFA_MIN_FREE_DISK_MB`) with the demo's
+   files (counted as 2 MB), as an upload is.
 5. If writing the files or creating the connection fails, the folder is removed and the error
    propagates (500). A folder left by a later failure has no scan and goes with the clean-up.
 6. The folder is an upload folder like any other: the clean-up job of spec 008 deletes it
