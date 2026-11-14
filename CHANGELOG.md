@@ -41,6 +41,10 @@ All notable changes to this project are documented here. The format follows
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
 
 ### Fixed
+- **The core's tests no longer depend on the day they run.** The test shop is written for a
+  fixed day with one date 40 days ahead; scans ran on the real clock, so from 12 November the
+  "dates in the future" test found nothing. `ScanOptions.now` sets the time a scan measures
+  against, and the tests pin it.
 - The compose bundle's web container started only with `SAHIFA_DOMAIN` set; without a domain
   Caddy got an empty site address and exited. Found by the new quick-start CI job.
 - Two admins inviting the same address at once no longer make one of them fail, and cleanup
@@ -71,6 +75,11 @@ All notable changes to this project are documented here. The format follows
 - **The web container no longer runs as root.** Caddy runs as uid 10001 and still serves on
   ports 80 and 443. In the compose bundle, a one-shot `web-volume` service hands an existing
   certificate volume to that user, so upgrading needs no manual step.
+- **Vulnerable API dependencies updated.** certifi 2026.10.23 drops a root whose intermediates
+  were compromised (GHSA-6q48-6c7w-9gw2); joserfc 1.8.0 checks token size before splitting
+  (GHSA-9pg5-8c7x-5hfx); opentelemetry-api 1.45.2 fixes two slow regular expressions on trace
+  headers (GHSA-xcq7-p3pf-p88h, GHSA-mf5v-w3w3-f6cg). The API's other minor updates of
+  9 November (FastAPI 0.162, pydantic 2.14 and others) come with it.
 
 ## [0.1.0] - 2026-10-09
 
