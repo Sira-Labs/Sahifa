@@ -74,7 +74,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest -q
+      # One line per test: when the run hangs, the log shows the test it hung after.
+      - run: uv run pytest -v
       # Models and migrations must agree; the tests leave the schema at head.
       - run: uv run alembic upgrade head && uv run alembic check
       # Known vulnerabilities fail the job unless accepted in security/audit-ignore.toml (spec 012).
