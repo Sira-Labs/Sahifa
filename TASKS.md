@@ -231,6 +231,16 @@ databases and files, and get in by invitation link; staging serves demos.
 - [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
       feedback link.
 
+## Maintenance (nightly runs)
+
+- [x] **`python api` red on every PR since 26 Oct: known vulnerabilities in the lockfile**
+      (14 Nov, replaces Dependabot PR #46)
+      - `pip-audit` failed on certifi, joserfc and opentelemetry-api; `main` itself last ran CI
+        on 17 Oct, so it looked green. Fixed by updating, with no entry in
+        `security/audit-ignore.toml`.
+      - Dependabot's grouped PR only updates direct dependencies; certifi and opentelemetry-api
+        are transitive (httpx, procrastinate) and were raised with `uv lock --upgrade-package`.
+
 ## Owner
 
 - [x] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment

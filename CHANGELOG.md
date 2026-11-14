@@ -71,6 +71,11 @@ All notable changes to this project are documented here. The format follows
 - **The web container no longer runs as root.** Caddy runs as uid 10001 and still serves on
   ports 80 and 443. In the compose bundle, a one-shot `web-volume` service hands an existing
   certificate volume to that user, so upgrading needs no manual step.
+- **Vulnerable API dependencies updated.** certifi 2026.10.23 drops a root whose intermediates
+  were compromised (GHSA-6q48-6c7w-9gw2); joserfc 1.8.0 checks token size before splitting
+  (GHSA-9pg5-8c7x-5hfx); opentelemetry-api 1.45.2 fixes two slow regular expressions on trace
+  headers (GHSA-xcq7-p3pf-p88h, GHSA-mf5v-w3w3-f6cg). The API's other minor updates of
+  9 November (FastAPI 0.162, pydantic 2.14 and others) come with it.
 
 ## [0.1.0] - 2026-10-09
 
