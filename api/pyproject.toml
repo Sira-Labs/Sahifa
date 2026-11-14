@@ -71,3 +71,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# A test that hangs prints every thread's stack after five minutes. That names a test stuck in
+# synchronous code; one stuck in the event loop is named by the reporter in tests/conftest.py.
+faulthandler_timeout = 300
