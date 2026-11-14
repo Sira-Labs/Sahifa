@@ -12,6 +12,9 @@ checks), `docs/architecture/02-domain-model.md` (scoring), `docs/architecture/03
    specs it references; do not read all specs.
 2. Present the plan, wait for approval, then implement. Deviating from a spec, an ADR or a
    fixed architecture decision needs a question first, or a new ADR.
+   Nightly runs without the owner (ADR-0016) plan and implement straight away, record a
+   deviation as a new ADR in the same PR, and merge their PRs once CI is green and every
+   review thread is resolved.
 3. `make lint` and `make test` (or the relevant subset) before every commit; semantic commits,
    one logical change each; a spec may take several commits.
 4. When the spec's acceptance criteria are met, tick them in the spec, mark it done in

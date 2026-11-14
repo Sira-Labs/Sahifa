@@ -241,3 +241,5 @@ databases and files, and get in by invitation link; staging serves demos.
 - [ ] Buy ISO/IEC 25024 so the catalogue can cite measure identifiers.
 - [ ] Apply `.github/rulesets/protect-main.json` to the live ruleset so `secrets` and
       `web image` become required (CONTRIBUTING.md); optionally turn on push protection.
+      Owner: the same step (an active ruleset, plus "Allow auto-merge" in the settings) is what
+      lets nightly runs enable auto-merge (ADR-0016); until then they merge by hand after CI.
