@@ -164,6 +164,7 @@ def test_buckets_and_keys() -> None:
     assert bucket_of("GET", "/api/auth/callback", exempt) == "auth"
     assert bucket_of("POST", "/api/scans", exempt) == "scans"
     assert bucket_of("POST", "/api/scans/upload", exempt) == "scans"
+    assert bucket_of("POST", "/api/scans/demo", exempt) == "scans"
     assert bucket_of("PUT", "/api/connections/x/schedule", exempt) == "write"
     assert bucket_of("GET", "/api/scans", exempt) == "read"
 
@@ -297,6 +298,11 @@ async def test_uploads_are_checked_before_and_after_arrival(
         monkeypatch.setattr(security.shutil, "disk_usage", lambda _p: type("U", (), {"free": 10 * MB})())
         full = await c.post("/api/scans/upload", files=upload("x.csv", b"id\n1\n"))
         assert full.status_code == 507 and full.json()["detail"] == "insufficient_storage"
+        # The demo writes files too (spec 022): the same reserve, and nothing is written.
+        before = sorted(p.name for p in uploads.iterdir())
+        demo = await c.post("/api/scans/demo")
+        assert demo.status_code == 507 and demo.json()["detail"] == "insufficient_storage"
+        assert sorted(p.name for p in uploads.iterdir()) == before
 
 
 @needs_db

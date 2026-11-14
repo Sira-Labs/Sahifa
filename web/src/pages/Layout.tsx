@@ -52,8 +52,9 @@ export function Layout({ children }: { children?: React.ReactNode }) {
       </p>
     );
   }
-  // The API failed or cannot be reached: say so, instead of an app whose every page fails.
-  if (me.isError) {
+  // The API failed or cannot be reached before any session was known: say so, instead of an
+  // app whose every page fails. A later refetch that fails keeps the page and what is on it.
+  if (me.isError && me.data === undefined) {
     return (
       <div className="wrap main">
         <ErrorPanel title="Sahifa could not check your session" error={me.error} onRetry={() => void me.refetch()} />

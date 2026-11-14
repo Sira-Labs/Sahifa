@@ -66,6 +66,8 @@ files by name).
    reads every row (`sample_rows = 0`), through the same hand-off as an upload (`_enqueue`,
    `jobs.start_scan`), in inline and in queue mode.
 4. The audit entry is `scan.demo` with the summary "Started a scan of the demo data".
+   The request counts against the scan rate limit, and is refused with 507 when the uploads
+   folder is below the free-disk reserve (`SAHIFA_MIN_FREE_DISK_MB`), as an upload is.
 5. If writing the files or creating the connection fails, the folder is removed and the error
    propagates (500). A folder left by a later failure has no scan and goes with the clean-up.
 6. The folder is an upload folder like any other: the clean-up job of spec 008 deletes it
@@ -115,7 +117,8 @@ files by name).
     scan and links to `/scans/new`.
 15. **The API is down.** When `/api/auth/me` fails with anything but 401 (sign in) or the 403
     of an address without access, the page shows one `ErrorPanel` (*Sahifa could not check
-    your session*) with the message, the advice and *Retry*, and asks once. Before, the app
+    your session*) with the message, the advice and *Retry*, and asks once. A later check
+    that fails while the session is known keeps the page (and a half-filled form). Before, the app
     rendered anyway and every component asked for the session again, thousands of times a
     minute against an API that was already failing (found on a database without migrations).
 

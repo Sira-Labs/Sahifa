@@ -228,7 +228,10 @@ UPLOAD_PATH = "/api/scans/upload"
 AUTH_FLOW_PATHS = frozenset({"/api/auth/login", "/api/auth/passkey/add", "/api/auth/callback"})
 # Trying invitation tokens (spec 020): a bucket of its own, per session like the others.
 INVITATION_PATHS = frozenset({"/api/invitations/lookup", "/api/invitations/accept"})
-SCAN_PATHS = frozenset({"/api/scans", UPLOAD_PATH})
+# The demo scan (spec 022) writes files and starts a scan, like an upload: the same scan limit
+# and the same free-disk reserve.
+DEMO_PATH = "/api/scans/demo"
+SCAN_PATHS = frozenset({"/api/scans", UPLOAD_PATH, DEMO_PATH})
 
 
 def bucket_of(method: str, path: str, exempt: frozenset[str]) -> str | None:

@@ -152,6 +152,23 @@ describe("ScansList", () => {
     expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
   });
 
+  it("keeps the page when a later session check fails", async () => {
+    let down = false;
+    const fetchFn = stubFetch(() => ({ items: [], next_cursor: null }));
+    const original = fetchFn.getMockImplementation()!;
+    fetchFn.mockImplementation(async (input, init) => {
+      if (input === "/api/auth/me" && down) return json({ detail: "database unavailable" }, 503);
+      return original(input, init);
+    });
+    const { client } = renderApp("/");
+    expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
+    down = true;
+    await client.refetchQueries({ queryKey: ["me"] });
+    expect(client.getQueryState(["me"])?.status).toBe("error");
+    expect(screen.getByRole("heading", { name: "No scans yet" })).toBeTruthy();
+    expect(screen.queryByText("Sahifa could not check your session")).toBeNull();
+  });
+
   it("appends the next page on load more", async () => {
     stubFetch((url) => {
       if (url === "/api/scans?limit=25") return { items: [scan(1), scan(2)], next_cursor: "c1" };
