@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sahifa_core.models import CheckStatus, Dimension, ScanReport
 from sahifa_core.scan import ScanOptions, run_scan
 
 
-def test_saved_checks_change_the_report(shop: Path, shop_report: ScanReport) -> None:
+def test_saved_checks_change_the_report(shop: Path, shop_report: ScanReport, shop_now: datetime) -> None:
     specs = {s.id: s for s in shop_report.checks}
     retired = specs["sah.foreign_key:orders:customer_id"].model_copy(update={"status": CheckStatus.RETIRED})
     locked = specs["sah.accepted_values:orders:status"].model_copy(update={"status": CheckStatus.LOCKED})
-    report = run_scan(str(shop), ScanOptions(sample_rows=0), saved={"orders": [retired, locked]})
+    report = run_scan(
+        str(shop), ScanOptions(sample_rows=0, now=shop_now), saved={"orders": [retired, locked]}
+    )
 
     before = next(a for a in shop_report.assets if a.ref.label == "orders")
     after = next(a for a in report.assets if a.ref.label == "orders")
@@ -37,3 +40,14 @@ def test_report_lists_every_reconciled_check(shop_report: ScanReport) -> None:
     assert len(shop_report.checks) == len(evaluated)
     # Evaluation never leaks into the persisted spec (freshness notes the age it measured).
     assert all("age_hours" not in s.params for s in shop_report.checks)
+
+
+def test_scan_measures_against_the_given_time(
+    shop: Path, shop_report: ScanReport, shop_now: datetime
+) -> None:
+    """The shop has a date 40 days ahead: in the future at its own time, in the past later."""
+    assert shop_report.started_at == shop_now
+    assert any(f.check_type == "sah.future_dates" for f in shop_report.findings)
+    later = run_scan(str(shop), ScanOptions(sample_rows=0, now=shop_now + timedelta(days=60)))
+    assert later.started_at == shop_now + timedelta(days=60)
+    assert not any(f.check_type == "sah.future_dates" for f in later.findings)
