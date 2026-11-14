@@ -252,6 +252,9 @@ databases and files, and get in by invitation link; staging serves demos.
         the head (asked from the API with the job's read token); tags are not affected.
 - [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
       `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
+- [x] **`@vitejs/plugin-react` 6** (15 Nov, replaces Dependabot PR #37): no code change; the
+      Dependabot branch conflicted in the lockfile after the npm group merged, and a rebase
+      cannot be requested from a run (the mention is stored altered), so the bump was redone.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels
