@@ -7,6 +7,11 @@ sprints ahead are a forecast, recomputed at the end of every sprint. One branch 
 (`sprint/NN-topic`), one PR per spec, CodeRabbit review, merge by the owner; every merge to
 `main` deploys staging.*
 
+*Since 14 November 2026 nightly runs continue the plan without the owner (ADR-0016): one story
+per run in the priority order below, one branch and PR per story, merged by the run once CI is
+green and every review thread is resolved. A story that needs the owner gets an `Owner:` line
+in `TASKS.md` and the run takes the next one.*
+
 The build budget resets every Saturday. When it reaches ~90 % the remaining stories roll into
 the next budget week unchanged; nothing is squeezed in. A budget stop moves dates, not scope.
 

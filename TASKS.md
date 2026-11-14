@@ -231,6 +231,27 @@ databases and files, and get in by invitation link; staging serves demos.
 - [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
       feedback link.
 
+## Maintenance (nightly runs)
+
+- [x] **CI red on every PR: vulnerable API dependencies and a core test that expired**
+      (14 Nov, PR #48, replaces Dependabot PR #46)
+      - `pip-audit` failed on certifi, joserfc and opentelemetry-api; `main` itself last ran CI
+        on 17 Oct, so it looked green. Fixed by updating, with no entry in
+        `security/audit-ignore.toml`.
+      - Dependabot's grouped PR only updates direct dependencies; certifi and opentelemetry-api
+        are transitive (httpx, FastAPI) and were raised with `uv lock --upgrade-package`.
+      - `test_rule_fires_on_faulty_shop[sah.future_dates]` failed from 12 Nov: the fixture shop
+        is written for 2 Oct with a date 40 days ahead, and scans used the real clock. New
+        `ScanOptions.now` (the clock when unset) is the scan's time and `started_at`; every test
+        that scans the fixture shop passes the shop's time. No spec: a test fix with a small
+        option, both needed in one PR because each alone leaves a required check red.
+- [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
+      `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
+- [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
+      `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
+      image does not build. Take it once the compiled dependencies publish cp315 wheels
+      (`@dependabot recreate` on #42); no compiler in the runtime image for it.
+
 ## Owner
 
 - [x] DNS `sahifa-stg.siralabs.org`; CapRover staging apps; GitHub `staging` environment
@@ -241,3 +262,5 @@ databases and files, and get in by invitation link; staging serves demos.
 - [ ] Buy ISO/IEC 25024 so the catalogue can cite measure identifiers.
 - [ ] Apply `.github/rulesets/protect-main.json` to the live ruleset so `secrets` and
       `web image` become required (CONTRIBUTING.md); optionally turn on push protection.
+      Owner: the same step (an active ruleset, plus "Allow auto-merge" in the settings) is what
+      lets nightly runs enable auto-merge (ADR-0016); until then they merge by hand after CI.

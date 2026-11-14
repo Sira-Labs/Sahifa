@@ -211,3 +211,4 @@ site/            product page for siralabs.org
 | 2026-10-07 | Spec 014, accuracy benchmark (PR #24): 100 % detection on a full read, a silent clean twin; locked `range` baselines raise false alarms on new data (follow-up, sprint 5) |
 | 2026-10-09 | **Release 0.1** (spec 015): `v0.1.0` published as a pre-release; R1 complete on staging. Dependabot updates (Python 3.14, Vite 8) merged with it (PR #26) |
 | 2026-10-10 | Specs 016–019 (PRs #28–#31): workspaces and roles with row-level security, role matrix, audit log, secret scanning and a non-root web image. The owner postpones production and inserts sprint 4b, ready for test users |
+| 2026-11-14 | ADR-0016: nightly runs continue the plan without the owner and merge on green CI |

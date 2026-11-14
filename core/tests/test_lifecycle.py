@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,24 +62,24 @@ def test_locked_keeps_saved_params() -> None:
     assert reconcile([], [saved]) == [saved]
 
 
-def test_locked_with_missing_column_is_unevaluated(shop: Path) -> None:
+def test_locked_with_missing_column_is_unevaluated(shop: Path, shop_now: datetime) -> None:
     locked = spec(column="discount", status=CheckStatus.LOCKED, min=0, max=10)
     assert reconcile([], [locked]) == [locked]
-    report = run_scan(str(shop), ScanOptions(sample_rows=0), saved={"orders": [locked]})
+    report = run_scan(str(shop), ScanOptions(sample_rows=0, now=shop_now), saved={"orders": [locked]})
     orders = next(a for a in report.assets if a.ref.label == "orders")
     assert [(u.spec.id, u.reason) for u in orders.unevaluated] == [(locked.id, "column_missing")]
     assert locked.id not in {r.spec.id for r in orders.checks}
     assert locked in report.checks
 
 
-def test_retired_is_never_evaluated_or_recreated(shop: Path) -> None:
+def test_retired_is_never_evaluated_or_recreated(shop: Path, shop_now: datetime) -> None:
     retired = spec(status=CheckStatus.RETIRED, min=1, max=5)
     assert reconcile([spec(min=1, max=9)], [retired]) == []
     assert reconcile([], [retired]) == []
     key = "sah.accepted_values:orders:status"
     report = run_scan(
         str(shop),
-        ScanOptions(sample_rows=0),
+        ScanOptions(sample_rows=0, now=shop_now),
         saved={"orders": [spec("sah.accepted_values", "status", CheckStatus.RETIRED, values=["paid"])]},
     )
     assert key not in {s.id for s in report.checks}
