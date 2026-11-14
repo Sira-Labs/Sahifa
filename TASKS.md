@@ -265,6 +265,9 @@ databases and files, and get in by invitation link; staging serves demos.
         the head (asked from the API with the job's read token); tags are not affected.
 - [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
       `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
+- [x] **`@vitejs/plugin-react` 6** (15 Nov, replaces Dependabot PR #37): no code change; the
+      Dependabot branch conflicted in the lockfile after the npm group merged, and a rebase
+      cannot be requested from a run (the mention is stored altered), so the bump was redone.
 - [x] **CI jobs have a time limit; a hung test names itself** (15 Nov)
       - `python api` hung in `pytest` for over 20 minutes on a web-only PR (#52) and would have
         held the PR for six hours. Every CI job now stops after 20 minutes, and pytest dumps all
