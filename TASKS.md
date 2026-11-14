@@ -256,7 +256,12 @@ databases and files, and get in by invitation link; staging serves demos.
       - `python api` hung in `pytest` for over 20 minutes on a web-only PR (#52) and would have
         held the PR for six hours. Every CI job now stops after 20 minutes, and pytest dumps all
         stacks after five minutes in one test (`faulthandler_timeout`), so the next hang shows
-        which test it is. The cause of that hang is not known yet.
+        which test it is.
+      - The hang is in the loop's close after a test: a scan started by the test is still
+        running in the app's runner, the close cancels it, and the cancel never ends. It showed
+        up the evening CI's Postgres image went from 17.11 to 17.12, and only sometimes. A
+        guard in `api/tests/conftest.py` now waits up to 30 s for tasks a test left behind and
+        prints their stacks when they do not end.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels

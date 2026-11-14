@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -48,6 +50,34 @@ def one_workspace_at_start() -> None:
         engine = owner_engine()
         drop_workspaces(engine)
         engine.dispose()
+
+
+# How long a task a test left behind (a scan still running in the app's runner) may take to
+# end once its test is over.
+LEFTOVER_TASK_S = 30
+
+
+@pytest.fixture(autouse=True)
+async def no_task_outlives_its_test() -> AsyncIterator[None]:
+    """Wait for tasks a test left behind, and say where they are when they do not end.
+
+    The event loop of a test is closed after it, and closing cancels what still runs. A task
+    that never ends then hangs the whole run without a word (CI, 14 Nov 2026). Here the task
+    gets `LEFTOVER_TASK_S` to end; after that its stack goes to the real stderr, past pytest's
+    capture, and the test fails."""
+    yield
+    me = asyncio.current_task()
+    pending = [t for t in asyncio.all_tasks() if t is not me and not t.done()]
+    if not pending:
+        return
+    _, stuck = await asyncio.wait(pending, timeout=LEFTOVER_TASK_S)
+    if stuck:
+        for task in stuck:
+            print(f"\nstill running {LEFTOVER_TASK_S} s after its test: {task!r}", file=sys.__stderr__)
+            task.print_stack(file=sys.__stderr__)
+        pytest.fail(
+            f"{len(stuck)} task(s) still running {LEFTOVER_TASK_S} s after the test; stacks on stderr"
+        )
 
 
 @pytest.fixture
