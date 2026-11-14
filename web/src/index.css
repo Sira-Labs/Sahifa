@@ -783,6 +783,38 @@ summary {
   display: grid;
   gap: 12px;
 }
+/* Numbered steps: the first-run guide and the steps of a running scan (spec 022). */
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 1.4em;
+  list-style: decimal;
+}
+.steps .step-current {
+  font-weight: 600;
+}
+.steps .step-done {
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.demo-offer {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.demo-note {
+  display: grid;
+  gap: 8px;
+  max-width: 46em;
+}
 .progress {
   position: relative;
   height: 8px;

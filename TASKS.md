@@ -227,7 +227,20 @@ databases and files, and get in by invitation link; staging serves demos.
         installs; off by default, so CapRover and staging do not change.
       - The access report is advice: scans still run read-only with a login that could write.
       - The CI job `quickstart` follows `deploy/quickstart.md` with a read-only and a writing login.
-- [ ] S4b-3 first run: demo data, guided first scan, empty states, error texts.
+- [x] **022 First run: demo data, a guided first scan, empty states, error texts** —
+      `docs/specs/022-first-run.md` (S4b-3)
+      - `POST /api/scans/demo` writes the faulty shop (5,000 rows) as an upload of its own and
+        reads it in full; no switch to turn it off, the upload clean-up removes the files.
+      - The guide is the empty start page, the steps on a running scan and a note on the demo
+        report, not an overlay tour: it also works for someone who comes back later.
+      - Found by the matrix test: a workspace holding a scanned upload with findings could not
+        be deleted (spec 020). A finding points at its scan as first and last seen, and the
+        cascade from the connection failed on it. `delete_workspace` deletes findings first.
+      - Found in the browser: with a failing `/api/auth/me` (a database without migrations)
+        the app asked for the session thousands of times a minute. The session check now
+        fails once, with a panel and a retry.
+      - Advice texts live in the web (`errorAdvice` by status, `scanFailureAdvice` by reason),
+        not in the API, whose messages stay as they are.
 - [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
       feedback link.
 

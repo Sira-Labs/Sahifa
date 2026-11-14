@@ -41,6 +41,8 @@ def drop_workspaces(engine: Engine) -> None:
         # Audit entries are append-only (spec 018); a workspace's own go with it, as a purge.
         conn.execute(text("SET sahifa.audit_purge = 'on'"))
         others = "SELECT id FROM workspaces WHERE NOT is_default"
+        # Findings before their connections, as `delete_workspace` does (spec 022).
+        conn.execute(text(f"DELETE FROM findings WHERE workspace_id IN ({others})"))
         conn.execute(text(f"DELETE FROM connections WHERE workspace_id IN ({others})"))
         conn.execute(text("DELETE FROM workspaces WHERE NOT is_default"))
 

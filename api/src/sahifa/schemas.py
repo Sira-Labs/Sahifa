@@ -112,6 +112,14 @@ class ScanOut(InWorkspace):
     findings: dict[str, int]
     assets_count: int | None
     files: list[str] | None = None
+    # The scan reads the demo shop (spec 022).
+    demo: bool = False
+
+
+class DemoScanIn(BaseModel):
+    """Where the demo scan goes; needed only when the caller may upload to several workspaces."""
+
+    workspace_id: uuid.UUID | None = None
 
 
 class ScanIn(BaseModel):

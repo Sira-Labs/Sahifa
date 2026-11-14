@@ -105,6 +105,63 @@ describe("Report", () => {
     expect(screen.getByText("Running")).toBeTruthy();
     expect(screen.getByText(/updates every 2 seconds/i)).toBeTruthy();
     expect(fetchedUrls(fetchFn)).not.toContain(REPORT_URL);
+    const steps = within(screen.getByRole("list", { name: "Steps of a scan" })).getAllByRole("listitem");
+    expect(steps.map((li) => li.getAttribute("aria-current"))).toEqual([null, "step", null]);
+    expect(steps[0]!.textContent).toContain("(done)");
+  });
+
+  it("marks the first step while the scan waits", async () => {
+    stubFetch((url) => {
+      if (url === SCAN_URL) return makeScan({ status: "queued", started_at: null, finished_at: null, score: null, findings: null });
+      throw new Error(`unexpected ${url}`);
+    });
+    renderApp(`/scans/${SCAN_ID}`);
+    const steps = within(await screen.findByRole("list", { name: "Steps of a scan" })).getAllByRole("listitem");
+    expect(steps.map((li) => li.getAttribute("aria-current"))).toEqual(["step", null, null]);
+  });
+
+  it("says what the demo report shows and where to go next", async () => {
+    stubFetch((url) => {
+      if (url === SCAN_URL) return makeScan({ demo: true, sample_rows: 0 });
+      if (url === REPORT_URL) return makeReport();
+      if (url.includes("/history?")) return { points: [] };
+      throw new Error(`unexpected ${url}`);
+    });
+    renderApp(`/scans/${SCAN_ID}`);
+    const note = await screen.findByRole("complementary", { name: "About the demo data" });
+    expect(note.textContent).toContain("a made-up web shop with faults put in on purpose");
+    expect(within(note).getByRole("link", { name: "Scan your own data" }).getAttribute("href")).toBe("/scans/new");
+    expect(screen.getAllByText("Demo data").length).toBeGreaterThan(0);
+  });
+
+  it("has no demo note on other reports", async () => {
+    stubFetch((url) => {
+      if (url === SCAN_URL) return makeScan();
+      if (url === REPORT_URL) return makeReport();
+      if (url.includes("/history?")) return { points: [] };
+      throw new Error(`unexpected ${url}`);
+    });
+    renderApp(`/scans/${SCAN_ID}`);
+    await screen.findByRole("heading", { name: "Findings" });
+    expect(screen.queryByRole("complementary", { name: "About the demo data" })).toBeNull();
+  });
+
+  it("says what to do about a failed scan when the reason is known", async () => {
+    stubFetch((url) => {
+      if (url === SCAN_URL)
+        return makeScan({
+          status: "failed",
+          error: 'connection to server at "db" (10.0.0.5), port 5432 failed: Connection refused',
+          score: null,
+          findings: null,
+        });
+      throw new Error(`unexpected ${url}`);
+    });
+    renderApp(`/scans/${SCAN_ID}`);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Connection refused");
+    expect(alert.textContent).toContain("The database cannot be reached from the API.");
+    expect(within(alert).getByRole("link", { name: "start a new scan" }).getAttribute("href")).toBe("/scans/new");
   });
 
   it("shows the error of a failed scan", async () => {
@@ -118,6 +175,8 @@ describe("Report", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("The scan failed");
     expect(alert.textContent).toContain("interrupted by a restart");
+    // An unknown reason keeps the general advice.
+    expect(alert.textContent).toContain("Fix the source and start a new scan.");
     expect(fetchedUrls(fetchFn)).not.toContain(REPORT_URL);
   });
 

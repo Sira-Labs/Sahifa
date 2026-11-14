@@ -61,7 +61,7 @@ resolving, generated checks) stays in the object's own history, as today.
 | `check.approve`, `check.reject`, `check.lock`, `check.unlock`, `check.retire`, `check.restore` | check | `status`, `version` |
 | `finding.acknowledge`, `finding.resolve`, `finding.mute`, `finding.unmute`, `finding.reopen` | finding | `status`, `muted_until`, `note` (after only) |
 | `schedule.saved`, `schedule.deleted` | schedule | `cron`, `timezone`, `enabled`, `sample_rows` |
-| `scan.started`, `scan.uploaded` | scan | after: connection, sample rows, files (names only) |
+| `scan.started`, `scan.uploaded`, `scan.demo` (spec 022) | scan | after: connection, sample rows, files (names only) |
 | `connection.created` | connection | after: name, kind, secret reference name (never its value) |
 | `connection.moved` | connection | `workspace` (id and name); one entry in each workspace |
 | `workspace.created`, `workspace.renamed` | workspace | `name` |

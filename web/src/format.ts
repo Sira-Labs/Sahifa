@@ -185,8 +185,9 @@ export function sortFindings(findings: Finding[]): Finding[] {
   return [...findings].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.ratio - b.ratio);
 }
 
-/** Where a scan's data came from: the connection name, or `Upload: 3 files`. */
+/** Where a scan's data came from: the connection name, `Upload: 3 files` or `Demo data`. */
 export function scanSource(scan: Scan): string {
+  if (scan.demo) return "Demo data";
   if (scan.files && scan.files.length > 0) return `Upload: ${scan.files.length} ${scan.files.length === 1 ? "file" : "files"}`;
   if (scan.connection_kind === "upload" || scan.connection_name.startsWith("upload")) {
     return scan.assets_count ? `Upload: ${scan.assets_count} ${scan.assets_count === 1 ? "file" : "files"}` : "Upload";
@@ -217,4 +218,25 @@ function paramValue(value: unknown, maxItems: number): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+// Why a scan failed, by what its reason contains, and what to do about it (spec 022).
+const FAILURE_ADVICE: [RegExp, string][] = [
+  [/has no source/i, "The connection's SAHIFA_CONN_ variable is not set on the API. Set it and restart the API."],
+  [
+    /connection refused|could not connect|could not translate host name|timeout expired/i,
+    "The database cannot be reached from the API. Check the host, the port and the firewall between them.",
+  ],
+  [
+    /password authentication failed|permission denied/i,
+    "The login was refused or may not read. Check the user, the password and its SELECT rights.",
+  ],
+  [/statement timeout|canceling statement/i, "A query ran into the time limit. Scan fewer rows per table."],
+  [/no such file|no files/i, "The files are gone: uploads are deleted after a few days. Upload them again."],
+];
+
+/** What to do about a failed scan, or null when its reason matches nothing known. */
+export function scanFailureAdvice(error: string | null | undefined): string | null {
+  if (!error) return null;
+  return FAILURE_ADVICE.find(([pattern]) => pattern.test(error))?.[1] ?? null;
 }
