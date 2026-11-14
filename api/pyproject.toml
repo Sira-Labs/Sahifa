@@ -71,3 +71,5 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# A test that hangs prints every thread's stack after five minutes, so the log names it.
+faulthandler_timeout = 300

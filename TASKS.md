@@ -252,6 +252,11 @@ databases and files, and get in by invitation link; staging serves demos.
         the head (asked from the API with the job's read token); tags are not affected.
 - [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
       `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
+- [x] **CI jobs have a time limit; a hung test names itself** (15 Nov)
+      - `python api` hung in `pytest` for over 20 minutes on a web-only PR (#52) and would have
+        held the PR for six hours. Every CI job now stops after 20 minutes, and pytest dumps all
+        stacks after five minutes in one test (`faulthandler_timeout`), so the next hang shows
+        which test it is. The cause of that hang is not known yet.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels

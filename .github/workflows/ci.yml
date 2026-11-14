@@ -17,6 +17,8 @@ jobs:
   core:
     name: python core
     runs-on: ubuntu-latest
+    # A hung step fails the job here instead of after GitHub's six hours.
+    timeout-minutes: 20
     defaults:
       run: { working-directory: core }
     steps:
@@ -42,6 +44,7 @@ jobs:
   api:
     name: python api
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run: { working-directory: api }
     # One throwaway Postgres serves as the metadata database and as a source to scan.
@@ -83,6 +86,7 @@ jobs:
   web:
     name: web
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run: { working-directory: web }
     steps:
@@ -115,6 +119,7 @@ jobs:
   secrets:
     name: secrets
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       GITLEAKS_VERSION: 8.24.3
       GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
@@ -138,6 +143,7 @@ jobs:
   web-image:
     name: web image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
@@ -151,6 +157,7 @@ jobs:
   quickstart:
     name: quickstart
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
@@ -165,6 +172,7 @@ jobs:
   licences:
     name: licences
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
