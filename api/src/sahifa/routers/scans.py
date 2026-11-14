@@ -1,16 +1,20 @@
-"""Scans (spec 004): create on a connection or on uploaded files, list, read, report, findings."""
+"""Scans (spec 004): create on a connection, on uploaded files or on the demo shop (spec 022),
+list, read, report, findings."""
 
 from __future__ import annotations
 
 import base64
 import json
 import secrets
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import anyio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from sahifa_core.synth import write_shop
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +23,7 @@ from ..db.models import Connection, Finding, FindingOccurrence, Scan
 from ..deps import access, session, settings
 from ..jobs import start_scan
 from ..logging import get_logger
-from ..schemas import Items, Page, ScanIn, ScanOut, ScanScore
+from ..schemas import DemoScanIn, Items, Page, ScanIn, ScanOut, ScanScore
 from ..services import audit
 from ..services.uploads import clean_file_name, content_matches
 from ..settings import Settings
@@ -31,6 +35,8 @@ UPLOAD_EXTENSIONS = frozenset({".csv", ".tsv", ".parquet", ".json", ".jsonl", ".
 CHUNK = 1024 * 1024
 SEVERITIES = ("critical", "high", "medium", "low")
 DIMENSIONS = ("completeness", "validity", "accuracy", "consistency", "uniqueness", "currentness")
+# The demo shop (spec 022): the size at which every rule check fires and a scan takes seconds.
+DEMO_ROWS = 5_000
 
 
 def to_out(scan: Scan, conn: Connection) -> ScanOut:
@@ -53,6 +59,7 @@ def to_out(scan: Scan, conn: Connection) -> ScanOut:
         findings=counts,
         assets_count=scan.assets_count,
         files=files,
+        demo=conn.kind == "upload" and bool(conn.config.get("demo")),
     )
 
 
@@ -70,17 +77,23 @@ async def _enqueue(
     )
     db.add(scan)
     upload = conn.kind == "upload"
+    demo = upload and bool(conn.config.get("demo"))
     files = options.get("files") or []
+    if demo:
+        action, summary = "scan.demo", "Started a scan of the demo data"
+    elif upload:
+        action = "scan.uploaded"
+        summary = f"Uploaded {len(files)} file{'s' if len(files) != 1 else ''} for a scan"
+    else:
+        action, summary = "scan.started", f"Started a scan of {conn.name}"
     audit.record(
         db,
         caller,
-        action="scan.uploaded" if upload else "scan.started",
+        action=action,
         workspace_id=conn.workspace_id,
         object_type="scan",
         object_id=scan.id,
-        summary=f"Uploaded {len(files)} file{'s' if len(files) != 1 else ''} for a scan"
-        if upload
-        else f"Started a scan of {conn.name}",
+        summary=summary,
         after={"connection": conn.name, "sample_rows": sample_rows}
         | ({"files": files} if upload else {"assets": options.get("assets")}),
     )
@@ -170,6 +183,44 @@ async def upload_scan(
     await db.flush()
     sample = cfg.sample_rows if sample_rows is None else sample_rows
     return await _enqueue(request, db, caller, conn, sample, {"files": originals})
+
+
+@router.post("/demo", response_model=ScanOut, status_code=status.HTTP_202_ACCEPTED)
+async def demo_scan(
+    request: Request,
+    body: DemoScanIn | None = None,
+    db: AsyncSession = Depends(session),
+    cfg: Settings = Depends(settings),
+    caller: Access = Depends(access),
+) -> ScanOut:
+    """Scan the demo shop (spec 022): the synthetic web shop with its faults, written into an
+    upload folder of its own, read in full. The upload clean-up deletes the folder later."""
+    # Before anything is written: the workspace the demo goes to, as for an upload.
+    target_workspace = caller.pick(body.workspace_id if body else None, "editor", action="scan.demo")
+    batch = uuid.uuid4().hex
+    folder = cfg.uploads_dir / batch
+    try:
+        written = await anyio.to_thread.run_sync(lambda: write_shop(folder, rows=DEMO_ROWS))
+        files = [p.name for p in written]
+        conn = Connection(
+            name=f"upload-{batch}",
+            kind="upload",
+            config={
+                "paths": [str(p) for p in written],
+                "names": {str(p): p.stem for p in written},
+                "files": files,
+                "demo": True,
+            },
+            workspace_id=target_workspace,
+        )
+        db.add(conn)
+        await db.flush()
+    except Exception:
+        # Nothing refers to the folder yet. Later failures leave it to the upload clean-up,
+        # which removes a folder without a scan once it is old enough.
+        await anyio.to_thread.run_sync(lambda: shutil.rmtree(folder, ignore_errors=True))
+        raise
+    return await _enqueue(request, db, caller, conn, 0, {"files": files})
 
 
 def _cursor(scan: Scan) -> str:

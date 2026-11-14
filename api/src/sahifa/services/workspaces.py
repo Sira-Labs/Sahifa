@@ -119,8 +119,12 @@ async def delete_workspace(db: AsyncSession, ws: Workspace) -> Deleted:
     folders = sorted({Path(p).parent for c in conns for p in (c.config or {}).get("paths", [])})
     # The audit entries of the workspace go with it (spec 018's purge setting, this transaction only).
     await db.execute(text("SELECT set_config('sahifa.audit_purge', 'on', true)"))
-    # Connections cascade to scans, assets, checks, findings, events, schedules and scores;
-    # the workspace then cascades to memberships, invitations and audit entries.
+    # Findings first: a finding of a real scan points at that scan twice (first and last seen).
+    # Deleting the connection sets both to NULL and deletes the finding's check in one
+    # statement, and Postgres then re-checks the finding against the deleted check and refuses.
+    await db.execute(delete(Finding).where(Finding.workspace_id == ws.id))
+    # Connections cascade to scans, assets, checks, events, schedules and scores; the
+    # workspace then cascades to memberships, invitations and audit entries.
     await db.execute(delete(Connection).where(Connection.workspace_id == ws.id))
     await db.execute(delete(Workspace).where(Workspace.id == ws.id))
     return Deleted(counts=counts, folders=folders)
