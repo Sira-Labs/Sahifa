@@ -40,8 +40,8 @@ def test_scores_are_bounded(shop_report) -> None:  # type: ignore[no-untyped-def
         assert 0 <= d.low <= d.value <= d.high <= 100
 
 
-def test_sampled_scan_has_intervals(shop) -> None:  # type: ignore[no-untyped-def]
+def test_sampled_scan_has_intervals(shop, shop_now) -> None:  # type: ignore[no-untyped-def]
     from sahifa_core.scan import ScanOptions, run_scan
 
-    r = run_scan(str(shop), ScanOptions(sample_rows=500, seed=3))
+    r = run_scan(str(shop), ScanOptions(sample_rows=500, seed=3, now=shop_now))
     assert any(d.low < d.high for d in r.score.dimensions.values())
