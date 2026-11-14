@@ -158,14 +158,31 @@ jobs:
     # secrets belong to the `staging` environment. Environment values are only visible inside
     # steps, so every step carries the gate; the job is a no-op until CAPROVER_SERVER is set.
     environment: staging
+    # One deploy at a time, and only of the newest commit: two merges a few seconds apart
+    # otherwise race, the older commit lands last and the newer run waits for a version that
+    # never goes live (14 Nov 2026, #47 and #44).
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     steps:
       - name: configured?
         id: gate
         env:
           SERVER: ${{ vars.CAPROVER_SERVER }}
           WORKER_TOKEN: ${{ secrets.CAPROVER_APP_TOKEN_WORKER }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
         run: |
-          if [ -n "$SERVER" ]; then echo "on=true" >> "$GITHUB_OUTPUT"; else echo "on=false" >> "$GITHUB_OUTPUT"; echo "::notice::CAPROVER_SERVER not set on environment 'staging'; skipping the deploy"; fi
+          on=true
+          if [ -z "$SERVER" ]; then on=false; echo "::notice::CAPROVER_SERVER not set on environment 'staging'; skipping the deploy"; fi
+          # A push to main that is no longer the head of main leaves the deploy to the newer run.
+          if [ "$on" = true ] && [ "$REF" = "refs/heads/main" ]; then
+            head=$(gh api "repos/$REPO/commits/main" --jq .sha)
+            if [ "$head" != "$SHA" ]; then on=false; echo "::notice::main is at $head, newer than $SHA; its run deploys staging"; fi
+          fi
+          echo "on=$on" >> "$GITHUB_OUTPUT"
           # The worker app arrives in R1 sprint 2 (spec 008, ADR-0009): deployed only when its token is set.
           if [ -n "$WORKER_TOKEN" ]; then echo "worker=true" >> "$GITHUB_OUTPUT"; else echo "worker=false" >> "$GITHUB_OUTPUT"; echo "CAPROVER_APP_TOKEN_WORKER not set; skipping worker deploy"; fi
       - uses: actions/checkout@v7

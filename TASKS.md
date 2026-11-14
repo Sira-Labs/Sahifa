@@ -245,6 +245,11 @@ databases and files, and get in by invitation link; staging serves demos.
         `ScanOptions.now` (the clock when unset) is the scan's time and `started_at`; every test
         that scans the fixture shop passes the shop's time. No spec: a test fix with a small
         option, both needed in one PR because each alone leaves a required check red.
+- [x] **Staging deploys raced when two PRs merged seconds apart** (14 Nov)
+      - #47 and #44 merged 4 s apart; #44's run deployed first, #47's slower build deployed
+        after it, so staging served the older commit and #44's run timed out in `wait-live`.
+      - `deploy-staging` has a concurrency group and skips a `main` commit that is no longer
+        the head (asked from the API with the job's read token); tags are not affected.
 - [x] **`@eslint/js` 10** (14 Nov, replaces Dependabot PR #36): its recommended set adds
       `no-useless-assignment`, which found one unused initial value in `web/src/schedule.ts`.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
