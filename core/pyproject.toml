@@ -58,5 +58,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# A test that hangs prints every thread's stack after five minutes, so the log names it.
+# A test that hangs prints every thread's stack after five minutes, which names it: the core's
+# tests are synchronous.
 faulthandler_timeout = 300

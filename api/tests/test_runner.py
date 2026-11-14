@@ -21,7 +21,8 @@ from sahifa.settings import Settings
 
 
 def runner(tmp_path: Path) -> ScanRunner:
-    return ScanRunner(None, Settings(data_dir=tmp_path))  # type: ignore[arg-type]
+    # Two at once, whatever SAHIFA_MAX_CONCURRENT_SCANS says on this machine.
+    return ScanRunner(None, Settings(data_dir=tmp_path, max_concurrent_scans=2))  # type: ignore[arg-type]
 
 
 async def test_drain_waits_until_cancelled_scans_have_let_go(
@@ -82,6 +83,21 @@ async def test_drain_gives_up_on_a_scan_that_cannot_be_cancelled(
     assert len(r.tasks) == 1
     finish.set()
     await asyncio.gather(*r.tasks, return_exceptions=True)
+
+
+async def test_nothing_starts_once_the_runner_drains(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A schedule that comes due during shutdown must not start a scan nobody waits for."""
+    ran: list[uuid.UUID] = []
+
+    async def scan(_sessions: Any, _settings: Any, scan_id: uuid.UUID) -> None:
+        ran.append(scan_id)
+
+    monkeypatch.setattr(scans, "execute_scan", scan)
+    r = runner(tmp_path)
+    await r.drain()
+    r.submit(uuid.uuid4())
+    await asyncio.sleep(0)
+    assert not r.tasks and not ran
 
 
 async def test_drain_without_scans_returns_at_once(tmp_path: Path) -> None:

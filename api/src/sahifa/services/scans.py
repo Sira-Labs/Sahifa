@@ -44,8 +44,15 @@ class ScanRunner:
         self.settings = settings
         self.limit = asyncio.Semaphore(settings.max_concurrent_scans)
         self.tasks: set[asyncio.Task[None]] = set()
+        self.closing = False
 
     def submit(self, scan_id: uuid.UUID) -> None:
+        """Run a `queued` scan in the background. Once the runner is draining nothing new
+        starts (a schedule may come due during shutdown): the scan stays `queued`, and the next
+        start marks it interrupted like any scan a restart cut off."""
+        if self.closing:
+            log.warning("scan.not_started", scan_id=str(scan_id), reason="the API is shutting down")
+            return
         task = asyncio.create_task(self._run(scan_id))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
@@ -55,6 +62,7 @@ class ScanRunner:
         holds a database session, and with it locks, when the API has shut down. A scan in its
         engine thread cannot be cancelled before the thread returns; it holds no session there,
         so after `DRAIN_TIMEOUT_S` it is left behind."""
+        self.closing = True
         tasks = list(self.tasks)
         if not tasks:
             return
