@@ -239,7 +239,7 @@ databases and files, and get in by invitation link; staging serves demos.
         on 17 Oct, so it looked green. Fixed by updating, with no entry in
         `security/audit-ignore.toml`.
       - Dependabot's grouped PR only updates direct dependencies; certifi and opentelemetry-api
-        are transitive (httpx, procrastinate) and were raised with `uv lock --upgrade-package`.
+        are transitive (httpx, FastAPI) and were raised with `uv lock --upgrade-package`.
 
 ## Owner
 
