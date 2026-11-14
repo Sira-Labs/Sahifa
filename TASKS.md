@@ -233,13 +233,18 @@ databases and files, and get in by invitation link; staging serves demos.
 
 ## Maintenance (nightly runs)
 
-- [x] **`python api` red on every PR since 26 Oct: known vulnerabilities in the lockfile**
-      (14 Nov, replaces Dependabot PR #46)
+- [x] **CI red on every PR: vulnerable API dependencies and a core test that expired**
+      (14 Nov, PR #48, replaces Dependabot PR #46)
       - `pip-audit` failed on certifi, joserfc and opentelemetry-api; `main` itself last ran CI
         on 17 Oct, so it looked green. Fixed by updating, with no entry in
         `security/audit-ignore.toml`.
       - Dependabot's grouped PR only updates direct dependencies; certifi and opentelemetry-api
         are transitive (httpx, FastAPI) and were raised with `uv lock --upgrade-package`.
+      - `test_rule_fires_on_faulty_shop[sah.future_dates]` failed from 12 Nov: the fixture shop
+        is written for 2 Oct with a date 40 days ahead, and scans used the real clock. New
+        `ScanOptions.now` (the clock when unset) is the scan's time and `started_at`; every test
+        that scans the fixture shop passes the shop's time. No spec: a test fix with a small
+        option, both needed in one PR because each alone leaves a required check red.
 
 ## Owner
 

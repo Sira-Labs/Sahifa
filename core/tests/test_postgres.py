@@ -44,8 +44,8 @@ def _pg(t: object) -> str:
     }.get(s, "text")
 
 
-def test_postgres_scan_matches_duckdb(loaded: str, shop_report) -> None:  # type: ignore[no-untyped-def]
-    pg = run_scan(loaded, ScanOptions(sample_rows=0))
+def test_postgres_scan_matches_duckdb(loaded: str, shop_report, shop_now) -> None:  # type: ignore[no-untyped-def]
+    pg = run_scan(loaded, ScanOptions(sample_rows=0, now=shop_now))
     assert {a.ref.name for a in pg.assets} == {a.ref.name for a in shop_report.assets}
     pg_types = {(f.asset.split(".")[-1], f.check_type) for f in pg.findings}
     dd_types = {(f.asset, f.check_type) for f in shop_report.findings}

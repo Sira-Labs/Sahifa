@@ -41,6 +41,10 @@ All notable changes to this project are documented here. The format follows
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
 
 ### Fixed
+- **The core's tests no longer depend on the day they run.** The test shop is written for a
+  fixed day with one date 40 days ahead; scans ran on the real clock, so from 12 November the
+  "dates in the future" test found nothing. `ScanOptions.now` sets the time a scan measures
+  against, and the tests pin it.
 - The compose bundle's web container started only with `SAHIFA_DOMAIN` set; without a domain
   Caddy got an empty site address and exited. Found by the new quick-start CI job.
 - Two admins inviting the same address at once no longer make one of them fail, and cleanup

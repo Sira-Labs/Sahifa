@@ -67,6 +67,9 @@ class ScanOptions:
     workers: int = 2
     # Record what the source's login may do (spec 021); off for uploads, Sahifa's own copies.
     access: bool = True
+    # The time the scan measures against (dates in the future, freshness) and reports as its
+    # start; the clock when unset. Tests pin it, so data written for a fixed day never expires.
+    now: datetime | None = None
 
 
 @dataclass
@@ -134,7 +137,7 @@ def run_scan(
     the report is the same whatever their number."""
     options = options or ScanOptions()
     scan_id = scan_id or str(uuid.uuid4())
-    started = datetime.now(UTC).replace(microsecond=0)
+    started = (options.now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0)
     t0 = time.monotonic()
 
     def connect(worker: int) -> Connector:
