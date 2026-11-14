@@ -85,6 +85,31 @@ describe("NewScan upload", () => {
     expect(await screen.findByText(/waiting for a free scan slot/i)).toBeTruthy();
   });
 
+  it("offers the demo while no file is chosen and starts it", async () => {
+    const created = makeScan({ id: "demo-scan", status: "queued", score: null, findings: null, demo: true });
+    const fetchFn = stubFetch((url) => {
+      if (url === "/api/scans/demo") return json(created, 202);
+      if (url === "/api/scans/demo-scan") return created;
+      throw new Error(`unexpected ${url}`);
+    });
+    const user = setup();
+    const { router } = renderApp("/scans/new");
+    await user.click(await screen.findByRole("button", { name: "Scan the demo data" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/scans/demo-scan"));
+    expect(fetchFn.mock.calls.find((c) => c[0] === "/api/scans/demo")![1]!.method).toBe("POST");
+  });
+
+  it("hides the demo offer once files are chosen", async () => {
+    stubFetch(() => {
+      throw new Error("nothing is fetched");
+    });
+    const user = setup();
+    renderApp("/scans/new");
+    expect(await screen.findByRole("button", { name: "Scan the demo data" })).toBeTruthy();
+    await user.upload(screen.getByLabelText("Choose files"), [file("orders.csv")]);
+    expect(screen.queryByRole("button", { name: "Scan the demo data" })).toBeNull();
+  });
+
   it("shows the API's refusal with a retry", async () => {
     stubFetch(() => json({ detail: "upload exceeds 200 MB" }, 413));
     const user = setup();
@@ -93,6 +118,7 @@ describe("NewScan upload", () => {
     await user.click(screen.getByRole("button", { name: "Start scan" }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("upload exceeds 200 MB");
+    expect(alert.textContent).toContain("Split the files, or raise SAHIFA_MAX_UPLOAD_MB");
     expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 });

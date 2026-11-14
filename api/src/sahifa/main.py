@@ -36,6 +36,8 @@ from .routers import (
     workspaces,
 )
 from .security import (
+    DEMO_BYTES,
+    DEMO_PATH,
     MB,
     UPLOAD_PATH,
     BodyLimitMiddleware,
@@ -186,8 +188,9 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
         default_bytes=MB,
         limits={UPLOAD_PATH: settings.max_upload_total_mb * MB},
         disk_dir=settings.uploads_dir,
-        disk_paths=frozenset({UPLOAD_PATH}),
+        disk_paths=frozenset({UPLOAD_PATH, DEMO_PATH}),
         min_free_bytes=settings.min_free_disk_mb * MB,
+        writes={DEMO_PATH: DEMO_BYTES},
     )
     app.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs)
 

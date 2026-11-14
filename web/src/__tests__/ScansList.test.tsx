@@ -1,7 +1,9 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { json, makeScan, renderApp, stubFetch } from "./helpers";
+import { act, waitFor } from "@testing-library/react";
+import type { Me } from "../auth";
+import { DEFAULT_WORKSPACE, ME, json, makeScan, renderApp, stubFetch } from "./helpers";
 
 /** Scan number `n` of a list page. */
 function scan(n: number, overrides = {}) {
@@ -48,12 +50,127 @@ describe("ScansList", () => {
     expect(within(rows[3]!).getByLabelText("98.5, 95 % interval 98.5 to 98.5")).toBeTruthy();
   });
 
-  it("invites a first scan when there are none", async () => {
+  it("explains the three steps and offers the demo or the person's own data when there are no scans", async () => {
     stubFetch(() => ({ items: [], next_cursor: null }));
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Start your first scan" }).getAttribute("href")).toBe("/scans/new");
+    const steps = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(steps).toHaveLength(3);
+    expect(steps[0]).toContain("Point Sahifa at data.");
+    expect(steps[1]).toContain("It profiles and checks every table.");
+    expect(steps[2]).toContain("Read the report.");
+    expect(screen.getByRole("button", { name: "Try the demo data" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Scan your own data" }).getAttribute("href")).toBe("/scans/new");
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("starts the demo scan with one click and opens it", async () => {
+    const created = makeScan({ id: "demo-scan", status: "queued", score: null, findings: null, demo: true });
+    const fetchFn = stubFetch((url) => {
+      if (url === "/api/scans/demo") return json(created, 202);
+      if (url === "/api/scans/demo-scan") return created;
+      return { items: [], next_cursor: null };
+    });
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+    await user.click(await screen.findByRole("button", { name: "Try the demo data" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/scans/demo-scan"));
+    const call = fetchFn.mock.calls.find((c) => c[0] === "/api/scans/demo")!;
+    expect(call[1]!.method).toBe("POST");
+    // One workspace to upload to: the API picks it.
+    expect(call[1]!.body).toBe("{}");
+    expect(await screen.findByText("Demo data")).toBeTruthy();
+  });
+
+  it("names the workspace of the demo when the person may upload to several", async () => {
+    const finance = { id: "w0000000-0000-4000-8000-000000000002", name: "Finance", role: "editor" as const, is_default: false };
+    const me: Me = { ...ME, workspaces: [DEFAULT_WORKSPACE, finance] };
+    const created = makeScan({ id: "demo-scan", status: "queued", score: null, findings: null, demo: true });
+    const fetchFn = stubFetch(
+      (url) => {
+        if (url === "/api/scans/demo") return json(created, 202);
+        if (url === "/api/scans/demo-scan") return created;
+        return { items: [], next_cursor: null };
+      },
+      { me },
+    );
+    const user = userEvent.setup();
+    renderApp("/");
+    await user.click(await screen.findByRole("button", { name: "Try the demo data" }));
+    await waitFor(() => expect(fetchFn.mock.calls.some((c) => c[0] === "/api/scans/demo")).toBe(true));
+    const call = fetchFn.mock.calls.find((c) => c[0] === "/api/scans/demo")!;
+    expect(JSON.parse(String(call[1]!.body))).toEqual({ workspace_id: DEFAULT_WORKSPACE.id });
+  });
+
+  it("does not let a viewer start the demo, and says why", async () => {
+    const me: Me = { ...ME, admin: false, org_admin: false, workspaces: [{ ...DEFAULT_WORKSPACE, role: "viewer" }] };
+    stubFetch(() => ({ items: [], next_cursor: null }), { me });
+    renderApp("/");
+    const button = (await screen.findByRole("button", { name: "Try the demo data" })) as HTMLButtonElement;
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(screen.getAllByText(/Viewers can look but not change/).length).toBeGreaterThan(0);
+  });
+
+  it("shows why the demo did not start, with what to do and a retry", async () => {
+    let fail = true;
+    const created = makeScan({ id: "demo-scan", status: "queued", score: null, findings: null, demo: true });
+    stubFetch((url) => {
+      if (url === "/api/scans/demo") return fail ? json({ detail: "disk full" }, 507) : json(created, 202);
+      if (url === "/api/scans/demo-scan") return created;
+      return { items: [], next_cursor: null };
+    });
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+    await user.click(await screen.findByRole("button", { name: "Try the demo data" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The demo scan did not start");
+    expect(alert.textContent).toContain("disk full");
+    expect(alert.textContent).toContain("Free disk space on the server");
+    fail = false;
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/scans/demo-scan"));
+  });
+
+  it("says that the API is down instead of asking for the session in a loop", async () => {
+    let down = true;
+    const fetchFn = stubFetch(() => ({ items: [], next_cursor: null }), { me: json({ detail: "database unavailable" }, 503) });
+    const original = fetchFn.getMockImplementation()!;
+    fetchFn.mockImplementation(async (input, init) => {
+      if (input === "/api/auth/me" && !down) return json(ME);
+      return original(input, init);
+    });
+    const user = userEvent.setup();
+    renderApp("/");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Sahifa could not check your session");
+    expect(alert.textContent).toContain("database unavailable");
+    expect(alert.textContent).toContain("The API is starting or down");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchFn.mock.calls.filter((c) => c[0] === "/api/auth/me")).toHaveLength(1);
+    down = false;
+    await user.click(within(alert).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
+  });
+
+  it("keeps the page when a later session check fails", async () => {
+    let down = false;
+    const fetchFn = stubFetch(() => ({ items: [], next_cursor: null }));
+    const original = fetchFn.getMockImplementation()!;
+    fetchFn.mockImplementation(async (input, init) => {
+      if (input === "/api/auth/me" && down) return json({ detail: "database unavailable" }, 503);
+      return original(input, init);
+    });
+    const { client } = renderApp("/");
+    expect(await screen.findByRole("heading", { name: "No scans yet" })).toBeTruthy();
+    down = true;
+    // The failed refetch reaches React through a queued notification: let it render first.
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["me"] });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(client.getQueryState(["me"])?.status).toBe("error");
+    expect(screen.getByRole("heading", { name: "No scans yet" })).toBeTruthy();
+    expect(screen.queryByText("Sahifa could not check your session")).toBeNull();
   });
 
   it("appends the next page on load more", async () => {

@@ -3,6 +3,7 @@ workspace (spec 020)."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -229,3 +230,27 @@ async def test_deleting_a_workspace(env: Env, tmp_path: Path) -> None:
         "members": 1,
         "invitations": 1,
     }
+
+
+async def test_deleting_a_workspace_with_a_scanned_demo(env: Env) -> None:
+    """Spec 022: findings of a real scan point at it as first and last seen; deleting their
+    connection in one statement failed, so such a workspace could not be deleted."""
+    wid = make_workspace(env.owner, f"Demo {uuid.uuid4().hex[:6]}")
+    name = sql(env.owner, "SELECT name FROM workspaces WHERE id = :w", w=wid)[0][0]
+    async with AsyncExitStack() as stack:
+        admin = await person(env, stack, ADMIN)
+        started = await admin.post("/api/scans/demo", json={"workspace_id": wid})
+        assert started.status_code == 202, started.text
+        scan = started.json()
+        for _ in range(600):
+            scan = (await admin.get(f"/api/scans/{scan['id']}")).json()
+            if scan["status"] in ("succeeded", "failed"):
+                break
+            await asyncio.sleep(0.1)
+        assert scan["status"] == "succeeded", scan["error"]
+        twice = "SELECT count(*) FROM findings WHERE workspace_id = :w AND first_scan_id = last_scan_id"
+        assert sql(env.owner, twice, w=wid)[0][0] > 0
+        done = await admin.request("DELETE", f"/api/workspaces/{wid}", json={"confirm": name})
+        assert done.status_code == 204, done.text
+    for table in ("connections", "scans", "findings", "finding_occurrences", "checks"):
+        assert sql(env.owner, f"SELECT count(*) FROM {table} WHERE workspace_id = :w", w=wid) == [(0,)], table

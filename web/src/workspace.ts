@@ -16,14 +16,22 @@ export function allows(role: WorkspaceRole | null | undefined, needs: WorkspaceR
   return role == null || RANK[role] >= RANK[needs];
 }
 
-/** The signed-in person, shared with the layout's session check. */
+/** The signed-in person, shared with the layout's session check. A failed check is not asked
+ * again by every component that mounts (`retryOnMount`): that loop hammered an API that was
+ * already failing (spec 022). The layout offers the retry. */
 export function useMe() {
-  return useQuery({ queryKey: ["me"], queryFn: authApi.me, retry: false, staleTime: 60_000 });
+  return useQuery({ queryKey: ["me"], queryFn: authApi.me, retry: false, retryOnMount: false, staleTime: 60_000 });
 }
 
 /** Workspaces where the person may change things (editor or admin). */
 export function editableWorkspaces(me: Me | undefined): MeWorkspace[] {
   return (me?.workspaces ?? []).filter((w) => allows(w.role));
+}
+
+/** Where an upload or the demo goes (spec 016): the filtered workspace when the person may
+ * upload there, else the default one, else the first they may upload to. */
+export function uploadWorkspace(editable: { id: string; is_default: boolean }[], filtered: string | undefined): string {
+  return (editable.find((w) => w.id === filtered) ?? editable.find((w) => w.is_default) ?? editable[0])?.id ?? "";
 }
 
 /** Whether the person administers any workspace, or is the org admin: who sees /workspaces. */

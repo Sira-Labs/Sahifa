@@ -8,6 +8,7 @@ It never reads the role from the route code, so a route that loses its check sho
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack
@@ -25,6 +26,7 @@ from sahifa.auth import access as access_module
 from sahifa.auth.access import Access
 from sahifa.auth.deps import DEV_PRINCIPAL
 from sahifa.db import SYSTEM
+from sahifa.routers import scans as scans_router
 
 from .conftest import needs_db
 from .tenancy import add_member, make_tree, make_workspace, sql, user_id
@@ -247,6 +249,14 @@ OPS: tuple[Op, ...] = (
         "create",
         202,
         lambda w: ("/api/scans/upload", {"files": {"files": CSV}, "data": {"workspace_id": w.a}}),
+    ),
+    Op(
+        "POST",
+        "/api/scans/demo",
+        "editor",
+        "create",
+        202,
+        lambda w: ("/api/scans/demo", {"json": {"workspace_id": w.a}}),
     ),
     Op(
         "GET", "/api/scans/{scan_id}", "viewer", "object", 200, lambda w: (f"/api/scans/{w.tree['scan']}", {})
@@ -537,6 +547,8 @@ async def setup(
 ) -> AsyncIterator[tuple[World, dict[str, AsyncClient]]]:
     """Workspaces A and B with their trees, and a signed-in browser per caller."""
     monkeypatch.setenv(SECRET_REF, str(tmp_path))
+    # Every permitted caller starts a demo scan (spec 022); a small shop keeps them short.
+    monkeypatch.setattr(scans_router, "DEMO_ROWS", 200)
     async with AsyncExitStack() as stack:
         clients: dict[str, AsyncClient] = {"anonymous": await stack.enter_async_context(browser(env.app))}
         for caller, email in (*EMAILS.items(), ("target", TARGET)):
@@ -557,6 +569,12 @@ async def setup(
             target=user_id(env.owner, TARGET),
         )
         yield world, clients
+        # Scans started by the matrix finish before the workspaces are dropped: a scan that
+        # writes its findings while its connection is deleted fails the delete.
+        for _ in range(300):
+            if not sql(env.owner, "SELECT 1 FROM scans WHERE status IN ('queued', 'running') LIMIT 1"):
+                break
+            await asyncio.sleep(0.1)
 
 
 async def test_matrix(setup: tuple[World, dict[str, AsyncClient]]) -> None:

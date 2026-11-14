@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **First run** (spec 022). The empty start page says what Sahifa does in three steps and
+  offers *Try the demo data*: one click scans a made-up web shop with faults put in on purpose
+  (`POST /api/scans/demo`), and the report says what it shows. A running scan lists its steps.
+  Failed requests and failed scans say what to do next where the cause is known: the API is
+  down, the role is missing, a file is too large, the database cannot be reached, the login
+  was refused.
 - **Explainer video on the product page**: 93 seconds on the problem Sahifa solves, how a scan
   works and what to expect, narrated, with English captions (`site/assets/video/`). Its source and
   how to re-render it are in `docs/assets/video/`.
@@ -41,6 +47,11 @@ All notable changes to this project are documented here. The format follows
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
 
 ### Fixed
+- **A workspace with scanned uploads can be deleted.** Deleting it failed with a server error
+  as soon as one of its scans had findings.
+- **A failing API is no longer flooded by the web app.** When the session check failed, every
+  part of the page asked again, thousands of times a minute. The page now says that the API
+  is down, with a retry.
 - **Shutting down the API no longer leaves a scan holding database locks.** In inline mode a
   running scan was cancelled but not waited for, so its transaction could outlive the
   shutdown. The API now waits up to ten seconds for cancelled scans to stop.
