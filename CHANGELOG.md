@@ -41,6 +41,9 @@ All notable changes to this project are documented here. The format follows
   in the header, and `SAHIFA_ORG_NAME` for the name shown there.
 
 ### Fixed
+- **Shutting down the API no longer leaves a scan holding database locks.** In inline mode a
+  running scan was cancelled but not waited for, so its transaction could outlive the
+  shutdown. The API now waits up to ten seconds for cancelled scans to stop.
 - **Staging always ends on the newest commit.** Two merges a few seconds apart raced: the older
   commit was deployed last and the newer release run waited ten minutes for a version that
   never went live. Deploys to staging now run one at a time, and a run whose commit is no

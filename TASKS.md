@@ -257,11 +257,15 @@ databases and files, and get in by invitation link; staging serves demos.
         held the PR for six hours. Every CI job now stops after 20 minutes, and pytest dumps all
         stacks after five minutes in one test (`faulthandler_timeout`), so the next hang shows
         which test it is.
-      - The hang is in the loop's close after a test: a scan started by the test is still
-        running in the app's runner, the close cancels it, and the cancel never ends. It showed
-        up the evening CI's Postgres image went from 17.11 to 17.12, and only sometimes. A
-        guard in `api/tests/conftest.py` now waits up to 30 s for tasks a test left behind and
-        prints their stacks when they do not end.
+      - The cause, found with a reporter that prints the stalled test and its tasks: at
+        shutdown the inline runner cancelled its scans but did not wait for them
+        (`ScanRunner.drain`). A cancelled scan kept its transaction open; the tests' next step,
+        a synchronous delete of the test workspaces, waited for its locks while the loop that
+        could end the scan stood still. It needs a scan still running when its test ends
+        (`test_roles`), so it depended on timing and showed up when CI got slower or faster.
+      - `drain` now waits up to 10 s for the cancelled scans; a scan inside its engine thread
+        holds no session and is left behind after that. The reporter, a guard that waits for
+        tasks a test left behind, and one line per test in the api job stay.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels

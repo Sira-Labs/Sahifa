@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
 log = get_logger("sahifa.scans")
 INTERRUPTED = "interrupted by a restart"
+# How long shutdown waits for cancelled scans to stop (see `ScanRunner.drain`).
+DRAIN_TIMEOUT_S = 10.0
 
 
 class ScanRunner:
@@ -49,8 +51,18 @@ class ScanRunner:
         task.add_done_callback(self.tasks.discard)
 
     async def drain(self) -> None:
-        for task in list(self.tasks):
+        """Cancel the running scans and wait until they have stopped, so that none of them still
+        holds a database session, and with it locks, when the API has shut down. A scan in its
+        engine thread cannot be cancelled before the thread returns; it holds no session there,
+        so after `DRAIN_TIMEOUT_S` it is left behind."""
+        tasks = list(self.tasks)
+        if not tasks:
+            return
+        for task in tasks:
             task.cancel()
+        _, running = await asyncio.wait(tasks, timeout=DRAIN_TIMEOUT_S)
+        if running:
+            log.warning("scan.drain_timeout", scans=len(running), waited_s=DRAIN_TIMEOUT_S)
 
     async def _run(self, scan_id: uuid.UUID) -> None:
         async with self.limit:
