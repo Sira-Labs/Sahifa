@@ -157,6 +157,11 @@ export function FindingsAcross() {
                 : "No findings need attention."
               : `${items.length}${findings.hasNextPage ? "+" : ""} ${items.length === 1 ? "finding" : "findings"}, most severe first.`}
           </p>
+          {items.length === 0 && !filtered && (
+            <p className="muted">
+              Findings appear here after a scan. <Link to="/scans/new">Start a scan</Link> of your data or of the demo shop.
+            </p>
+          )}
           <div className="stack">
             {items.map((f) => {
               // Where it is: the workspace when the person sees several, the connection unless filtered to one.

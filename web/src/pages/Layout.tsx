@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { ApiError, api } from "../api";
 import { noAccessEmail, signOut, type Me } from "../auth";
 import { BrandMark } from "../components/Brand";
+import { ErrorPanel } from "../components/ErrorPanel";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { administers, setWorkspaceFilter, useMe, useWorkspaceFilter } from "../workspace";
 import { NoAccess } from "./NoAccess";
@@ -49,6 +50,14 @@ export function Layout({ children }: { children?: React.ReactNode }) {
       <p role="status" className="wrap main muted">
         Checking your session…
       </p>
+    );
+  }
+  // The API failed or cannot be reached: say so, instead of an app whose every page fails.
+  if (me.isError) {
+    return (
+      <div className="wrap main">
+        <ErrorPanel title="Sahifa could not check your session" error={me.error} onRetry={() => void me.refetch()} />
+      </div>
     );
   }
   const signedIn = me.data?.mode === "oidc";

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { assetLabel, describeScore, formatFailedShare, formatIntervalRange, formatScoreInterval, scanSource, sortFindings } from "../format";
+import {
+  assetLabel,
+  describeScore,
+  formatFailedShare,
+  formatIntervalRange,
+  formatScoreInterval,
+  scanFailureAdvice,
+  scanSource,
+  sortFindings,
+} from "../format";
 import { makeFinding, makeScan } from "./helpers";
 
 describe("interval display", () => {
@@ -38,6 +47,20 @@ describe("helpers", () => {
     expect(scanSource(makeScan())).toBe("shop");
     expect(scanSource(makeScan({ files: ["a.csv", "b.csv", "c.csv"] }))).toBe("Upload: 3 files");
     expect(scanSource(makeScan({ connection_name: "upload-5ca7", connection_kind: "upload", assets_count: null }))).toBe("Upload");
+    expect(scanSource(makeScan({ demo: true, connection_kind: "upload", files: ["a.csv", "b.csv"] }))).toBe("Demo data");
+  });
+
+  it("says what to do about a failed scan by its reason", () => {
+    const advice = (reason: string | null) => scanFailureAdvice(reason);
+    expect(advice("connection shop has no source: set SAHIFA_CONN_SHOP")).toContain("is not set on the API");
+    expect(advice("could not translate host name \"db\" to address")).toContain("cannot be reached");
+    expect(advice("connection failed: timeout expired")).toContain("cannot be reached");
+    expect(advice('FATAL: password authentication failed for user "reader"')).toContain("login was refused");
+    expect(advice("permission denied for table orders")).toContain("SELECT rights");
+    expect(advice("canceling statement due to statement timeout")).toContain("time limit");
+    expect(advice("IO Error: No files found that match the pattern")).toContain("Upload them again");
+    expect(advice("interrupted by a restart")).toBeNull();
+    expect(advice(null)).toBeNull();
   });
 });
 

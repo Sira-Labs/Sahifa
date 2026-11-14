@@ -166,6 +166,8 @@ export type Scan = InWorkspace & {
   // Not in spec 004; shown when the API sends them (upload scans).
   connection_kind?: ConnectionKind;
   files?: string[];
+  // The scan reads the demo shop (spec 022).
+  demo?: boolean;
 };
 
 export type ScanCreate = { connection_id: string; assets?: string[]; sample_rows?: number };

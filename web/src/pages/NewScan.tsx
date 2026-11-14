@@ -4,6 +4,7 @@ import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from "rea
 import { api } from "../api";
 import { StatusChip } from "../components/Chips";
 import { ConnectionTest } from "../components/ConnectionTest";
+import { DemoScanButton } from "../components/DemoScanButton";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { DEFAULT_SAMPLE_ROWS } from "../constants";
@@ -11,7 +12,7 @@ import { formatBytes } from "../format";
 import type { NewScanTab } from "../search";
 import type { Scan } from "../types";
 import { countError, fileError, mergeFiles, parseSampleRows } from "../validation";
-import { VIEWER_REASON, allows, editableWorkspaces, useMe, useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
+import { VIEWER_REASON, allows, editableWorkspaces, uploadWorkspace, useMe, useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
 
 
 const routeApi = getRouteApi("/_app/scans/new");
@@ -62,12 +63,6 @@ function SampleField({ sample }: { sample: ReturnType<typeof useSample> }) {
   );
 }
 
-/** Where an upload goes (spec 016): the filtered workspace when the person may upload there,
- * else the default one, else the first they may upload to. */
-function initialWorkspace(editable: { id: string; is_default: boolean }[], filtered: string | undefined): string {
-  return (editable.find((w) => w.id === filtered) ?? editable.find((w) => w.is_default) ?? editable[0])?.id ?? "";
-}
-
 function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
   const me = useMe();
   const editable = editableWorkspaces(me.data);
@@ -76,7 +71,7 @@ function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [tried, setTried] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
-  const workspace = chosen ?? initialWorkspace(editable, filtered);
+  const workspace = chosen ?? uploadWorkspace(editable, filtered);
   const sample = useSample();
   const upload = useMutation({
     // With one workspace to upload to, the API picks it; with several, the choice goes along.
@@ -155,6 +150,12 @@ function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
           {upload.isPending ? "Uploading…" : files.length > 1 ? `Scan ${files.length} files` : "Start scan"}
         </button>
       </div>
+      {files.length === 0 && (
+        <div className="demo-offer">
+          <p className="muted">No files at hand? The demo is a made-up web shop with faults put in on purpose.</p>
+          <DemoScanButton label="Scan the demo data" className="btn btn-small" workspaceId={workspace} onCreated={onCreated} />
+        </div>
+      )}
     </form>
   );
 }

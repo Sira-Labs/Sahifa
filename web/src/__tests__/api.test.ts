@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, api, errorMessage, normalizeFinding, query, statusMessage } from "../api";
+import { ApiError, api, errorAdvice, errorMessage, normalizeFinding, query, statusMessage } from "../api";
 import { json, makeFinding, stubFetch } from "./helpers";
 
 /** The error a call rejects with. */
@@ -59,6 +59,25 @@ describe("error mapping", () => {
     const err = await failure(api.listScans());
     expect(err.status).toBe(0);
     expect(err.message).toMatch(/cannot reach the sahifa api/i);
+  });
+});
+
+describe("error advice", () => {
+  it("says what to do where the status says it", () => {
+    const advice = (status: number) => errorAdvice(new ApiError(status, "x"));
+    expect(advice(0)).toContain("docker compose ps");
+    expect(advice(403)).toContain("editor role");
+    expect(advice(413)).toContain("SAHIFA_MAX_UPLOAD_MB");
+    expect(advice(415)).toContain("CSV, TSV, Parquet and JSON lines");
+    expect(advice(429)).toContain("Wait a minute");
+    expect(advice(500)).toContain("API's log");
+    for (const status of [502, 503, 504]) expect(advice(status)).toContain("starting or down");
+    expect(advice(507)).toContain("SAHIFA_UPLOAD_TTL_DAYS");
+  });
+
+  it("adds nothing where the message says it all", () => {
+    for (const status of [400, 401, 404, 409, 422]) expect(errorAdvice(new ApiError(status, "x"))).toBeNull();
+    expect(errorAdvice(new Error("x"))).toBeNull();
   });
 });
 

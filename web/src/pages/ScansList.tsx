@@ -1,14 +1,15 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { api } from "../api";
 import { StatusChip } from "../components/Chips";
+import { DemoScanButton } from "../components/DemoScanButton";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { ScoreText } from "../components/ScoreText";
 import { POLL_INTERVAL_MS, SCANS_PAGE_SIZE, SEVERITIES } from "../constants";
 import { formatDuration, formatLocalTime, scanSource, secondsBetween } from "../format";
 import { isTerminal } from "../hooks/useScanPolling";
 import type { Scan } from "../types";
-import { useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
+import { VIEWER_REASON, editableWorkspaces, useMe, useShowsWorkspaces, useWorkspaceFilter } from "../workspace";
 
 /** Open findings by severity, words included: "2 critical · 5 high". */
 function FindingCounts({ scan }: { scan: Scan }) {
@@ -23,6 +24,48 @@ function FindingCounts({ scan }: { scan: Scan }) {
         </span>
       ))}
     </span>
+  );
+}
+
+/** The start page of a fresh install (spec 022): what Sahifa does in three steps, and two ways
+ * in, the demo shop or the person's own data. */
+function FirstRun() {
+  const navigate = useNavigate();
+  const me = useMe();
+  const readOnly = !!me.data && editableWorkspaces(me.data).length === 0;
+  return (
+    <div className="card empty">
+      <h2>No scans yet</h2>
+      <ol className="steps">
+        <li>
+          <span className="font-semibold">Point Sahifa at data.</span> Drop a few CSV, Parquet or JSON exports on the page, or pick a
+          registered connection. Sahifa only reads.
+        </li>
+        <li>
+          <span className="font-semibold">It profiles and checks every table.</span> Sahifa works out each column&rsquo;s type and
+          meaning and writes the checks itself.
+        </li>
+        <li>
+          <span className="font-semibold">Read the report.</span> A score per quality dimension with its interval, and every finding
+          with examples, the SQL behind it and a next step.
+        </li>
+      </ol>
+      <div className="actions">
+        <DemoScanButton
+          label="Try the demo data"
+          className="btn btn-primary"
+          onCreated={(scan) => void navigate({ to: "/scans/$scanId", params: { scanId: scan.id } })}
+        />
+        <Link to="/scans/new" className="btn">
+          Scan your own data
+        </Link>
+      </div>
+      <p className="muted text-sm">
+        {readOnly
+          ? VIEWER_REASON
+          : "The demo is a made-up web shop with faults put in on purpose. Its report is ready in under a minute."}
+      </p>
+    </div>
   );
 }
 
@@ -55,18 +98,7 @@ export function ScansList() {
       {scans.isPending && <p role="status">Loading scans…</p>}
       {scans.isError && <ErrorPanel title="Could not load the scans" error={scans.error} onRetry={() => void scans.refetch()} />}
 
-      {scans.isSuccess && items.length === 0 && (
-        <div className="card empty">
-          <h2>No scans yet</h2>
-          <p className="muted">
-            Drop a few CSV, Parquet or JSON exports on the page, or pick a registered connection, and Sahifa profiles every
-            table, writes the checks and scores each dimension with its interval.
-          </p>
-          <Link to="/scans/new" className="btn btn-primary">
-            Start your first scan
-          </Link>
-        </div>
-      )}
+      {scans.isSuccess && items.length === 0 && <FirstRun />}
 
       {items.length > 0 && (
         <div className="table-card">

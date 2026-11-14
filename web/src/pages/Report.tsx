@@ -16,6 +16,7 @@ import {
   formatLocalTime,
   formatPassShare,
   samplePolicy,
+  scanFailureAdvice,
   scanSource,
   sortFindings,
   titleCase,
@@ -55,7 +56,8 @@ function assetRows(a: AssetReport): string {
 }
 
 function ReportHeader({ scan, report }: { scan?: Scan; report?: ScanReport }) {
-  const source = report ? report.source.label : scan ? scanSource(scan) : "";
+  // A demo scan is named as such; its report's label is the name of an upload folder.
+  const source = scan?.demo ? scanSource(scan) : report ? report.source.label : scan ? scanSource(scan) : "";
   return (
     <div className="page-head">
       <div className="min-w-0">
@@ -85,27 +87,58 @@ function ReportHeader({ scan, report }: { scan?: Scan; report?: ScanReport }) {
   );
 }
 
+// What a scan does, in order (spec 022); the status tells which step it is at.
+const SCAN_STEPS = ["Waiting for a free slot", "Profiling every table and running the checks", "Scoring and writing the report"];
+
 function Running({ scan }: { scan: Scan }) {
+  const current = scan.status === "queued" ? 0 : 1;
   return (
     <div role="status" className="card running">
       <p className="font-semibold">{scan.status === "queued" ? "Waiting for a free scan slot…" : "Scanning: profiling every table and running the checks…"}</p>
       <div className="progress" aria-hidden="true">
         <span />
       </div>
+      <ol className="steps" aria-label="Steps of a scan">
+        {SCAN_STEPS.map((step, i) => (
+          <li key={step} className={i === current ? "step-current" : i < current ? "step-done" : undefined} aria-current={i === current ? "step" : undefined}>
+            {step}
+            {i < current && <span className="sr-only"> (done)</span>}
+          </li>
+        ))}
+      </ol>
       <p className="muted text-sm">This page updates every 2 seconds. You can leave and come back; the scan keeps running.</p>
     </div>
   );
 }
 
 function Failed({ scan }: { scan: Scan }) {
+  const advice = scanFailureAdvice(scan.error);
   return (
     <div role="alert" className="card error-panel">
       <p className="font-semibold">The scan failed</p>
       <p className="break-anywhere">{scan.error ?? "The API gave no reason."}</p>
+      {advice && <p>{advice}</p>}
       <p className="muted text-sm">
-        Fix the source and <Link to="/scans/new">start a new scan</Link>.
+        {advice ? "Then" : "Fix the source and"} <Link to="/scans/new">start a new scan</Link>.
       </p>
     </div>
+  );
+}
+
+/** On a demo report (spec 022): what the person is looking at, and where to go next. */
+function DemoNote() {
+  return (
+    <aside className="card demo-note" aria-label="About the demo data">
+      <p className="font-semibold">This is the demo: a made-up web shop with faults put in on purpose</p>
+      <p className="muted">
+        Six tables, with duplicate keys, orders without a customer, placeholders, dates in the future and more. Each finding below
+        names the table and column, shows examples and the SQL behind it, and says what to do next. Every row was read, so the
+        intervals have no width; a sample of a large table widens them.
+      </p>
+      <p>
+        <Link to="/scans/new">Scan your own data</Link>
+      </p>
+    </aside>
   );
 }
 
@@ -290,6 +323,7 @@ export function Report() {
       )}
       {report.data && (
         <>
+          {s.demo && <DemoNote />}
           <AccessWarning access={report.data.source_access} />
           <ScoreCard
             title="Store score"

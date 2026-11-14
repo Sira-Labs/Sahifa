@@ -102,6 +102,26 @@ const STATUS_TEXT: Record<number, string> = {
   507: "The server is low on disk space",
 };
 
+// What to do about a failed request, where the status says it (spec 022). Statuses that are
+// missing here carry a message that already says what is wrong.
+const STATUS_ADVICE: Record<number, string> = {
+  0: "Check that the API is running and reachable (docker compose ps), then retry.",
+  403: "Ask an admin of the workspace for the editor role, or pick another workspace.",
+  413: "Split the files, or raise SAHIFA_MAX_UPLOAD_MB on the API.",
+  415: "Accepted are CSV, TSV, Parquet and JSON lines; text files as UTF-8.",
+  429: "Wait a minute, then retry.",
+  500: "Look at the API's log for this time; retrying may work.",
+  502: "The API is starting or down: check its container and its log, then retry.",
+  503: "The API is starting or down: check its container and its log, then retry.",
+  504: "The API is starting or down: check its container and its log, then retry.",
+  507: "Free disk space on the server, or lower SAHIFA_UPLOAD_TTL_DAYS.",
+};
+
+/** One sentence on what to do about `error`, or null when its message says it all. */
+export function errorAdvice(error: unknown): string | null {
+  return error instanceof ApiError ? (STATUS_ADVICE[error.status] ?? null) : null;
+}
+
 /** Fallback message for a status without a usable body. */
 export function statusMessage(status: number, statusText = ""): string {
   const known = STATUS_TEXT[status];
@@ -264,6 +284,13 @@ export const api = {
   createScan: (body: ScanCreate) => apiSend<Scan>("POST", "/api/scans", body),
   uploadScan: (files: File[], sampleRows?: number, workspaceId?: string) =>
     request<Scan>("/api/scans/upload", { method: "POST", body: uploadForm(files, sampleRows, workspaceId) }),
+  /** Scan the demo shop (spec 022); the workspace only when the person may upload to several. */
+  demoScan: (workspaceId?: string) =>
+    request<Scan>("/api/scans/demo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(workspaceId ? { workspace_id: workspaceId } : {}),
+    }),
   listScans: (cursor?: string, limit = 25, workspaceId?: string) =>
     apiGet<Page<Scan>>(`/api/scans${query({ limit, cursor, workspace_id: workspaceId })}`),
   getScan: (id: string) => apiGet<Scan>(`/api/scans/${enc(id)}`),
