@@ -282,6 +282,14 @@ databases and files, and get in by invitation link; staging serves demos.
       - `drain` now waits up to 10 s for the cancelled scans; a scan inside its engine thread
         holds no session and is left behind after that. The reporter, a guard that waits for
         tasks a test left behind, and one line per test in the api job stay.
+- [x] **Weekly dependency updates of 16 Nov in one PR** (replaces Dependabot PRs #55 to #60)
+      - Six PRs touched three lockfiles in pairs, so each merge would have put the next into
+        conflict; they were redone on one branch with `uv lock --upgrade-package` and pnpm.
+      - DuckDB 2.0.0, croniter 7.0.0 and jsdom 31.0.1 are major versions that need no code
+        change: every test is green on them. DuckDB is raised in `api/uv.lock` too (Dependabot
+        only raised it for `core/`), so the API runs the version core is tested with.
+      - Procrastinate stays at 3.10.0 here: 3.11.0 changes `procrastinate_fetch_job_v2`, which
+        needs its own Alembic migration (next entry).
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels
