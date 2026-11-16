@@ -49,7 +49,7 @@ creates the database roles the dump refers to.
 ```bash
 dump=sahifa-2026-11-17-021500.dump
 docker compose stop api worker &&
-  docker compose exec -T db dropdb -U sahifa --force sahifa &&
+  docker compose exec -T db dropdb -U sahifa --force --if-exists sahifa &&
   docker compose exec -T db createdb -U sahifa sahifa &&
   docker compose exec -T db pg_restore -U sahifa -d sahifa --no-owner --exit-on-error < "$dump" &&
   docker compose up -d
