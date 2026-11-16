@@ -32,6 +32,6 @@ worker (Postgres as the queue, no broker; its ADR-0004 and spec 002) with the sa
   SQLAlchemy session and Procrastinate's psycopg pool apart.
 - `SAHIFA_SCAN_EXECUTION` chooses: `inline` (the default, the sprint 1 thread) or `queue` (the
   worker). Inline stays until the owner creates the worker app.
-- Procrastinate is pinned (3.10.0); migration 0004 carries its schema as released, and a newer
-  version arrives with its own migration.
+- Procrastinate is pinned (3.11.0 since 17 Nov 2026); migration 0004 carries the schema of
+  3.10.0 as released, and a newer version arrives with its own migration (0011 for 3.11.0).
 - Scheduled scans (spec 010) use the periodic tasks of the same app.
