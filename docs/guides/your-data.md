@@ -50,10 +50,10 @@ Nothing, unless you send it:
 
 The *Feedback* link in the footer opens the project's issue tracker on GitHub in a new tab.
 What you write there is public: leave out data, host names and passwords. An error's
-*Reference* is a random id when Sahifa made it, and then safe to share. A proxy in front of
-Sahifa may set references of its own, and a reference does not show who made it: unless you
-know that nothing in front of your install sets them, read the reference before you post it
-and leave it out if it could say something about a person or a system.
+*Reference* is a random id when Sahifa made it. Whatever sends a request (a proxy in front of
+Sahifa, a script that calls the API) may set a reference of its own, and a reference does not
+show who made it. So read it before you post it, and leave it out if it could say something
+about a person or a system.
 
 ## The operator's log
 
