@@ -16,6 +16,21 @@ curl -fsSL "$base/.env.example" -o .env
 curl -fsSL "$base/compose.override.example.yaml" -o compose.override.yaml
 ```
 
+### Which version
+
+`SAHIFA_TAG` in `.env` names the images to run. The example file says `latest`, which is
+whatever was built last and changes under you with the next `pull`. For an install that should
+stay as it is, set one of:
+
+| `SAHIFA_TAG` | What it is |
+|---|---|
+| a version, for example `0.1.0` | a release; the list is on the project's *Releases* page on GitHub |
+| `sha-<7 characters>`, for example `sha-edcf171` | the build of one commit on `main`; it never moves |
+
+The footer of every page shows what runs: `Sahifa 0.1.0 (edcf171) · schema 0010`. The seven
+characters in brackets are the commit, so `sha-edcf171` is that exact build. Say them when you
+report a problem.
+
 ## 2. A password at the edge
 
 Without Keycloak, the web container asks for a password on every page and API call. Make a
@@ -86,6 +101,36 @@ put in on purpose, so you see a report before you connect anything of your own.
 
 - Scheduled scans: on the connection, *Schedule*.
 - TLS and a domain: set `SAHIFA_DOMAIN`, with ports 80 and 443 reachable (`README.md`).
-- Updating: `docker compose pull && docker compose up -d`; migrations run on start.
 - Something wrong: `docker compose logs api worker`, and the troubleshooting table in
   `caprover.md`, which applies to compose as well.
+
+## Updating, and going back
+
+1. Take a backup (`docs/guides/backup-and-restore.md`); it is one command.
+2. Set `SAHIFA_TAG` in `.env` to the new version or `sha-` tag.
+3. `docker compose pull && docker compose up -d`. The API brings the database to its version
+   when it starts; the worker waits for it.
+
+An older image does not start on a database a newer one has changed (`db.schema_mismatch` in
+the API's log). To go back, restore the backup from step 1 with the old `SAHIFA_TAG`.
+
+## When someone sees an error
+
+An error Sahifa did not expect shows a **Reference** on the page, for example
+`Reference: 3f2a9c0d4b7e4c1f9a6d5e8b7c2a1f04`. Every answer of the API carries it as the header
+`X-Request-ID`. The API's log has the error under it, with the request and the stack trace:
+
+```bash
+docker compose logs api | grep 3f2a9c0d4b7e4c1f9a6d5e8b7c2a1f04
+```
+
+The line with `"event": "api.error"` is the one to read. A scan that failed says why on its
+own page; its lines in the worker's log carry the scan's id.
+
+## Backups, your data, feedback
+
+- Back up the database daily and before every update: `docs/guides/backup-and-restore.md`.
+- What Sahifa reads, keeps and deletes: `docs/guides/your-data.md`.
+- What does not work, or what you miss: the *Feedback* link in the footer opens the project's
+  issues on GitHub. Add the version line from the footer and, for an error, its reference;
+  leave out data, host names and passwords.

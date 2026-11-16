@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **A reference for every error** (spec 023). Every answer of the API carries `X-Request-ID`.
+  An error Sahifa did not expect shows the reference on the page, and the API's log has one
+  line `api.error` under it with the request and the stack trace. A proxy in front of Sahifa
+  may set the reference itself.
+- **For self-hosters** (spec 023): `docs/guides/backup-and-restore.md` (tested by CI on every
+  change), `docs/guides/your-data.md` on what Sahifa reads, keeps and deletes, and in the quick
+  start which image tag to install, how to update and how to go back. The footer shows the
+  version with its commit, a *Feedback* link and the data note.
 - **First run** (spec 022). The empty start page says what Sahifa does in three steps and
   offers *Try the demo data*: one click scans a made-up web shop with faults put in on purpose
   (`POST /api/scans/demo`), and the report says what it shows. A running scan lists its steps.

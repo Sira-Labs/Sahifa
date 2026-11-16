@@ -241,8 +241,23 @@ databases and files, and get in by invitation link; staging serves demos.
         fails once, with a panel and a retry.
       - Advice texts live in the web (`errorAdvice` by status, `scanFailureAdvice` by reason),
         not in the API, whose messages stay as they are.
-- [ ] S4b-4 stable for test users: versioned images, error reporting, backup guide, data note,
-      feedback link.
+- [x] **S4b-4 stable for test users** — `docs/specs/023-stable-for-test-users.md` (17 Nov)
+      - Error reporting is the API's own log, with a reference (`X-Request-ID`) the page
+        shows for 500 and above; no error-tracking service, which would need an account and
+        send data out of a self-hosted install (S12-3 has it).
+      - The reference middleware sits inside the security headers and outside the limits, so
+        413/429/507 carry it and its own 500 gets the headers. A caller's reference is kept
+        only in a narrow form (8 to 64 of `A-Z a-z 0-9 . _ -`), so a proxy can set one.
+      - Versioned images already existed (`release.yml`); what was missing is telling people
+        which tag to take. The quick start now says: a release, or the `sha-` tag of the commit
+        the footer shows, never `latest`.
+      - The backup guide is tested: the CI job `quickstart` dumps, drops, restores and
+        compares the scans. Restore on a new machine starts the bundle once first, because the
+        role `sahifa_app` is made by the first migration and is not in a dump.
+      - The feedback link is fixed to the GitHub issue chooser, not a setting.
+      - Owner: tag a release for test users from `main` (for example `v0.2.0-beta.1`; `v*` tags
+        are yours by CONTRIBUTING.md). It blocks nothing: until then the quick start has them
+        pin `sha-<commit>`, which never moves.
 
 ## Maintenance (nightly runs)
 
