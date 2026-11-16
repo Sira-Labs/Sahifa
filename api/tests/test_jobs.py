@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
+import procrastinate
 import psycopg
 import pytest
 from alembic import command
@@ -427,12 +428,52 @@ def test_conninfo_and_application_name() -> None:
     assert len(jobs.application_name("worker", "x" * 100)) == 63
 
 
+FETCH_JOB_SOURCE = "SELECT prosrc FROM pg_proc WHERE proname = 'procrastinate_fetch_job_v2'"
+SKIPS_NULL_LOCKS = "jobs.lock IS NULL"
+
+
+def released_fetch_job_body() -> str:
+    """The body of `procrastinate_fetch_job_v2` in the installed Procrastinate's schema."""
+    schema = SchemaManager.get_schema()
+    head = schema.index("CREATE FUNCTION procrastinate_fetch_job_v2(")
+    start = schema.index("$$", head) + 2
+    return schema[start : schema.index("$$", start)]
+
+
 def test_procrastinate_schema_is_pinned() -> None:
-    """Migration 0004 carries Procrastinate 3.10.0's schema. A newer Procrastinate needs a new
-    migration with its migration scripts (never an edit of 0004); then update this test."""
-    assert importlib.metadata.version("procrastinate") == "3.10.0"
-    vendored = (MIGRATIONS_DIR / "versions" / "0004_procrastinate_3_10_0.sql").read_text(encoding="utf-8")
-    assert vendored.endswith(SchemaManager.get_schema())
+    """Migration 0004 carries Procrastinate 3.10.0's schema and 0011 the migration script of
+    3.11.0. A newer Procrastinate needs a new migration with its migration scripts (never an
+    edit of 0004 or 0011); then update this test."""
+    assert importlib.metadata.version("procrastinate") == "3.11.0"
+    versions = MIGRATIONS_DIR / "versions"
+    released = sorted(
+        script.name
+        for script in (Path(procrastinate.__file__).parent / "sql" / "migrations").glob("*.sql")
+        if script.name > "03.10"
+    )
+    assert released == ["03.11.00_01_pre_fetch_job_skip_null_lock.sql"]
+    script = Path(procrastinate.__file__).parent / "sql" / "migrations" / released[0]
+    vendored = (versions / "0011_procrastinate_3_11_0.sql").read_text(encoding="utf-8")
+    assert vendored.endswith(script.read_text(encoding="utf-8"))
+
+
+@needs_db
+def test_migrated_schema_is_the_released_one(owner: Engine) -> None:
+    """0004 and 0011 together give the function the installed Procrastinate ships."""
+    assert sql(owner, FETCH_JOB_SOURCE) == [(released_fetch_job_body(),)]
+
+
+@needs_db
+def test_migration_0011_round_trip(owner: Engine) -> None:
+    assert DB_URL
+    downgrade(DB_URL, "0010")
+    try:
+        before = sql(owner, FETCH_JOB_SOURCE)[0][0]
+        assert SKIPS_NULL_LOCKS not in before and "jobs.lock IS NOT NULL" in before
+    finally:
+        upgrade(DB_URL)
+    assert SKIPS_NULL_LOCKS in sql(owner, FETCH_JOB_SOURCE)[0][0]
+    command.check(build_config(DB_URL))
 
 
 @needs_db

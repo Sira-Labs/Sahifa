@@ -290,6 +290,15 @@ databases and files, and get in by invitation link; staging serves demos.
         only raised it for `core/`), so the API runs the version core is tested with.
       - Procrastinate stays at 3.10.0 here: 3.11.0 changes `procrastinate_fetch_job_v2`, which
         needs its own Alembic migration (next entry).
+- [x] **Procrastinate 3.11.0** (17 Nov, the rest of Dependabot PR #59)
+      - 3.11.0 changes one function, `procrastinate_fetch_job_v2`, and nothing else in its
+        schema. Migration 0011 applies Procrastinate's own script, vendored as released next to
+        it like 0004's schema; the downgrade reads the 3.10.0 function out of 0004's file.
+      - The pin test can no longer compare 0004's file with the installed schema. It now checks
+        the version, that 0011's file is the one script released after 3.10, and (with a
+        database) that the migrated function is the one the installed Procrastinate ships.
+      - The script is a "pre" migration: the new function serves 3.10.0 too, so the api
+        migrating before the worker restarts is safe.
 - [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels
