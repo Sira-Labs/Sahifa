@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
 import { useId, useState } from "react";
-import { ApiError, api } from "../api";
+import { ApiError, DATA_NOTE_URL, FEEDBACK_URL, api } from "../api";
 import { noAccessEmail, signOut, type Me } from "../auth";
 import { BrandMark } from "../components/Brand";
 import { ErrorPanel } from "../components/ErrorPanel";
+import { versionLine } from "../format";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { administers, setWorkspaceFilter, useMe, useWorkspaceFilter } from "../workspace";
 import { NoAccess } from "./NoAccess";
@@ -35,7 +36,7 @@ function WorkspaceFilter({ me }: { me: Me }) {
 
 /** Page frame of the app: checks the session (spec 006), then the skip link, sticky header
  * with the mark, the organisation and the workspace filter (spec 016), navigation, account and
- * sign-out, the route, and the API version in the footer. A 401 goes to /login (the API client's handler); an address without access sees
+ * sign-out, the route, and in the footer the version, the feedback link and the data note (spec 023). A 401 goes to /login (the API client's handler); an address without access sees
  * "No access yet". In dev and proxy mode `/api/auth/me` always answers, so nothing changes.
  * `children` replaces the route outlet (the not-found page of unknown paths). */
 export function Layout({ children }: { children?: React.ReactNode }) {
@@ -127,10 +128,18 @@ export function Layout({ children }: { children?: React.ReactNode }) {
       </main>
       <footer className="wrap site-footer">
         <span>Sahifa · data quality with honest intervals</span>
+        <span className="footer-links">
+          <a href={FEEDBACK_URL} target="_blank" rel="noreferrer">
+            Feedback
+          </a>
+          <a href={DATA_NOTE_URL} target="_blank" rel="noreferrer">
+            Your data
+          </a>
+        </span>
         <span className="num">
           {version.isPending && "Connecting to the API…"}
           {version.isError && "API unreachable"}
-          {version.data && `API ${version.data.version} · schema ${version.data.schema_revision}`}
+          {version.data && versionLine(version.data)}
         </span>
       </footer>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, api, errorAdvice, errorMessage, normalizeFinding, query, statusMessage } from "../api";
+import { ApiError, api, errorAdvice, errorMessage, errorReference, normalizeFinding, query, statusMessage } from "../api";
 import { json, makeFinding, stubFetch } from "./helpers";
 
 /** The error a call rejects with. */
@@ -59,6 +59,28 @@ describe("error mapping", () => {
     const err = await failure(api.listScans());
     expect(err.status).toBe(0);
     expect(err.message).toMatch(/cannot reach the sahifa api/i);
+  });
+});
+
+describe("error reference (spec 023)", () => {
+  const answer = (status: number, id?: string) =>
+    new Response(JSON.stringify({ detail: "internal_error", message: "Sahifa hit an error it did not expect." }), {
+      status,
+      headers: id ? { "Content-Type": "application/json", "X-Request-ID": id } : { "Content-Type": "application/json" },
+    });
+
+  it("is on the error of a failed call, and null without the header", async () => {
+    stubFetch((url) => answer(500, url === "/healthz" ? "0123456789abcdef0123456789abcdef" : undefined));
+    expect((await failure(api.health())).requestId).toBe("0123456789abcdef0123456789abcdef");
+    expect((await failure(api.getScan("s1"))).requestId).toBeNull();
+  });
+
+  it("is shown for 500 and above only", () => {
+    const error = (status: number) => new ApiError(status, "x", null, "ref-12345678");
+    for (const status of [500, 502, 503, 504, 507]) expect(errorReference(error(status))).toBe("ref-12345678");
+    for (const status of [0, 400, 403, 404, 413, 429]) expect(errorReference(error(status))).toBeNull();
+    expect(errorReference(new ApiError(500, "x"))).toBeNull();
+    expect(errorReference(new Error("x"))).toBeNull();
   });
 });
 

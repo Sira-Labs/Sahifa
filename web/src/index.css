@@ -312,6 +312,10 @@ summary {
   flex-wrap: wrap;
   gap: 8px 16px;
 }
+.footer-links {
+  display: flex;
+  gap: 16px;
+}
 @media (max-width: 560px) {
   .brand-ar {
     display: none;

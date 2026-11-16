@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { api } from "../api";
+import { DATA_NOTE_URL, api } from "../api";
 import { StatusChip } from "../components/Chips";
 import { ConnectionTest } from "../components/ConnectionTest";
 import { DemoScanButton } from "../components/DemoScanButton";
@@ -143,6 +143,12 @@ function UploadPanel({ onCreated }: { onCreated: (scan: Scan) => void }) {
         </div>
       )}
       <SampleField sample={sample} />
+      <p className="muted text-sm">
+        The files stay on the server Sahifa runs on and are deleted some days after the scan (seven unless the operator changed it); the report stays.{" "}
+        <a href={DATA_NOTE_URL} target="_blank" rel="noreferrer">
+          Your data
+        </a>
+      </p>
       {readOnly && <p className="muted">{VIEWER_REASON}</p>}
       {upload.isError && <ErrorPanel title="The upload was not accepted" error={upload.error} onRetry={() => upload.mutate()} />}
       <div>

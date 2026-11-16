@@ -120,6 +120,36 @@ describe("NewScan upload", () => {
     expect(alert.textContent).toContain("upload exceeds 200 MB");
     expect(alert.textContent).toContain("Split the files, or raise SAHIFA_MAX_UPLOAD_MB");
     expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(alert.textContent).not.toContain("Reference");
+  });
+
+  it("shows the reference of an error the API did not expect (spec 023)", async () => {
+    stubFetch(
+      () =>
+        new Response(JSON.stringify({ detail: "internal_error", message: "Sahifa hit an error it did not expect." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", "X-Request-ID": "0123456789abcdef0123456789abcdef" },
+        }),
+    );
+    const user = setup();
+    renderApp("/scans/new");
+    await user.upload(await screen.findByLabelText("Choose files"), [file("orders.csv")]);
+    await user.click(screen.getByRole("button", { name: "Start scan" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Sahifa hit an error it did not expect.");
+    expect(alert.textContent).toContain("Reference: 0123456789abcdef0123456789abcdef");
+    expect(alert.textContent).toContain("in the API's log");
+  });
+
+  it("says where uploaded files go and links the data note (spec 023)", async () => {
+    stubFetch(() => ({}));
+    renderApp("/scans/new");
+    await screen.findByLabelText("Choose files");
+    expect(screen.getByText(/The files stay on the server Sahifa runs on and are deleted some days after the scan/)).toBeTruthy();
+    const links = screen.getAllByRole("link", { name: "Your data" });
+    expect(links.map((a) => a.getAttribute("href"))).toContain(
+      "https://github.com/Sira-Labs/Sahifa/blob/main/docs/guides/your-data.md",
+    );
   });
 });
 

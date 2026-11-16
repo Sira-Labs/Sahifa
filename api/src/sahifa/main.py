@@ -21,6 +21,7 @@ from .db import Database
 from .db.migrate import head_revision
 from .db.models import Organisation
 from .logging import configure, get_logger
+from .requests import RequestIdMiddleware
 from .routers import (
     assets,
     audit,
@@ -171,8 +172,8 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
     )
     app.state.settings = settings
     app.state.oidc = oidc
-    # Outermost last (spec 012): headers on every answer, then size and disk, then rate limits,
-    # then the CSRF guard, all before FastAPI parses a body.
+    # Outermost last (spec 012): headers on every answer, then the request's reference, then
+    # size and disk, then rate limits, then the CSRF guard, all before FastAPI parses a body.
     app.add_middleware(
         CsrfMiddleware, public_url=settings.public_url, exempt_paths=frozenset({auth.BACKCHANNEL_PATH})
     )
@@ -192,6 +193,9 @@ def create_app(settings: Settings | None = None, *, oidc: OidcClient | None = No
         min_free_bytes=settings.min_free_disk_mb * MB,
         writes={DEMO_PATH: DEMO_BYTES},
     )
+    # Inside the security headers, outside everything else (spec 023): the limits' answers
+    # carry the reference, and the 500 it writes for an unexpected error gets the headers.
+    app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs)
 
     @app.exception_handler(NoAccessError)

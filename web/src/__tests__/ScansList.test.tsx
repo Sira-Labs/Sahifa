@@ -173,6 +173,15 @@ describe("ScansList", () => {
     expect(screen.queryByText("Sahifa could not check your session")).toBeNull();
   });
 
+  it("shows the version, the feedback link and the data note in the footer (spec 023)", async () => {
+    stubFetch(() => ({ items: [], next_cursor: null }));
+    renderApp("/");
+    const footer = (await screen.findByText("Sahifa 0.1.0 · schema 0002")).closest("footer")!;
+    const href = (name: string) => within(footer).getByRole("link", { name }).getAttribute("href");
+    expect(href("Feedback")).toBe("https://github.com/Sira-Labs/Sahifa/issues/new/choose");
+    expect(href("Your data")).toBe("https://github.com/Sira-Labs/Sahifa/blob/main/docs/guides/your-data.md");
+  });
+
   it("appends the next page on load more", async () => {
     stubFetch((url) => {
       if (url === "/api/scans?limit=25") return { items: [scan(1), scan(2)], next_cursor: "c1" };

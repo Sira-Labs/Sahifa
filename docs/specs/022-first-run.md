@@ -110,7 +110,7 @@ files by name).
     | 415 | accepted are CSV, TSV, Parquet and JSON lines, text as UTF-8 |
     | 429 | wait a minute, then retry |
     | 502, 503, 504 | the API is starting or down: check its container and logs, then retry |
-    | 500 | look at the API's log for this time; retrying may work |
+    | 500 | retrying may work; if not, the API's log has the cause (spec 023 adds the reference to search for) |
     | 507 | free disk space on the server, or lower `SAHIFA_UPLOAD_TTL_DAYS` |
 
     Other statuses get no second line: their message already says what is wrong.
