@@ -73,6 +73,8 @@ All notable changes to this project are documented here. The format follows
   warning at start; the next release removes it.
 
 ### Changed
+- Dependencies: DuckDB 2.0, croniter 7 and jsdom 31, with the weekly minor updates of core,
+  API and web.
 - **Access comes from memberships.** A signed-in person needs a workspace (or to be the org
   admin). Until invitations arrive, an address in `SAHIFA_ALLOWED_EMAILS` becomes an editor of
   the `Default` workspace; everything that existed before moves to `Default`.
