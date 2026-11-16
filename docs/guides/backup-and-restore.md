@@ -18,11 +18,15 @@ Your sources are not part of this: Sahifa only reads them.
 ## Back up
 
 ```bash
-docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > "sahifa-$(date +%F).dump"
-cp .env "env-$(date +%F).backup"
+stamp=$(date +%F-%H%M%S)
+docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > "sahifa-$stamp.dump"
+cp .env "env-$stamp.backup"
+cp compose.override.yaml "compose.override-$stamp.yaml"
 ```
 
 - It runs while Sahifa is in use; the dump is one consistent state.
+- The names carry the time to the second, so a second backup on the same day (one before an
+  update, one after) does not overwrite the first.
 - Write down the version next to it (the footer of every page shows it, or
   `docker compose exec api python -c "import sahifa; print(sahifa.__version__)"` and the
   `SAHIFA_TAG` in `.env`): a dump restores into the same version or a newer one.
@@ -30,25 +34,30 @@ cp .env "env-$(date +%F).backup"
   start, for example from cron:
 
   ```cron
-  15 2 * * *  cd /home/me/sahifa && docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > /backup/sahifa-$(date +\%F).dump
+  15 2 * * *  cd /home/me/sahifa && docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > /backup/sahifa-$(date +\%F-\%H\%M\%S).dump
   ```
 
 - Take one before every update.
 
 ## Restore
 
-On the machine that should run Sahifa. On a new machine, follow the quick start first, with
-the `.env` you saved, and let it start once: the first start creates the database roles the
-dump refers to.
+On the machine that should run Sahifa. On a new machine, follow the quick start first, but
+put the `.env` and the `compose.override.yaml` you saved in place of the downloaded ones (the
+override holds your folders and other changes), and let it start once: the first start
+creates the database roles the dump refers to.
 
 ```bash
-docker compose stop api worker
-docker compose exec -T db dropdb -U sahifa --force sahifa
-docker compose exec -T db createdb -U sahifa sahifa
-docker compose exec -T db pg_restore -U sahifa -d sahifa --no-owner --exit-on-error < sahifa-2026-11-17.dump
-docker compose up -d
+dump=sahifa-2026-11-17-021500.dump
+docker compose stop api worker &&
+  docker compose exec -T db dropdb -U sahifa --force sahifa &&
+  docker compose exec -T db createdb -U sahifa sahifa &&
+  docker compose exec -T db pg_restore -U sahifa -d sahifa --no-owner --exit-on-error < "$dump" &&
+  docker compose up -d
 ```
 
+- The steps are chained with `&&` on purpose: when one fails, the rest does not run, and
+  Sahifa is not started on a database that was only partly restored. Fix what the failed
+  command reports and run the block again; it starts from an empty database each time.
 - `docker compose ps` shows `api` healthy after a few seconds; the scans, checks and findings
   are back, and people sign in as before.
 - **The image must be as new as the dump, or newer.** A newer image brings the database up to

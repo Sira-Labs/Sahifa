@@ -77,11 +77,13 @@ with the version I run.
    (change `SAHIFA_TAG`, `pull`, `up -d`; the API migrates on start) and that going back to an
    older image after a migration needs the backup from before the update.
 8. **Backup.** The database holds everything worth keeping; the guide backs it up with
-   `pg_dump` in the custom format through the `db` container, and `.env` by copying it.
+   `pg_dump` in the custom format through the `db` container, and `.env` and
+   `compose.override.yaml` by copying them, under names with the time to the second.
    Uploaded files and Caddy's certificates are not backed up: the first are deleted after
    `SAHIFA_UPLOAD_TTL_DAYS` anyway, the second are issued again.
 9. **Restore** stops `api` and `worker`, replaces the database with the dump (`pg_restore`),
-   and starts them with an image as new as the dump or newer. On a new machine the bundle is
+   and starts them with an image as new as the dump or newer; the steps are chained, so a
+   failed one stops the rest. On a new machine the bundle is
    started once first, so the roles exist. The CI job `quickstart` runs backup and restore
    after its scans and checks that the scans are still there.
 

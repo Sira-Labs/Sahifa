@@ -106,7 +106,7 @@ put in on purpose, so you see a report before you connect anything of your own.
 
 ## Updating, and going back
 
-1. Take a backup (`docs/guides/backup-and-restore.md`); it is one command.
+1. Take a backup (`docs/guides/backup-and-restore.md`); it is a few lines.
 2. Set `SAHIFA_TAG` in `.env` to the new version or `sha-` tag.
 3. `docker compose pull && docker compose up -d`. The API brings the database to its version
    when it starts; the worker waits for it.
