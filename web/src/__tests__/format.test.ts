@@ -7,6 +7,7 @@ import {
   formatScoreInterval,
   scanFailureAdvice,
   scanSource,
+  versionLine,
   sortFindings,
 } from "../format";
 import { makeFinding, makeScan } from "./helpers";
@@ -41,6 +42,13 @@ describe("helpers", () => {
       makeFinding({ severity: "critical", ratio: 0.8, summary: "c-big" }),
     ]);
     expect(out.map((f) => f.summary)).toEqual(["c-big", "c-small", "l"]);
+  });
+
+  it("writes the footer's version line, with the commit when the image knows it", () => {
+    const version = { version: "0.1.0", schema_revision: "0011" };
+    expect(versionLine({ ...version, commit: "edcf1717787a57d3678926cf562dd213a240b993" })).toBe("Sahifa 0.1.0 (edcf171) · schema 0011");
+    expect(versionLine({ ...version, commit: "unknown" })).toBe("Sahifa 0.1.0 · schema 0011");
+    expect(versionLine({ ...version, commit: "test" })).toBe("Sahifa 0.1.0 · schema 0011");
   });
 
   it("names the source of a scan", () => {

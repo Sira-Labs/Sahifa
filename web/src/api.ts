@@ -47,12 +47,19 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
-/** A failed request. `status` is 0 when the API could not be reached at all. */
+/** Where test users say what does not work (spec 023). */
+export const FEEDBACK_URL = "https://github.com/Sira-Labs/Sahifa/issues/new/choose";
+/** The note on what Sahifa reads, keeps and deletes (spec 023). */
+export const DATA_NOTE_URL = "https://github.com/Sira-Labs/Sahifa/blob/main/docs/guides/your-data.md";
+
+/** A failed request. `status` is 0 when the API could not be reached at all; `requestId` is
+ * the answer's `X-Request-ID`, the reference the operator finds in the API's log (spec 023). */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
     public readonly body: unknown = null,
+    public readonly requestId: string | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -110,12 +117,19 @@ const STATUS_ADVICE: Record<number, string> = {
   413: "Split the files, or raise SAHIFA_MAX_UPLOAD_MB on the API.",
   415: "Accepted are CSV, TSV, Parquet and JSON lines; text files as UTF-8.",
   429: "Wait a minute, then retry.",
-  500: "Look at the API's log for this time; retrying may work.",
+  500: "Retrying may work. If it does not, the API's log has the cause.",
   502: "The API is starting or down: check its container and its log, then retry.",
   503: "The API is starting or down: check its container and its log, then retry.",
   504: "The API is starting or down: check its container and its log, then retry.",
   507: "Free disk space on the server, or lower SAHIFA_UPLOAD_TTL_DAYS.",
 };
+
+/** The reference to show for `error`: the answer's request id when the API failed (500 and
+ * above), where the operator has a log line to look up. Null for refused or invalid requests,
+ * whose message is the answer. */
+export function errorReference(error: unknown): string | null {
+  return error instanceof ApiError && error.status >= 500 ? error.requestId : null;
+}
 
 /** One sentence on what to do about `error`, or null when its message says it all. */
 export function errorAdvice(error: unknown): string | null {
@@ -153,7 +167,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const body = await res.text();
     if (res.status === 401) onUnauthorized?.();
-    throw new ApiError(res.status, errorMessage(body, statusMessage(res.status, res.statusText)), parseJson(body));
+    throw new ApiError(
+      res.status,
+      errorMessage(body, statusMessage(res.status, res.statusText)),
+      parseJson(body),
+      res.headers.get("X-Request-ID"),
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

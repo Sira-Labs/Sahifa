@@ -1,5 +1,5 @@
 import { DIMENSIONS, SEVERITY_RANK } from "./constants";
-import type { AssetRef, Dimension, Finding, Scan, Score } from "./types";
+import type { AssetRef, Dimension, Finding, Scan, Score, Version } from "./types";
 
 /** Zero-padded absolute integer part. */
 function pad(n: number, width = 2): string {
@@ -183,6 +183,13 @@ export function worstDimension(score: Score): { name: Dimension; value: number }
 /** Findings by severity, then by failed share, the largest first. */
 export function sortFindings(findings: Finding[]): Finding[] {
   return [...findings].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.ratio - b.ratio);
+}
+
+/** The footer's version line: `Sahifa 0.1.0 (abc1234) · schema 0011`. The commit is left out
+ * when the image does not know it (a local build). */
+export function versionLine(version: Version): string {
+  const known = /^[0-9a-f]{7,40}$/.test(version.commit);
+  return `Sahifa ${version.version}${known ? ` (${version.commit.slice(0, 7)})` : ""} · schema ${version.schema_revision}`;
 }
 
 /** Where a scan's data came from: the connection name, `Upload: 3 files` or `Demo data`. */

@@ -5,8 +5,9 @@
 #
 # Downloads nothing: it copies the files the quick start downloads from this checkout, fills
 # .env the way the quick start says, mounts the faulty shop's files read-only, adds a Postgres
-# source with a read-only and a writing login, starts the bundle behind the password gate and
-# runs check_api.py against it.
+# source with a read-only and a writing login, starts the bundle behind the password gate,
+# runs check_api.py against it, and then backs the database up and restores it the way
+# docs/guides/backup-and-restore.md says (spec 023).
 set -euo pipefail
 
 api_image=${1:?usage: quickstart-check.sh <api image> <web image>}
@@ -94,3 +95,26 @@ echo "quickstart: the bundle answers through the gate"
 
 # Step 5: test the logins and scan.
 python3 "$here/quickstart/check_api.py" http://localhost me "$password"
+
+# docs/guides/backup-and-restore.md (spec 023): back up, restore, and the scans are still there.
+scans() {
+  curl -fsS -u "me:$password" "http://localhost/api/scans?limit=100" |
+    python3 -c 'import json, sys; print(" ".join(sorted(s["id"] + ":" + s["status"] for s in json.load(sys.stdin)["items"])))'
+}
+before=$(scans)
+[[ -n $before ]] || { echo "quickstart: FAIL, no scans to back up" >&2; exit 1; }
+"${compose[@]}" exec -T db pg_dump -U sahifa -d sahifa --format=custom > sahifa.dump.part
+mv sahifa.dump.part sahifa.dump
+"${compose[@]}" exec -T db pg_restore --list < sahifa.dump > /dev/null
+"${compose[@]}" stop api worker
+"${compose[@]}" exec -T db dropdb -U sahifa --force --if-exists sahifa
+"${compose[@]}" exec -T db createdb -U sahifa sahifa
+"${compose[@]}" exec -T db pg_restore -U sahifa -d sahifa --no-owner --exit-on-error < sahifa.dump
+"${compose[@]}" up -d --wait api worker
+for _ in $(seq 30); do
+  after=$(scans 2>/dev/null || true)
+  [[ $after == "$before" ]] && break
+  sleep 2
+done
+[[ $after == "$before" ]] || { echo "quickstart: FAIL, the scans after the restore differ from before" >&2; exit 1; }
+echo "quickstart: backup and restore keep the scans"
