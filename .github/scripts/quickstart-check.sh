@@ -103,7 +103,9 @@ scans() {
 }
 before=$(scans)
 [[ -n $before ]] || { echo "quickstart: FAIL, no scans to back up" >&2; exit 1; }
-"${compose[@]}" exec -T db pg_dump -U sahifa -d sahifa --format=custom > sahifa.dump
+"${compose[@]}" exec -T db pg_dump -U sahifa -d sahifa --format=custom > sahifa.dump.part
+mv sahifa.dump.part sahifa.dump
+"${compose[@]}" exec -T db pg_restore --list < sahifa.dump > /dev/null
 "${compose[@]}" stop api worker
 "${compose[@]}" exec -T db dropdb -U sahifa --force --if-exists sahifa
 "${compose[@]}" exec -T db createdb -U sahifa sahifa

@@ -78,10 +78,12 @@ with the version I run.
    older image after a migration needs the backup from before the update.
 8. **Backup.** The database holds everything worth keeping; the guide backs it up with
    `pg_dump` in the custom format through the `db` container, and `.env` and
-   `compose.override.yaml` by copying them, under names with the time to the second.
+   `compose.override.yaml` by copying them, under names with the time to the second; the dump gets its name only when `pg_dump`
+   succeeded.
    Uploaded files and Caddy's certificates are not backed up: the first are deleted after
    `SAHIFA_UPLOAD_TTL_DAYS` anyway, the second are issued again.
-9. **Restore** stops `api` and `worker`, replaces the database with the dump (`pg_restore`),
+9. **Restore** reads the dump's table of contents first (`pg_restore --list`), so a missing
+   or broken file stops it before the database is dropped. It then stops `api` and `worker`, replaces the database with the dump (`pg_restore`),
    and starts them with an image as new as the dump or newer; the steps are chained, so a
    failed one stops the rest. On a new machine the bundle is
    started once first, so the roles exist. The CI job `quickstart` runs backup and restore

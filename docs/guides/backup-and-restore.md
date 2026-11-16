@@ -19,10 +19,16 @@ Your sources are not part of this: Sahifa only reads them.
 
 ```bash
 stamp=$(date +%F-%H%M%S)
-docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > "sahifa-$stamp.dump"
-cp .env "env-$stamp.backup"
-cp compose.override.yaml "compose.override-$stamp.yaml"
+docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > "sahifa-$stamp.dump.part" &&
+  mv "sahifa-$stamp.dump.part" "sahifa-$stamp.dump" &&
+  cp .env "env-$stamp.backup" &&
+  cp compose.override.yaml "compose.override-$stamp.yaml" &&
+  echo "backup $stamp complete"
 ```
+
+- The dump is written as `.dump.part` and gets its name only when `pg_dump` succeeded. A file
+  ending in `.dump` is a complete dump; without the last line, `backup ... complete`, there is
+  no backup, whatever files lie around.
 
 - It runs while Sahifa is in use; the dump is one consistent state.
 - The names carry the time to the second, so a second backup on the same day (one before an
@@ -34,7 +40,7 @@ cp compose.override.yaml "compose.override-$stamp.yaml"
   start, for example from cron:
 
   ```cron
-  15 2 * * *  cd /home/me/sahifa && docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > /backup/sahifa-$(date +\%F-\%H\%M\%S).dump
+  15 2 * * *  cd /home/me/sahifa && f=/backup/sahifa-$(date +\%F-\%H\%M\%S).dump && docker compose exec -T db pg_dump -U sahifa -d sahifa --format=custom > "$f.part" && mv "$f.part" "$f"
   ```
 
 - Take one before every update.
@@ -48,13 +54,18 @@ creates the database roles the dump refers to.
 
 ```bash
 dump=sahifa-2026-11-17-021500.dump
-docker compose stop api worker &&
+docker compose exec -T db pg_restore --list < "$dump" > /dev/null &&
+  docker compose stop api worker &&
   docker compose exec -T db dropdb -U sahifa --force --if-exists sahifa &&
   docker compose exec -T db createdb -U sahifa sahifa &&
   docker compose exec -T db pg_restore -U sahifa -d sahifa --no-owner --exit-on-error < "$dump" &&
   docker compose up -d
 ```
 
+- The first step reads the dump's table of contents before anything is touched: a file that
+  is missing, empty, cut off at the start or not a dump stops the block while the current
+  database is still there. It does not prove that every byte of the dump is good; only a
+  restore does (see *Test it once*).
 - The steps are chained with `&&` on purpose: when one fails, the rest does not run, and
   Sahifa is not started on a database that was only partly restored. Fix what the failed
   command reports and run the block again; it starts from an empty database each time.
