@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Measures over time for every column** (spec 024). Each successful scan stores what it
+  measured per column: the shares of empty, distinct and blank values, mean, spread, minimum,
+  maximum and quantiles, and the table's row count. A column's profile on the table page links
+  to *Measures over time*: a small chart per measure over the last 30 scans and the numbers
+  per scan (`GET /api/assets/{id}/measures?column=`). History starts with the first scan after
+  the update (schema migration 0012).
 - **A reference for every error** (spec 023). Every answer of the API carries `X-Request-ID`.
   An error Sahifa did not expect shows the reference on the page, and the API's log has one
   line `api.error` under it with the request and the stack trace. A proxy in front of Sahifa

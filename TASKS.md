@@ -259,6 +259,26 @@ databases and files, and get in by invitation link; staging serves demos.
         are yours by CONTRIBUTING.md). It blocks nothing: until then the quick start has them
         pin `sha-<commit>`, which never moves.
 
+## Sprint 5 — metric history, anomalies, drift
+
+- [x] **S5-1 measure history per column** — `docs/specs/024-column-measure-history.md` (19 Nov)
+      - One row per scan, table and column with the measures as one JSON object
+        (`column_measures`, migration 0012), not a column or a row per measure: 30,000 rows
+        for a scan of 1,000 tables, new measures without a migration, a history in one index
+        range.
+      - Keyed by column name, because each scan replaces the `columns` rows; a column that is
+        gone keeps its history and its page.
+      - Only what the profile already has is stored, with no extra query. Minimum and maximum
+        of dates are text there and are left out until S5-2 decides how growing timestamps
+        are baselined.
+      - "Per check" of the story is not in it: failing checks already have their counts per
+        scan (`finding_occurrences`); a series for passing checks comes with S5-2, which
+        defines what the anomaly checks read.
+      - The existing tenancy tests found that a moved connection left its measures in the old
+        workspace; `move_connection` now moves them.
+      - The history starts with the first scan after the update; earlier reports are not
+        backfilled.
+
 ## Maintenance (nightly runs)
 
 - [x] **CI red on every PR: vulnerable API dependencies and a core test that expired**
@@ -318,6 +338,11 @@ databases and files, and get in by invitation link; staging serves demos.
       `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
       image does not build. Take it once the compiled dependencies publish cp315 wheels
       (`@dependabot recreate` on #42); no compiler in the runtime image for it.
+      - 19 Nov: `httptools` 0.9.0 and `uvloop` 0.23.0 now have them, and `markupsafe` 3.0.4;
+        `pyyaml` 6.0.3 (also from `uvicorn[standard]`) still has none and no newer release.
+        Checked with a binary-only install of the locked runtime set on 3.15.
+- [ ] **Trim `column_measures`** (from spec 024): one row per column and scan, kept for ever.
+      Once S5-2 fixes the window its baselines read, the clean-up job deletes what is older.
 
 ## Owner
 
