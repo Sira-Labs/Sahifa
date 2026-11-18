@@ -392,7 +392,7 @@ async def move(
     db: AsyncSession = Depends(session),
     caller: Access = Depends(access),
 ) -> ConnectionOut | JSONResponse:
-    """Move a connection with its scans, assets, checks, findings, schedule and scores to
+    """Move a connection with its scans, assets, checks, findings, schedule, scores and measures to
     another workspace, in one transaction (org admin)."""
     caller.require_org_admin(action="connection.move")
     conn = await db.get(Connection, connection_id)

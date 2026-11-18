@@ -26,6 +26,7 @@ from .checks import Saved, load_saved, persist_checks
 from .connections import resolve
 from .findings import record_findings
 from .history import score_records
+from .measures import measure_rows, record_measures
 
 if TYPE_CHECKING:
     from sahifa_core.models import CheckSpec
@@ -131,7 +132,8 @@ async def _succeed(
     saved: Saved | None = None,
 ) -> None:
     """Store the report, its assets, columns and checks (spec 007), its findings with their
-    occurrences (spec 009) and its scores (spec 011) in one transaction."""
+    occurrences (spec 009), its scores (spec 011) and its columns' measures (spec 024) in one
+    transaction."""
     async with sessions() as db:
         scan = await db.get(Scan, scan_id)
         if scan is None:
@@ -167,6 +169,19 @@ async def _succeed(
                 asset_ids=persisted.asset_ids,
             )
         )
+        # The scan row carries the new state; the measures are a bulk insert and need it and
+        # the assets flushed first.
+        await db.flush()
+        measured = await record_measures(
+            db,
+            measure_rows(
+                report,
+                scan_id=scan_id,
+                connection_id=scan.connection_id,
+                finished_at=finished,
+                asset_ids=persisted.asset_ids,
+            ),
+        )
         await db.commit()
     log.info(
         "scan.checks_persisted",
@@ -175,6 +190,7 @@ async def _succeed(
         regenerated=persisted.regenerated,
         skipped=persisted.skipped,
     )
+    log.info("scan.measures_stored", scan_id=str(scan_id), columns=measured)
     log.info(
         "scan.findings_linked",
         scan_id=str(scan_id),

@@ -252,5 +252,5 @@ async def test_deleting_a_workspace_with_a_scanned_demo(env: Env) -> None:
         assert sql(env.owner, twice, w=wid)[0][0] > 0
         done = await admin.request("DELETE", f"/api/workspaces/{wid}", json={"confirm": name})
         assert done.status_code == 204, done.text
-    for table in ("connections", "scans", "findings", "finding_occurrences", "checks"):
+    for table in ("connections", "scans", "findings", "finding_occurrences", "checks", "column_measures"):
         assert sql(env.owner, f"SELECT count(*) FROM {table} WHERE workspace_id = :w", w=wid) == [(0,)], table

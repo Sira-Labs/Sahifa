@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-# The 11 workspace-owned tables, each with a row in every tree `make_tree` writes.
+# The 12 workspace-owned tables, each with a row in every tree `make_tree` writes.
 TABLES = (
     "connections",
     "scans",
@@ -23,6 +23,7 @@ TABLES = (
     "finding_events",
     "finding_occurrences",
     "scores",
+    "column_measures",
 )
 
 
@@ -63,7 +64,7 @@ def add_member(owner: Engine, workspace_id: str, email: str, role: str) -> None:
 
 
 def make_tree(owner: Engine, workspace_id: str, *, scan_status: str = "succeeded") -> dict[str, str]:
-    """A connection in the workspace with one row in each of the other ten tables."""
+    """A connection in the workspace with one row in each of the other eleven tables."""
     ids = {
         name: str(uuid.uuid4())
         for name in ("connection", "scan", "asset", "check", "finding", "schedule", "audit")
@@ -96,6 +97,9 @@ def make_tree(owner: Engine, workspace_id: str, *, scan_status: str = "succeeded
         " VALUES (:audit, :ws, 'test', 'connection.created', 'connection', :connection, 'Registered')",
         "INSERT INTO scores (id, scan_id, connection_id, measured_at, checks, dimensions)"
         " VALUES (gen_random_uuid(), :scan, :connection, now(), 1, '{}'::jsonb)",
+        "INSERT INTO column_measures (id, scan_id, connection_id, asset_id, column_name, measured_at, rows,"
+        " measures) VALUES (gen_random_uuid(), :scan, :connection, :asset, 'c', now(), 10,"
+        " '{\"null_share\": 0.1}'::jsonb)",
     )
     with owner.connect() as conn:
         for statement in statements:
@@ -120,6 +124,7 @@ def workspaces_of(owner: Engine, connection_id: str) -> dict[str, set[str]]:
         "scan_schedules": "connection_id = :c",
         "assets": "connection_id = :c",
         "scores": "connection_id = :c",
+        "column_measures": "connection_id = :c",
         "columns": "asset_id IN (SELECT id FROM assets WHERE connection_id = :c)",
         "checks": "asset_id IN (SELECT id FROM assets WHERE connection_id = :c)",
         "check_events": "check_id IN (SELECT k.id FROM checks k JOIN assets a ON a.id = k.asset_id"

@@ -1,4 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
+import { api } from "../api";
 import { CheckList } from "../components/CheckList";
 import { ChecksPanel } from "../components/ChecksPanel";
 import { ColumnRow } from "../components/ColumnRow";
@@ -17,12 +19,28 @@ function caption(a: Asset): string {
   return `The 95 % intervals cover sampling uncertainty from reading ${formatCount(a.sample_rows)} of ${formatCompact(a.population)} rows.`;
 }
 
+/** The stored table behind a report's asset, found as the checks panel and the score history
+ * find it (same query keys, so one request serves all three); undefined until known, or when
+ * the scan could not store the table. */
+function useStoredAssetId(scanId: string, label: string): string | undefined {
+  const scan = useQuery({ queryKey: ["scan", scanId], queryFn: () => api.getScan(scanId) });
+  const connectionId = scan.data?.connection_id;
+  const stored = useQuery({
+    queryKey: ["asset", connectionId, label],
+    queryFn: () => api.findAsset(connectionId!, label),
+    enabled: !!connectionId,
+  });
+  return stored.data?.id;
+}
+
 /** `/scans/$scanId/assets/$asset`: asset-level checks, the columns with their profile and
- * checks, then the stored checks with their lifecycle actions (spec 007). `asset` is the asset
+ * checks (each column linking to its measures over time, spec 024), then the stored checks
+ * with their lifecycle actions (spec 007). `asset` is the asset
  * label (`namespace.name`). */
 export function AssetReport() {
   const { scanId, asset } = routeApi.useParams();
   const report = useReport(scanId);
+  const assetId = useStoredAssetId(scanId, asset);
 
   if (report.isPending) return <p role="status">Loading the report…</p>;
   if (report.isError) return <ErrorPanel title="Could not load the report" error={report.error} onRetry={() => void report.refetch()} />;
@@ -109,6 +127,7 @@ export function AssetReport() {
                   column={c}
                   checks={a.checks.filter((k) => k.spec.column === c.profile.name)}
                   read={a.sampled ? "sampled" : "full"}
+                  assetId={assetId}
                 />
               ))}
             </tbody>

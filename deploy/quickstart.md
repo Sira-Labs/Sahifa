@@ -27,7 +27,7 @@ stay as it is, set one of:
 | a version, for example `0.1.0` | a release; the list is on the project's *Releases* page on GitHub |
 | `sha-<7 characters>`, for example `sha-edcf171` | the build of one commit on `main`; it never moves |
 
-The footer of every page shows what runs: `Sahifa 0.1.0 (edcf171) · schema 0011`. The seven
+The footer of every page shows what runs: `Sahifa 0.1.0 (edcf171) · schema 0012`. The seven
 characters in brackets are the commit, so `sha-edcf171` is that exact build. Say them when you
 report a problem.
 

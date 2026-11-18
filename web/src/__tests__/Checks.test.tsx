@@ -106,6 +106,15 @@ async function openChecks() {
 }
 
 describe("Checks on the asset report", () => {
+  it("links each column to its measures over time once the stored table is known (spec 024)", async () => {
+    serve();
+    const user = userEvent.setup();
+    await openChecks();
+    await user.click(screen.getByRole("button", { name: /customer_id/ }));
+    const link = await screen.findByRole("link", { name: "Measures over time" });
+    expect(link.getAttribute("href")).toBe(`/assets/${ASSET_ID}/columns/customer_id`);
+  });
+
   it("shows tabs with counts and starts on the proposed checks", async () => {
     const { fetch } = serve();
     const tabs = await openChecks();

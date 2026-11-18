@@ -476,6 +476,42 @@ class ScoreRecord(Base):
     dimensions: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
+class ColumnMeasure(Base):
+    """What one scan measured on one column (spec 024): the profile's shares, mean, spread and
+    quantiles, as `{name: number}`.
+
+    One row per scan, table and column, with the measures in one JSON object: a scan of 1,000
+    tables writes its columns' rows once, the set of measures can grow without a migration,
+    and a column's history is one index range. `column_name` rather than a column id, because
+    each scan replaces the `columns` rows."""
+
+    __tablename__ = "column_measures"
+    __table_args__ = (
+        UniqueConstraint("scan_id", "asset_id", "column_name", name="uq_column_measures_scan_asset_column"),
+        Index("ix_column_measures_history", "asset_id", "column_name", text("measured_at DESC")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT", name="fk_column_measures_workspace_id"),
+        index=True,
+        server_default=FetchedValue(),
+    )
+    scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("connections.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
+    column_name: Mapped[str] = mapped_column(Text)
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Rows the profile read, rows in the table where the scan knows them, and whether the
+    # profile stands on a sample.
+    rows: Mapped[int] = mapped_column(BigInteger)
+    population: Mapped[int | None] = mapped_column(BigInteger)
+    sampled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    measures: Mapped[dict[str, float]] = mapped_column(JSONB)
+
+
 class Organisation(Base):
     """The install (spec 016): exactly one row in R2, named by `SAHIFA_ORG_NAME` at start."""
 

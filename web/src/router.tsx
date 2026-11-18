@@ -4,6 +4,7 @@ import { Account } from "./pages/Account";
 import { isPasskeyStatus, type PasskeyStatus } from "./auth";
 import { AssetReport } from "./pages/AssetReport";
 import { Audit } from "./pages/Audit";
+import { ColumnMeasures } from "./pages/ColumnMeasures";
 import { Connections } from "./pages/Connections";
 import { Findings } from "./pages/Findings";
 import { FindingPage, FindingsAcross } from "./pages/FindingsAcross";
@@ -53,6 +54,12 @@ const newScanRoute = createRoute({
 const reportRoute = createRoute({ getParentRoute: () => appRoute, path: "/scans/$scanId", component: Report });
 
 const assetRoute = createRoute({ getParentRoute: () => appRoute, path: "/scans/$scanId/assets/$asset", component: AssetReport });
+
+const columnMeasuresRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/assets/$assetId/columns/$column",
+  component: ColumnMeasures,
+});
 
 const findingsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -104,6 +111,7 @@ export const routeTree = rootRoute.addChildren([
     newScanRoute,
     reportRoute,
     assetRoute,
+    columnMeasuresRoute,
     findingsRoute,
     findingsAcrossRoute,
     findingRoute,
