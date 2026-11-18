@@ -297,6 +297,27 @@ class History(BaseModel):
     points: list[HistoryPoint]
 
 
+class MeasurePoint(BaseModel):
+    """What one successful scan measured on a column (spec 024)."""
+
+    scan_id: uuid.UUID
+    finished_at: datetime
+    # `manual` or `schedule` (spec 010).
+    trigger: str
+    # Rows the profile read; rows in the table where the scan knows them.
+    rows: int
+    population: int | None
+    sampled: bool
+    # {measure: number}; a measure the column does not have is absent.
+    measures: dict[str, float]
+
+
+class MeasureHistory(BaseModel):
+    asset_id: uuid.UUID
+    column: str
+    points: list[MeasurePoint]
+
+
 class WorkspaceOut(BaseModel):
     """A workspace with the caller's role and its size (spec 016)."""
 
