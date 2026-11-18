@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { formatCount, formatNumber, formatPercent, titleCase, worstDimension, type ReadKind } from "../format";
 import type { CheckResult, ColumnProfile, ColumnReport } from "../types";
@@ -59,8 +60,20 @@ function ValueList({ title, items, truncated }: { title: string; items: ColumnPr
   );
 }
 
-/** One column of the asset report: a summary row and, expanded, its profile and checks. */
-export function ColumnRow({ column, checks, read }: { column: ColumnReport; checks: CheckResult[]; read: ReadKind }) {
+/** One column of the asset report: a summary row and, expanded, its profile, the link to its
+ * measures over time (spec 024) and its checks. */
+export function ColumnRow({
+  column,
+  checks,
+  read,
+  assetId,
+}: {
+  column: ColumnReport;
+  checks: CheckResult[];
+  read: ReadKind;
+  /** The stored table, once known: the profile then links to the column's measures over time. */
+  assetId?: string;
+}) {
   const [open, setOpen] = useState(false);
   const detailId = useId();
   const p = column.profile;
@@ -114,6 +127,14 @@ export function ColumnRow({ column, checks, read }: { column: ColumnReport; chec
                   </div>
                 ))}
               </dl>
+              {assetId && (
+                <p>
+                  <Link to="/assets/$assetId/columns/$column" params={{ assetId, column: p.name }}>
+                    Measures over time
+                  </Link>
+                  <span className="muted text-sm"> · null share, distinct share, mean and quantiles per scan</span>
+                </p>
+              )}
               <div className="detail-lists">
                 <ValueList title="Top values" items={p.top} truncated={p.top_truncated} />
                 <ValueList title="Patterns" items={p.patterns} />

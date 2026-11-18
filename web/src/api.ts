@@ -3,6 +3,7 @@
 // CSRF header and the session cookie; a 401 sends the user to /login (spec 006).
 import type {
   Asset,
+  AssetDetail,
   AuditEntry,
   AuditFilters,
   CheckAction,
@@ -16,6 +17,7 @@ import type {
   FindingsSearch,
   Health,
   HistoryPoint,
+  MeasureHistory,
   Invitation,
   InvitationAccepted,
   InvitationCreated,
@@ -341,6 +343,10 @@ export const api = {
   /** A table's score history ending at `scanId`, or null when that scan has no score for it. */
   assetHistory: (assetId: string, scanId: string) =>
     historyOrNull(`/api/assets/${enc(assetId)}/history${query({ scan_id: scanId })}`),
+  getAsset: (assetId: string) => apiGet<AssetDetail>(`/api/assets/${enc(assetId)}`),
+  /** What the last scans measured on one column of a table, oldest first (spec 024). */
+  columnMeasures: (assetId: string, column: string) =>
+    apiGet<MeasureHistory>(`/api/assets/${enc(assetId)}/measures${query({ column })}`),
   listChecks: (assetId: string) => apiGet<StoredCheck[]>(`/api/checks${query({ asset_id: assetId })}`),
   changeCheck: (check: Pick<StoredCheck, "id" | "version">, action: CheckAction) =>
     apiSend<StoredCheck>("POST", `/api/checks/${enc(check.id)}/${action}`, { version: check.version }),

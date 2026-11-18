@@ -1183,6 +1183,39 @@ summary {
   padding-top: 4px;
 }
 /* Findings across scans (spec 009): occurrences, history, notes and the mute form. */
+.measure-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.measure-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+.measure-now {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.measure-chart {
+  width: 100%;
+  height: 56px;
+  color: var(--accent);
+}
+.measure-chart polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.measure-chart circle {
+  fill: currentColor;
+}
 .history-list {
   display: grid;
   gap: 0;

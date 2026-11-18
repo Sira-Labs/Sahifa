@@ -449,6 +449,26 @@ export type FindingsSearch = { status?: FindingsView; severity?: Severity; conne
 export type FindingChange = { note?: string; until?: string };
 
 /** One successful scan's score at one level, from `GET …/history` (spec 011). */
+/** What one successful scan measured on a column (spec 024). */
+export type MeasurePoint = {
+  scan_id: string;
+  finished_at: string;
+  trigger: ScanTrigger;
+  /** Rows the profile read; rows in the table where the scan knows them. */
+  rows: number;
+  population: number | null;
+  sampled: boolean;
+  /** `{measure: number}`; a measure the column does not have is absent. */
+  measures: Record<string, number>;
+};
+
+export type MeasureHistory = { asset_id: string; column: string; points: MeasurePoint[] };
+
+/** A stored table with its columns (`GET /api/assets/{id}`). */
+export type AssetDetail = Asset & {
+  columns: { name: string; position: number; physical_type: string; logical_type: string; semantic_type: string | null; role: string }[];
+};
+
 export type HistoryPoint = {
   scan_id: string;
   finished_at: string;
