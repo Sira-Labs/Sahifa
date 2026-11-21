@@ -49,8 +49,8 @@ As a data engineer, I ask for a column's thresholds and see that its null share,
 2. **Errors.** For each reading after a warm-up (3 readings, or 2 cycles), the absolute
    difference to the baseline computed from the readings before it only.
 3. **Interval.** With `m` past errors, the width is the `ceil((m + 1)(1 - rate))`-th smallest.
-   For the modelled histories in item 7, the measured false-alarm rate stays within `rate`.
-   This is an empirical result, not a bound for every history. The interval is the baseline
+   How close the false-alarm rate then comes to `rate` was measured per kind of history; item
+   7 has the results, which differ by case. They are empirical, not a bound. The interval is the baseline
    plus and minus the width. Readings too large to compute with (near the largest float) get
    no interval.
 4. **Enough history.** A threshold needs `ceil(1 / rate) - 1` errors: 19 at 5 %, 9 at 10 %, 99
