@@ -87,6 +87,7 @@ All notable changes to this project are documented here. The format follows
   warning at start; the next release removes it.
 
 ### Changed
+- The API image runs on Python 3.15 (was 3.14).
 - Dependencies: DuckDB 2.0, croniter 7 and jsdom 31, with the weekly minor updates of core,
   API and web.
 - Procrastinate 3.11.0, with schema migration 0011: the worker picks its next job without
