@@ -313,6 +313,14 @@ OPS: tuple[Op, ...] = (
     ),
     Op(
         "GET",
+        "/api/assets/{asset_id}/measures/thresholds",
+        "viewer",
+        "object",
+        200,
+        lambda w: (f"/api/assets/{w.tree['asset']}/measures/thresholds", {"params": {"column": "c"}}),
+    ),
+    Op(
+        "GET",
         "/api/checks",
         "viewer",
         "object",

@@ -318,6 +318,39 @@ class MeasureHistory(BaseModel):
     points: list[MeasurePoint]
 
 
+class MeasureInterval(BaseModel):
+    """Where a reading is expected and the interval an ordinary one stays in (spec 025)."""
+
+    expected: float
+    low: float
+    high: float
+    # Past one-step-ahead errors the width stands on.
+    scores: int
+    # Only on the newest reading's interval: whether the reading is outside it.
+    unusual: bool | None = None
+
+
+class MeasureThreshold(BaseModel):
+    # The newest scan's value; null when that scan did not have the measure.
+    value: float | None
+    # The newest reading against the scans before it; null while there are too few.
+    newest: MeasureInterval | None
+    # The interval for the next scan; null while there are too few.
+    next: MeasureInterval | None
+    scans: int
+    scans_needed: int
+
+
+class MeasureThresholds(BaseModel):
+    asset_id: uuid.UUID
+    column: str
+    # The false-alarm rate the intervals are built for.
+    rate: float
+    # 7 when the scans come daily and the history is read with a weekly cycle, else null.
+    period: int | None
+    measures: dict[str, MeasureThreshold]
+
+
 class WorkspaceOut(BaseModel):
     """A workspace with the caller's role and its size (spec 016)."""
 
