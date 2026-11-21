@@ -279,6 +279,26 @@ databases and files, and get in by invitation link; staging serves demos.
       - The history starts with the first scan after the update; earlier reports are not
         backfilled.
 
+- [x] **S5-2 anomaly thresholds** — `docs/specs/025-anomaly-thresholds.md` (22 Nov)
+      - Medians instead of STL (ADR-0017): histories are short and mostly irregular, and
+        statsmodels would bring NumPy, SciPy, pandas and patsy into a core with four
+        dependencies. The baseline is the median of the last 10 readings, or of the same
+        position in the last 4 cycles.
+      - The interval is conformal on the baseline's own one-step-ahead errors; a rate of 5 %
+        needs 22 scans (33 with a weekly cycle). Too little history calls nothing unusual.
+      - Gate G2 is `core/tests/test_anomaly.py`: 4,000 simulated histories per case. The rate
+        holds for level noise (normal and skewed) and a weekly cycle read as one. A steady
+        trend and an unmodelled cycle stay below 10 % at a chosen 5 %; the spec says so
+        instead of promising the rate everywhere.
+      - The first seasonal baseline (level plus the usual offset of the weekday) failed the
+        gate: errors from before the cycle was known made the interval so wide that an
+        8-sigma shift was never found. Forecasting from the same position, and measuring
+        errors only after two full cycles, fixed it.
+      - Only the weekly cycle of daily scans is recognised (median gap of a day, give or take
+        three hours); thresholds are computed when asked, not stored.
+      - Not in it: the check that makes a finding of an unusual reading and the chart with
+        thresholds (S5-4); check 16, distribution shift, goes with drift (S5-3).
+
 ## Maintenance (nightly runs)
 
 - [x] **CI red on every PR: vulnerable API dependencies and a core test that expired**
@@ -342,7 +362,7 @@ databases and files, and get in by invitation link; staging serves demos.
         `pyyaml` 6.0.3 (also from `uvicorn[standard]`) still has none and no newer release.
         Checked with a binary-only install of the locked runtime set on 3.15.
 - [ ] **Trim `column_measures`** (from spec 024): one row per column and scan, kept for ever.
-      Once S5-2 fixes the window its baselines read, the clean-up job deletes what is older.
+      Spec 025 reads the last 120 scans of a column; the clean-up job can delete what is older.
 
 ## Owner
 
