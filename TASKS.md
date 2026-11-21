@@ -354,13 +354,13 @@ databases and files, and get in by invitation link; staging serves demos.
         database) that the migrated function is the one the installed Procrastinate ships.
       - The script is a "pre" migration: the new function serves 3.10.0 too, so the api
         migrating before the worker restarts is safe.
-- [ ] **Python 3.15 for the API image** (Dependabot PR #42, left open): `httptools` 0.8.0 (from
-      `uvicorn[standard]`) has no wheel for 3.15 and the slim image has no compiler, so the
-      image does not build. Take it once the compiled dependencies publish cp315 wheels
-      (`@dependabot recreate` on #42); no compiler in the runtime image for it.
-      - 19 Nov: `httptools` 0.9.0 and `uvloop` 0.23.0 now have them, and `markupsafe` 3.0.4;
-        `pyyaml` 6.0.3 (also from `uvicorn[standard]`) still has none and no newer release.
-        Checked with a binary-only install of the locked runtime set on 3.15.
+- [x] **Python 3.15 for the API image** (22 Nov, replaces Dependabot PR #42, open since 26 Oct)
+      - It waited for wheels: the slim image has no compiler, and `httptools`, `markupsafe` and
+        `pyyaml` (all from `uvicorn[standard]` and FastAPI) had none for 3.15. `httptools`
+        0.9.0, `markupsafe` 3.0.4 and `pyyaml` 6.0.4 do; the lock takes them.
+      - Checked before the push with a binary-only install of the locked runtime set on 3.15
+        and an import of the app; the CI job `quickstart` builds the image and scans with it.
+      - CI's test jobs stay on 3.12 and `requires-python` on 3.11: the image is what changes.
 - [ ] **Trim `column_measures`** (from spec 024): one row per column and scan, kept for ever.
       Spec 025 reads the last 120 scans of a column; the clean-up job can delete what is older.
 
