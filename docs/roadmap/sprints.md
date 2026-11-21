@@ -181,7 +181,7 @@ Goal: Sahifa notices when a column changes, not only when a rule breaks.
 | ID | Story | Prio | Done when |
 |---|---|---|---|
 | S5-1 | Metric history per check and column: each scan's measures (null share, distinct share, mean, quantiles, row count) stored | M | a column page shows its measures over the last 30 scans ✅ spec 024 (columns; a series per check comes with S5-2) |
-| S5-2 | Anomaly thresholds: STL baselines and conformal intervals at a chosen false-alarm rate (checks 16, 17) | M | on synthetic history with injected shifts the false-alarm rate is within the chosen rate (gate G2) |
+| S5-2 | Anomaly thresholds: STL baselines and conformal intervals at a chosen false-alarm rate (checks 16, 17) | M | on synthetic history with injected shifts the false-alarm rate is within the chosen rate (gate G2) ✅ spec 025 (check 17's thresholds, medians instead of STL: ADR-0017; check 16 goes with S5-3) |
 | S5-3 | Drift between scans: distribution drift with effect sizes and PSI critical values (checks 24, 29) | M | a shifted distribution in the faulty shop is reported with its effect size; the clean twin stays silent |
 | S5-4 | Web: measure charts with thresholds on the column view; anomalies as findings | S | an anomaly links from the finding to its chart |
 

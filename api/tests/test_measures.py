@@ -16,7 +16,14 @@ from sahifa_core.synth import write_shop
 from sqlalchemy.engine import Engine
 
 from sahifa.db.migrate import build_config, downgrade, upgrade
-from sahifa.services.measures import measure_rows, measures_of
+from sahifa.db.models import ColumnMeasure
+from sahifa.services.measures import (
+    measure_rows,
+    measure_thresholds,
+    measures_of,
+    period_of,
+    weekly_run,
+)
 
 from .conftest import DB_URL, needs_db, owner_engine
 from .test_checks import asset_id, connect, make_asset, make_connection, scan, sql
@@ -293,3 +300,155 @@ def test_migration_0012_round_trips(owner: Engine) -> None:
         (1,)
     ]
     command.check(build_config(DB_URL))
+
+
+# --- Anomaly thresholds (spec 025) -------------------------------------------------------------
+
+
+def reading(day: float, **measures: float) -> ColumnMeasure:
+    return ColumnMeasure(measured_at=T0 + timedelta(days=day), rows=100, measures=measures)
+
+
+def test_a_weekly_cycle_needs_an_unbroken_daily_series() -> None:
+    daily = [T0 + timedelta(days=d, minutes=d % 5) for d in range(20)]
+    assert period_of(daily) == 7 and weekly_run(daily) == 20
+    assert period_of(daily[:14]) is None  # under two weeks and a day
+    assert period_of([T0 + timedelta(hours=6 * d) for d in range(30)]) is None
+    assert period_of([T0 + timedelta(days=7 * d) for d in range(30)]) is None
+    assert period_of([]) is None and weekly_run([]) is None
+    # Alternating 20 and 28 hours has a median gap of a day but is not a daily series.
+    hours = [0]
+    for i in range(42):
+        hours.append(hours[-1] + (20 if i % 2 == 0 else 28))
+    assert period_of([T0 + timedelta(hours=h) for h in hours]) is None
+    # A missed day ends the series: only the scans after it are read with the cycle.
+    missed = [T0 + timedelta(days=d) for d in [*range(10), *range(11, 31)]]
+    assert weekly_run(missed) == 20 and period_of(missed) is None
+    assert weekly_run([T0 + timedelta(days=d) for d in [*range(41), 42]]) is None
+
+
+def test_thresholds_judge_the_newest_reading_and_give_the_next_interval() -> None:
+    # 30 scans at irregular times: a mean around 50, a null share of 0 that jumps at the end.
+    means = [50 + (i * 7 % 5) - 2 for i in range(30)]
+    points = [reading(i * 1.7, mean=m, null_share=0.0) for i, m in enumerate(means)]
+    points[-1].measures["null_share"] = 0.4
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period is None
+    assert set(found) == {"mean", "null_share"}
+
+    mean = found["mean"]
+    assert (mean["value"], mean["scans"], mean["scans_needed"]) == (means[-1], 30, 22)
+    assert mean["newest"]["unusual"] is False
+    assert mean["newest"]["low"] <= means[-1] <= mean["newest"]["high"]
+    assert mean["next"]["low"] < mean["next"]["expected"] < mean["next"]["high"]
+    assert "unusual" not in mean["next"] and mean["next"]["scores"] == 27
+
+    nulls = found["null_share"]
+    assert nulls["value"] == 0.4 and nulls["newest"]["unusual"] is True
+    # A share's interval stays within 0 to 1.
+    assert nulls["newest"]["low"] == 0.0 and 0.0 <= nulls["newest"]["high"] < 0.4
+    assert nulls["next"]["low"] >= 0.0 and nulls["next"]["high"] <= 1.0
+
+
+def test_thresholds_wait_for_enough_history_and_skip_scans_without_the_measure() -> None:
+    points = [reading(i * 1.3, mean=float(i % 3)) for i in range(10)]
+    _, found = measure_thresholds(points, rate=0.05)
+    assert found["mean"] == {"value": 0.0, "newest": None, "next": None, "scans": 10, "scans_needed": 22}
+    # At a rate of one in two, three warm-up scans and one error are enough.
+    _, quick = measure_thresholds(points, rate=0.5)
+    assert quick["mean"]["scans_needed"] == 4 and quick["mean"]["next"] is not None
+
+    # The newest scan read an empty table: the measure has no value to judge, but an interval
+    # for the next scan from the scans that had it.
+    points = [reading(i * 1.3, mean=10.0 + i % 2) for i in range(30)] + [reading(40)]
+    _, found = measure_thresholds(points, rate=0.05)
+    assert found["mean"]["value"] is None and found["mean"]["newest"] is None
+    assert found["mean"]["scans"] == 30 and found["mean"]["next"] is not None
+
+
+def test_a_daily_history_is_read_with_its_weekly_cycle() -> None:
+    # Six weeks of daily scans: 500 rows on weekdays, 380 on the two weekend days.
+    points = [reading(d, mean=380.0 if d % 7 in (5, 6) else 500.0) for d in range(42)]
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period == 7
+    weekend = found["mean"]
+    assert weekend["value"] == 380.0 and weekend["newest"]["unusual"] is False
+    assert weekend["newest"]["expected"] == 380.0
+    # The next scan is a weekday again.
+    assert weekend["next"]["expected"] == 500.0 and weekend["scans_needed"] == 14 + 19
+    # The same weekend value on a weekday is unusual.
+    points.append(reading(42, mean=380.0))
+    _, found = measure_thresholds(points, rate=0.05)
+    assert found["mean"]["newest"]["unusual"] is True
+
+
+def test_a_missed_day_does_not_shift_the_weekly_cycle() -> None:
+    """Days 0 to 40, then day 42 (a weekday, 500 rows) with day 41 missing. Read by position
+    with a cycle of seven, day 42 would be compared with the weekend days and called unusual."""
+
+    def rows(day: int) -> float:
+        return 380.0 if day % 7 in (5, 6) else 500.0
+
+    points = [reading(d, mean=rows(d)) for d in [*range(41), 42]]
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period is None
+    assert found["mean"]["value"] == 500.0 and found["mean"]["newest"]["unusual"] is False
+
+    # Three weeks after the gap the daily series is long enough again, and only it is read
+    # with the cycle: 22 scans from day 42 on.
+    points += [reading(d, mean=rows(d)) for d in range(43, 64)]
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period == 7
+    assert (found["mean"]["scans"], found["mean"]["scans_needed"]) == (22, 14 + 19)
+    assert found["mean"]["next"] is None  # the series after the gap is still too short
+
+
+@needs_db
+async def test_thresholds_through_the_api(client: AsyncClient, owner: Engine) -> None:
+    cid = make_connection(owner)
+    aid = make_asset(owner, cid, "orders")
+    sql(
+        owner,
+        "INSERT INTO columns (asset_id, name, position, physical_type, logical_type, role)"
+        " VALUES (:a, 'new', 0, 'INTEGER', 'integer', 'measure')",
+        a=aid,
+    )
+    for i in range(30):
+        at = T0 + timedelta(hours=31 * i)
+        sid = make_scan(owner, cid, at=at)
+        value = 900.0 if i == 29 else 100.0 + i % 4
+        sql(
+            owner,
+            "INSERT INTO column_measures (id, scan_id, connection_id, asset_id, column_name, measured_at,"
+            " rows, measures) VALUES (gen_random_uuid(), :s, :c, :a, 'amount', :at, 50, CAST(:m AS jsonb))",
+            s=sid,
+            c=cid,
+            a=aid,
+            at=at,
+            m=f'{{"mean": {value}, "null_share": 0.0}}',
+        )
+    path = f"/api/assets/{aid}/measures/thresholds"
+    r = await client.get(path, params={"column": "amount"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["asset_id"], body["column"], body["rate"], body["period"]) == (aid, "amount", 0.05, None)
+    mean = body["measures"]["mean"]
+    assert mean["value"] == 900.0 and mean["newest"]["unusual"] is True
+    assert mean["newest"]["high"] < 900.0 and mean["scans"] == 30 and mean["scans_needed"] == 22
+    assert body["measures"]["null_share"]["newest"]["unusual"] is False
+
+    # A stricter rate needs more history than there is.
+    strict = (await client.get(path, params={"column": "amount", "rate": 0.01})).json()
+    assert strict["rate"] == 0.01 and strict["measures"]["mean"]["newest"] is None
+    assert strict["measures"]["mean"]["scans_needed"] == 102
+
+    # A column without history, an unknown one, an unknown table, and bad parameters.
+    empty = await client.get(path, params={"column": "new"})
+    assert empty.status_code == 200 and empty.json()["measures"] == {}
+    missing = await client.get(path, params={"column": "nope"})
+    assert missing.status_code == 404 and missing.json()["detail"] == "column_not_found"
+    other = await client.get(f"/api/assets/{uuid.uuid4()}/measures/thresholds", params={"column": "amount"})
+    assert other.status_code == 404
+    assert (await client.get(path)).status_code == 422
+    for rate in (0, 0.001, 0.6, "x"):
+        assert (await client.get(path, params={"column": "amount", "rate": rate})).status_code == 422

@@ -176,9 +176,11 @@ Shannon divergence and PSI with critical values instead of the 0.1/0.25 rule of 
 
 ### 17. `sah.metric_anomaly` (R2)
 
-Null share, distinct count, mean and row count per scan as metric history; STL baseline and
-conformal thresholds give an alert threshold with a chosen false-alarm rate
-(Auto-Validate-by-History).
+Null share, distinct count, mean and row count per scan as metric history (spec 024); a
+median baseline (with a weekly cycle for daily scans) and conformal thresholds give an alert
+threshold with a chosen false-alarm rate (Auto-Validate-by-History; spec 025, ADR-0017: medians
+instead of STL). The thresholds exist (`GET /api/assets/{id}/measures/thresholds`); the check
+that turns an unusual reading into a finding comes with S5-4.
 
 ## Consistency
 

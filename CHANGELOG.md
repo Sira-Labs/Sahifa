@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Anomaly thresholds for every measure** (spec 025, ADR-0017).
+  `GET /api/assets/{id}/measures/thresholds?column=` says per measure whether the newest
+  scan's value is unusual given the scans before it, and where the next one is expected, at a
+  false-alarm rate you choose (5 % by default: about one ordinary reading in twenty). At 5 %
+  the interval for the next scan exists after 22 scans, and the newest scan is judged from
+  the 23rd on (33 and 34 for an unbroken series of daily scans, which is read with its weekly
+  cycle). Not yet shown in
+  the web app or raised as findings.
 - **Measures over time for every column** (spec 024). Each successful scan stores what it
   measured per column: the shares of empty, distinct and blank values, mean, spread, minimum,
   maximum and quantiles, and the table's row count. A column's profile on the table page links
