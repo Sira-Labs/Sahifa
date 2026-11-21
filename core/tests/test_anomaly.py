@@ -105,6 +105,16 @@ def test_a_constant_series_tolerates_noise_but_not_a_change() -> None:
     assert judge([*constant, 0.26]).unusual
 
 
+def test_readings_too_large_to_compute_with_give_no_threshold() -> None:
+    huge = [1e308] * 30
+    assert threshold(huge) is None
+    assert not judge([*huge, 1e308]).unusual
+    assert threshold([1e308, -1e308] * 15) is None
+    # Large but workable readings still get one.
+    found = threshold([1e300 + i * 1e298 for i in range(30)])
+    assert found is not None and math.isfinite(found.low) and math.isfinite(found.high)
+
+
 def test_judge_reads_the_last_value_against_the_ones_before() -> None:
     rng = random.Random(2)
     values = [1000 + rng.gauss(0, 10) for _ in range(40)]

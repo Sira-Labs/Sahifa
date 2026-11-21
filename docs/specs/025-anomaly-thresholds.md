@@ -48,13 +48,16 @@ As a data engineer, I ask for a column's thresholds and see that its null share,
    median of the readings at the same position in the last 4 cycles (ADR-0017).
 2. **Errors.** For each reading after a warm-up (3 readings, or 2 cycles), the absolute
    difference to the baseline computed from the readings before it only.
-3. **Interval.** With `m` past errors, the width is the `ceil((m + 1)(1 - rate))`-th smallest:
-   an ordinary error exceeds it with probability at most `rate`. The interval is the baseline
-   plus and minus the width.
+3. **Interval.** With `m` past errors, the width is the `ceil((m + 1)(1 - rate))`-th smallest.
+   For the modelled histories in item 7, the measured false-alarm rate stays within `rate`.
+   This is an empirical result, not a bound for every history. The interval is the baseline
+   plus and minus the width. Readings too large to compute with (near the largest float) get
+   no interval.
 4. **Enough history.** A threshold needs `ceil(1 / rate) - 1` errors: 19 at 5 %, 9 at 10 %, 99
-   at 1 %. With the warm-up that is 22 scans at 5 % (33 with a weekly cycle). Until then the
-   answer says how many scans there are and how many are needed, and nothing is called
-   unusual.
+   at 1 %. With the warm-up, the interval for the next scan exists after 22 scans at 5 % (33
+   with a weekly cycle); `scans_needed` is that number. Judging the newest scan takes one
+   more, 23 (34), because it is judged by the scans before it. Until then the answer says how
+   many scans there are and how many are needed, and nothing is called unusual.
 5. **A constant series** has a width of zero; the width is then a billionth of the level, so
    floating-point noise is not a change and any real change is.
 6. **The API** reads the column's last 120 scans. For each measure it returns the newest
@@ -62,9 +65,12 @@ As a data engineer, I ask for a column's thresholds and see that its null share,
    - A scan without the measure (an empty table) is left out of that measure's history; when
      the newest scan lacks it, `value` and `newest` are null.
    - Shares stay in 0 to 1: their intervals are cut there.
-   - **Cycle.** When the scans come once a day (the median gap between them is a day, give or
-     take three hours, over at least 15 scans), the history is read with a weekly cycle and
-     `period` is 7. A measure that some scans lack is read without it.
+   - **Cycle.** When the newest scans are an unbroken daily series (each a day after the one
+     before, give or take three hours) of at least 15, that series is read with a weekly
+     cycle and `period` is 7. The cycle is by position, so a missed day or a second scan on
+     one day ends the series: scans before the break are left out, and until the series after
+     it is long enough the whole history is read without a cycle. A measure that some scans
+     of the series lack is read without it.
 7. **What the rate promises** (gate G2, `core/tests/test_anomaly.py`, 4,000 simulated
    histories of 60 readings per case):
 
@@ -101,7 +107,7 @@ Unit (`core/tests/test_anomaly.py`): needed scores and readings; forecast with a
 cycle; one-step-ahead errors; the ranked width; thresholds and too little history; a constant
 series; `judge`; the gate cases above.
 
-Unit (`api/tests/test_measures.py`): `period_of`; thresholds for a mean and a jumping null
+Unit (`api/tests/test_measures.py`): the daily series and its breaks; a missed day; thresholds for a mean and a jumping null
 share; shares cut at 0 and 1; too little history; a newest scan without the measure; a daily
 history with a weekend dip.
 
@@ -117,6 +123,10 @@ Role matrix (`api/tests/test_matrix.py`): the route, viewer, read.
 - **The rate is a query parameter with a default of 5 %,** not yet a setting per check: the
   check that carries it arrives with S5-4.
 - **120 scans** are read: enough for a rate of 1 % (102 scans), and bounded.
+- **The cycle is read by position, on an unbroken daily series only** (from the review: with
+  a missed day, positions would be a day off and an ordinary weekday would be compared with
+  weekend days). Selecting by calendar day would keep the history across a gap; it comes when
+  gaps turn out to be common.
 - **Only the weekly cycle of daily scans is recognised.** Other cycles are read without one,
   which widens the interval (behaviour 7) instead of raising alarms.
 - The role matrix has 35 workspace operations now (spec 024 counted 34).

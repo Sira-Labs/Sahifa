@@ -88,8 +88,10 @@ def errors(values: Sequence[float], period: int | None = None) -> list[float]:
 
 
 def conformal_width(scores: Sequence[float], rate: float) -> float | None:
-    """The width that an ordinary error exceeds with probability at most `rate`: the
-    ceil((m + 1)(1 - rate))-th smallest of the `m` past errors. None while there are too few."""
+    """The conformal width for `rate`: the ceil((m + 1)(1 - rate))-th smallest of the `m` past
+    errors. For errors that are exchangeable, an ordinary one exceeds it with probability at
+    most `rate`; rolling forecast errors are only roughly so, and the rate is checked by
+    simulation (`tests/test_anomaly.py`). None while there are too few errors."""
     m = len(scores)
     if m < scores_needed(rate):
         return None
@@ -101,7 +103,7 @@ def threshold(
     history: Sequence[float], rate: float = DEFAULT_RATE, period: int | None = None
 ) -> Threshold | None:
     """The interval for the reading that follows `history`, or None while the history is too
-    short for `rate` (`readings_needed`)."""
+    short for `rate` (`readings_needed`) or the interval cannot be written as finite numbers."""
     if len(history) < readings_needed(rate, period):
         return None
     scores = errors(history, period)
@@ -110,7 +112,12 @@ def threshold(
         return None
     expected = forecast(history, period)
     width = max(width, EPSILON * max(1.0, abs(expected)))
-    return Threshold(expected=expected, low=expected - width, high=expected + width, scores=len(scores))
+    found = Threshold(expected=expected, low=expected - width, high=expected + width, scores=len(scores))
+    # Readings near the largest float overflow in a median or a sum: no interval then, rather
+    # than one with infinity or NaN in it.
+    if not all(math.isfinite(x) for x in (found.expected, found.low, found.high)):
+        return None
+    return found
 
 
 @dataclass(frozen=True)

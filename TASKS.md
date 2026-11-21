@@ -294,8 +294,10 @@ databases and files, and get in by invitation link; staging serves demos.
         gate: errors from before the cycle was known made the interval so wide that an
         8-sigma shift was never found. Forecasting from the same position, and measuring
         errors only after two full cycles, fixed it.
-      - Only the weekly cycle of daily scans is recognised (median gap of a day, give or take
-        three hours); thresholds are computed when asked, not stored.
+      - Only the weekly cycle of daily scans is recognised, and only on an unbroken daily
+        series (each scan a day after the one before, give or take three hours): the review
+        showed that a missed day shifts positions and flags an ordinary weekday. Thresholds
+        are computed when asked, not stored.
       - Not in it: the check that makes a finding of an unusual reading and the chart with
         thresholds (S5-4); check 16, distribution shift, goes with drift (S5-3).
 

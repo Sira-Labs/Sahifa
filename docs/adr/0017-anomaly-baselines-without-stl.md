@@ -28,7 +28,7 @@ compiler.
 
 1. **The baseline is a median, not STL.**
    - Without a cycle: the median of the last 10 readings.
-   - With a cycle (a history with one scan per day is read with a weekly cycle): the median of
+   - With a cycle (an unbroken series of daily scans is read with a weekly cycle): the median of
      the readings at the same position in the last 4 cycles, once 2 cycles are complete.
 2. **The interval is conformal, as planned:** the baseline's own absolute one-step-ahead errors
    over the history give the width that an ordinary reading exceeds with probability at most

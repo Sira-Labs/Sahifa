@@ -126,14 +126,33 @@ async def measure_history(
     return [(record, trigger) for record, trigger in reversed(rows.all())]
 
 
+def daily_run(times: list[datetime]) -> int:
+    """How many of the newest scans form an unbroken daily series: each a day after the one
+    before, give or take three hours."""
+    run = 1 if times else 0
+    for earlier, later in itertools.pairwise(reversed(times)):
+        # Reversed, so `earlier` is the later scan of the pair.
+        if abs((earlier - later).total_seconds() - DAY_S) > DAILY_TOLERANCE_S:
+            break
+        run += 1
+    return run
+
+
+def weekly_run(times: list[datetime]) -> int | None:
+    """The length of the newest unbroken daily series when it is long enough to show a weekly
+    cycle (two weeks and a day), else None.
+
+    The cycle is read by position, seven readings to a week, so it only holds where no day is
+    missing and none has two scans: a gap or an extra scan ends the series, and what came
+    before it is not read with the cycle."""
+    run = daily_run(times)
+    return run if run >= 2 * WEEK + 1 else None
+
+
 def period_of(times: list[datetime]) -> int | None:
-    """7 when the scans come once a day (the median gap is a day, give or take three hours),
-    else None: a weekly cycle only shows in a history with one reading per day."""
-    if len(times) < 2 * WEEK + 1:
-        return None
-    gaps = sorted((b - a).total_seconds() for a, b in itertools.pairwise(times))
-    middle = gaps[len(gaps) // 2]
-    return WEEK if abs(middle - DAY_S) <= DAILY_TOLERANCE_S else None
+    """7 when the whole history is one unbroken daily series long enough for a weekly cycle,
+    else None."""
+    return WEEK if times and weekly_run(times) == len(times) else None
 
 
 def is_share(measure: str) -> bool:
@@ -159,17 +178,24 @@ def measure_thresholds(
     interval built from the scans before it, and the interval for the next scan. Returns the
     cycle the history was read with and, per measure, `value`, `newest`, `next`, `scans` and
     `scans_needed`; an interval is None while the measure's history is too short for `rate`.
+    `scans_needed` is what the next scan's interval needs; judging the newest reading takes
+    one more, because it is judged by the scans before it.
 
     A scan without the measure (an empty table) is left out of that measure's history."""
-    period = period_of([p.measured_at for p in points])
+    # With a daily series at the end of the history, read that series with a weekly cycle and
+    # leave the scans before it out: positions before a missed day would be a day off.
+    run = weekly_run([p.measured_at for p in points])
+    period = WEEK if run is not None else None
+    cycled = points[-run:] if run is not None else points
     names: dict[str, None] = {}
     for point in points:
         names.update(dict.fromkeys(point.measures))
     out: dict[str, dict[str, Any]] = {}
     for name in names:
-        values = [float(p.measures[name]) for p in points if name in p.measures]
-        # The cycle is by position, so it only holds for a measure every scan has.
-        cycle = period if len(values) == len(points) else None
+        # The cycle is by position, so it only holds for a measure every scan of the series has.
+        whole = period is not None and all(name in p.measures for p in cycled)
+        read, cycle = (cycled, period) if whole else (points, None)
+        values = [float(p.measures[name]) for p in read if name in p.measures]
         has_newest = name in points[-1].measures
         before = threshold(values[:-1], rate, cycle) if has_newest else None
         upcoming = threshold(values, rate, cycle)

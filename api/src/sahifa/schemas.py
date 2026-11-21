@@ -337,6 +337,7 @@ class MeasureThreshold(BaseModel):
     newest: MeasureInterval | None
     # The interval for the next scan; null while there are too few.
     next: MeasureInterval | None
+    # Scans of this measure that were read, and how many `next` needs; `newest` needs one more.
     scans: int
     scans_needed: int
 
@@ -346,7 +347,7 @@ class MeasureThresholds(BaseModel):
     column: str
     # The false-alarm rate the intervals are built for.
     rate: float
-    # 7 when the scans come daily and the history is read with a weekly cycle, else null.
+    # 7 when the newest scans are an unbroken daily series read with a weekly cycle, else null.
     period: int | None
     measures: dict[str, MeasureThreshold]
 

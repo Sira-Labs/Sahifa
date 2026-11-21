@@ -17,7 +17,13 @@ from sqlalchemy.engine import Engine
 
 from sahifa.db.migrate import build_config, downgrade, upgrade
 from sahifa.db.models import ColumnMeasure
-from sahifa.services.measures import measure_rows, measure_thresholds, measures_of, period_of
+from sahifa.services.measures import (
+    measure_rows,
+    measure_thresholds,
+    measures_of,
+    period_of,
+    weekly_run,
+)
 
 from .conftest import DB_URL, needs_db, owner_engine
 from .test_checks import asset_id, connect, make_asset, make_connection, scan, sql
@@ -303,13 +309,22 @@ def reading(day: float, **measures: float) -> ColumnMeasure:
     return ColumnMeasure(measured_at=T0 + timedelta(days=day), rows=100, measures=measures)
 
 
-def test_period_of_a_daily_and_an_irregular_history() -> None:
+def test_a_weekly_cycle_needs_an_unbroken_daily_series() -> None:
     daily = [T0 + timedelta(days=d, minutes=d % 5) for d in range(20)]
-    assert period_of(daily) == 7
+    assert period_of(daily) == 7 and weekly_run(daily) == 20
     assert period_of(daily[:14]) is None  # under two weeks and a day
     assert period_of([T0 + timedelta(hours=6 * d) for d in range(30)]) is None
     assert period_of([T0 + timedelta(days=7 * d) for d in range(30)]) is None
-    assert period_of([]) is None
+    assert period_of([]) is None and weekly_run([]) is None
+    # Alternating 20 and 28 hours has a median gap of a day but is not a daily series.
+    hours = [0]
+    for i in range(42):
+        hours.append(hours[-1] + (20 if i % 2 == 0 else 28))
+    assert period_of([T0 + timedelta(hours=h) for h in hours]) is None
+    # A missed day ends the series: only the scans after it are read with the cycle.
+    missed = [T0 + timedelta(days=d) for d in [*range(10), *range(11, 31)]]
+    assert weekly_run(missed) == 20 and period_of(missed) is None
+    assert weekly_run([T0 + timedelta(days=d) for d in [*range(41), 42]]) is None
 
 
 def test_thresholds_judge_the_newest_reading_and_give_the_next_interval() -> None:
@@ -365,6 +380,27 @@ def test_a_daily_history_is_read_with_its_weekly_cycle() -> None:
     points.append(reading(42, mean=380.0))
     _, found = measure_thresholds(points, rate=0.05)
     assert found["mean"]["newest"]["unusual"] is True
+
+
+def test_a_missed_day_does_not_shift_the_weekly_cycle() -> None:
+    """Days 0 to 40, then day 42 (a weekday, 500 rows) with day 41 missing. Read by position
+    with a cycle of seven, day 42 would be compared with the weekend days and called unusual."""
+
+    def rows(day: int) -> float:
+        return 380.0 if day % 7 in (5, 6) else 500.0
+
+    points = [reading(d, mean=rows(d)) for d in [*range(41), 42]]
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period is None
+    assert found["mean"]["value"] == 500.0 and found["mean"]["newest"]["unusual"] is False
+
+    # Three weeks after the gap the daily series is long enough again, and only it is read
+    # with the cycle: 22 scans from day 42 on.
+    points += [reading(d, mean=rows(d)) for d in range(43, 64)]
+    period, found = measure_thresholds(points, rate=0.05)
+    assert period == 7
+    assert (found["mean"]["scans"], found["mean"]["scans_needed"]) == (22, 14 + 19)
+    assert found["mean"]["next"] is None  # the series after the gap is still too short
 
 
 @needs_db
