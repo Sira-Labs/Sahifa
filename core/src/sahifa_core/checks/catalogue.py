@@ -690,7 +690,11 @@ class DistributionShift(Check):
         if self._few_values(col):
             counts = {v.value: v.count for v in col.top if v.value is not None}
             return {"form": "values", "rows": sum(counts.values()), "counts": counts}
-        return {"form": "numeric", "rows": col.non_null, "points": self._points(col)}
+        return {
+            "form": "numeric",
+            "rows": col.non_null,
+            "quantiles": {"min": col.min, **dict(sorted((col.quantiles or {}).items())), "max": col.max},
+        }
 
     def evaluate_profile(self, spec: CheckSpec, ctx: Context) -> tuple[int, int, list[tuple[str, int]]]:
         col = ctx.asset.column(spec.column or "")
@@ -707,7 +711,8 @@ class DistributionShift(Check):
         current = self._points(col)
         if current is None:
             return 0, 0, []  # no longer a number column: type conformance reports that
-        reference = [(float(v), float(u)) for v, u in spec.params["points"]]
+        saved = dict(spec.params["quantiles"])
+        reference = drift.points_of(saved.pop("min"), saved, saved.pop("max"))
         n = col.non_null
         distance = drift.ks_distance(reference, current)
         critical = drift.ks_critical(n, int(spec.params["rows"]))

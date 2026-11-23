@@ -169,7 +169,11 @@ def drift_report(
 def test_baselines_are_proposed_for_numbers_and_few_values(clean_report: ScanReport) -> None:
     specs = {(s.asset.label, s.column): s for s in clean_report.checks if s.type == SHIFT}
     assert specs[("events", "payload_size")].params["form"] == "numeric"
-    assert len(specs[("events", "payload_size")].params["points"]) == 7
+    assert list(specs[("events", "payload_size")].params["quantiles"]) == [
+        "min",
+        *(f"p{int(level * 100):02d}" for level in drift.LEVELS),
+        "max",
+    ]
     assert specs[("events", "kind")].params["form"] == "values"
     assert set(specs[("events", "kind")].params["counts"]) == {"view", "cart", "checkout"}
     assert sum(specs[("events", "kind")].params["counts"].values()) == ROWS // 2
