@@ -301,6 +301,32 @@ databases and files, and get in by invitation link; staging serves demos.
       - Not in it: the check that makes a finding of an unusual reading and the chart with
         thresholds (S5-4); check 16, distribution shift, goes with drift (S5-3).
 
+- [x] **S5-3 distribution shift (check 16)** — `docs/specs/026-distribution-shift.md` (23 Nov)
+      - Against the locked baseline, not the previous scan as the catalogue said: scan by scan
+        a slow drift never shows and a change is accepted without anyone deciding. The
+        baseline lifecycle already holds the reference a person approved.
+      - Computed on the profile, with no query: seven points of the distribution function for
+        numbers (Kolmogorov–Smirnov decides, Wasserstein in interquartile ranges is the size),
+        the counts per value for few values (Jensen–Shannon decides, PSI must pass its
+        critical value). KS on seven points is a lower bound; a finer grid would mean more
+        quantiles in the profile and the stored measures.
+      - A report needs an effect of 0.1 and significance at one in a thousand. Significance
+        alone would flag every large table, the effect alone every small one (ten values and
+        200 rows reach a Jensen–Shannon distance of 0.1 by chance).
+      - `failed` is the smallest number of rows that must have changed, so the finding weighs
+        in the score like that share of failing rows.
+      - The accuracy benchmark now measures every check of the catalogue (`accuracy.CHECKS`);
+        the drift twin has two shifted columns in `events`.
+      - No timestamps (they move with every load) and no personal data (the baseline keeps
+        values).
+      - CodeRabbit did not review the PR (its check ended neutral), so an independent review
+        was run before the merge. It found that a value held by a quarter of the rows (zeros,
+        say) was read at the highest quantile level it spans, which reported unchanged
+        columns; such a share is now read within its bounds.
+- [ ] **Checks 24 `sah.schema_drift` and 29 `sah.volume_trend`** (listed with S5-3 in the
+      plan): both need what earlier scans saw, which a scan does not hand to the core yet
+      (the API has it: `columns` per scan, `column_measures`). Next after S5-4.
+
 ## Maintenance (nightly runs)
 
 - [x] **CI red on every PR: vulnerable API dependencies and a core test that expired**

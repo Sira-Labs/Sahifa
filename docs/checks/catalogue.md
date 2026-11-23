@@ -31,7 +31,7 @@ timestamp type), **measure** (other numbers), **description** (text with mean le
 | 13 | `sah.outliers` | accuracy | column | rule | low | sql | R1 |
 | 14 | `sah.future_dates` | accuracy | column | rule | high | sql | R1 |
 | 15 | `sah.implausible_dates` | accuracy | column | rule | medium | sql | R1 |
-| 16 | `sah.distribution_shift` | accuracy | column | baseline | medium | history | R2 |
+| 16 | `sah.distribution_shift` | accuracy | column | baseline | medium | profile | R2 ✅ |
 | 17 | `sah.metric_anomaly` | accuracy | column, asset | baseline | medium | history | R2 |
 | 18 | `sah.foreign_key` | consistency | column | rule | critical | sql | R1 |
 | 19 | `sah.column_order` | consistency | asset | rule | high | sql | R1 |
@@ -47,7 +47,7 @@ timestamp type), **measure** (other numbers), **description** (text with mean le
 | 29 | `sah.volume_trend` | currentness | asset | baseline | high | history | R2 |
 | 30 | `sah.custom_sql` | any | asset | manual | as set | sql | R2 |
 
-R1 ships 20 checks (1–10, 12–15, 18–20, 25, 26, 28).
+R1 ships 20 checks (1–10, 12–15, 18–20, 25, 26, 28). Of R2, check 16 exists (spec 026).
 
 ## Completeness
 
@@ -168,11 +168,26 @@ subdivisions, NUTS regions, ICD-10).
 - **Fails:** value before 1900-01-01 or after 2200-01-01 (catches 0001-01-01 and
   9999-12-31 sentinels).
 
-### 16. `sah.distribution_shift` (R2)
+### 16. `sah.distribution_shift` — Distribution changed (baseline, R2, spec 026)
 
-Numeric: Wasserstein distance and KS on the sample against the previous scan, thresholds on
-effect size, not p-values (large tables make every test significant). Categorical: Jensen–
-Shannon divergence and PSI with critical values instead of the 0.1/0.25 rule of thumb.
+- **Applies to:** columns with at least 100 values that are not keys, foreign keys, timestamps
+  or personal data: number columns, and text or integer columns with 2 to 20 distinct values.
+- **Baseline:** the distribution in the scan that proposed the check, as the profile has it:
+  minimum, five quantiles and maximum for numbers; the count per value for few values. Later
+  scans are compared with the locked baseline (not with the previous scan: a slow drift would
+  never show, and a change would be accepted without anyone deciding).
+- **Fails, numbers:** the Kolmogorov–Smirnov distance is at least 0.1 and above what two
+  samples of that size differ by chance (one in a thousand). The Wasserstein distance in
+  interquartile ranges says how far the values moved.
+- **Fails, few values:** the Jensen–Shannon distance is at least 0.1 and PSI is above its
+  critical value (a chi-square quantile scaled by the two sample sizes), instead of the
+  0.1/0.25 rule of thumb.
+- **Counts:** the smallest number of rows that must have changed. Thresholds are on effect
+  size: large tables make every test significant.
+- **Benchmark** (23 Nov 2026, `sahifa bench-accuracy --seeds 20 --rows 5000 --sample-rows 500`):
+  40 of 40 shifted columns detected, 0 unexpected results, 0 findings of 200 locked baselines
+  on a clean shop of another seed. The count is exact for the value mix (52 % of the groups);
+  for numbers it is a lower bound from seven points of the distribution.
 
 ### 17. `sah.metric_anomaly` (R2)
 

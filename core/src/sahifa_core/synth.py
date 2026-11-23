@@ -88,6 +88,8 @@ def iban_de(rng: random.Random) -> str:
 
 # Smallest shop whose products table (rows // 50) is large enough for baselines (50 rows).
 MIN_DRIFT_ROWS = 2500
+# The drift twin moves half of the payload sizes below this value above it.
+SHIFT_PAYLOAD_FROM = 2500
 TS_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -305,6 +307,17 @@ def _add_drift(shop: Shop, rng: random.Random) -> None:
     occurred = events.header.index("occurred_at")
     for e in events.rows:
         e[occurred] = _ts(_dt(e[occurred]) - timedelta(days=30))  # the feed stopped a month ago
+    # Two shifted distributions (check 16), each inside what the other baselines allow: half of
+    # the views become checkouts, and half of the small payloads become large ones.
+    kind, size = events.header.index("kind"), events.header.index("payload_size")
+    views = [e for e in events.rows if e[kind] == "view"]
+    for e in rng.sample(views, len(views) // 2):
+        e[kind] = "checkout"
+    small = [e for e in events.rows if int(str(e[size])) < SHIFT_PAYLOAD_FROM]
+    large = [e[size] for e in events.rows if int(str(e[size])) >= SHIFT_PAYLOAD_FROM]
+    moved = rng.sample(small, len(small) // 2)
+    for e in moved:
+        e[size] = rng.choice(large)  # a value the column already has: the range baseline holds
 
     shop.faults = [
         Fault(
@@ -338,6 +351,8 @@ def _add_drift(shop: Shop, rng: random.Random) -> None:
             sum(1 for v in events.values("occurred_at") if _dt(v) < first_event),
         ),
         Fault("sah.freshness", "events", None, 1),
+        Fault("sah.distribution_shift", "events", "kind", len(views) // 2),
+        Fault("sah.distribution_shift", "events", "payload_size", len(moved)),
     ]
 
 

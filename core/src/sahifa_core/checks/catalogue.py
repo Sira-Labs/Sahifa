@@ -1,4 +1,4 @@
-"""The 20 R1 checks of docs/checks/catalogue.md."""
+"""The checks of docs/checks/catalogue.md that exist: the 20 of R1 and check 16 of R2."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import math
 from datetime import datetime
 from typing import Any
 
-from .. import semantics
+from .. import drift, semantics
 from ..models import CheckSpec, ColumnProfile, Dimension, LogicalType, Role, Severity
 from ..profile import pattern_regex
 from ..sql import DATE_LIKE, LEADING_ZERO_NUMBER, NON_PRINTING_CLASS, NUMERIC_LIKE
@@ -642,6 +642,147 @@ class DuplicateRows(Check):
 
 # --- currentness ----------------------------------------------------------------------------
 
+
+class DistributionShift(Check):
+    """Check 16 (spec 026): the column's distribution against the one its baseline recorded.
+
+    The baseline is the profile of the scan that proposed the check: the distribution function
+    at seven points for numbers, the count per value for a column with few values. A proposed
+    check follows each scan; once locked, later scans are measured against it (ADR-0005)."""
+
+    type = "sah.distribution_shift"
+    title = "Distribution changed"
+    dimension = Dimension.ACCURACY
+    kind = "baseline"
+    severity = Severity.MEDIUM
+    evaluation = "profile"
+    release = "R2"
+    next_step = (
+        "If the change is legitimate (a new mix, a season, a migration), approve the new baseline; "
+        "otherwise find the load or the source that changed."
+    )
+    MIN_ROWS = 100
+
+    def _few_values(self, col: ColumnProfile) -> bool:
+        return (
+            col.logical_type in (LogicalType.TEXT, LogicalType.INTEGER)
+            and 2 <= (col.distinct or 0) <= 20
+            and col.distinct_ratio <= 0.2
+            and not col.top_truncated
+        )
+
+    def _points(self, col: ColumnProfile) -> list[tuple[float, float]] | None:
+        """The numeric column's distribution function, or None when its profile lacks a part."""
+        quantiles = col.quantiles or {}
+        if not col.logical_type.is_numeric or len(quantiles) < len(drift.LEVELS):
+            return None
+        if not isinstance(col.min, int | float) or not isinstance(col.max, int | float):
+            return None
+        points = drift.points_of(col.min, quantiles, col.max)
+        return points if all(math.isfinite(v) for v, _u in points) else None
+
+    def applies(self, col: ColumnProfile, ctx: Context) -> bool:
+        if col.role in KEYISH or col.non_null < self.MIN_ROWS or col.semantic_type in semantics.PERSONAL:
+            return False
+        return self._few_values(col) or (self._points(col) is not None and col.min != col.max)
+
+    def params(self, col: ColumnProfile, ctx: Context) -> dict[str, Any]:
+        if self._few_values(col):
+            counts = {v.value: v.count for v in col.top if v.value is not None}
+            return {"form": "values", "rows": sum(counts.values()), "counts": counts}
+        return {
+            "form": "numeric",
+            "rows": col.non_null,
+            "quantiles": {"min": col.min, **dict(sorted((col.quantiles or {}).items())), "max": col.max},
+        }
+
+    def evaluate_profile(self, spec: CheckSpec, ctx: Context) -> tuple[int, int, list[tuple[str, int]]]:
+        col = ctx.asset.column(spec.column or "")
+        spec.params.pop("measured", None)
+        # A column since recognised as personal data shows masked values: nothing to compare.
+        if col is None or col.non_null < 1 or col.semantic_type in semantics.PERSONAL:
+            return 0, 0, []
+        if spec.params["form"] == "values":
+            return self._evaluate_values(spec, col)
+        return self._evaluate_numeric(spec, col)
+
+    def _evaluate_numeric(
+        self, spec: CheckSpec, col: ColumnProfile
+    ) -> tuple[int, int, list[tuple[str, int]]]:
+        current = self._points(col)
+        if current is None:
+            return 0, 0, []  # no number column any more, or one with infinite values
+        saved = dict(spec.params["quantiles"])
+        reference = drift.points_of(saved.pop("min"), saved, saved.pop("max"))
+        n = col.non_null
+        distance = drift.ks_distance(reference, current)
+        critical = drift.ks_critical(n, int(spec.params["rows"]))
+        moved = drift.wasserstein_in_iqr(reference, current)
+        spec.params["measured"] = {
+            "distance": round(distance, 4),
+            "threshold": round(max(drift.MIN_EFFECT, critical), 4),
+            "moved_iqr": None if moved is None else round(moved, 3),
+            "median": [drift.cdf_inverse(reference, 0.5), drift.cdf_inverse(current, 0.5)],
+        }
+        shifted = distance >= max(drift.MIN_EFFECT, critical)
+        return n, min(n, math.ceil(distance * n)) if shifted else 0, []
+
+    def _evaluate_values(self, spec: CheckSpec, col: ColumnProfile) -> tuple[int, int, list[tuple[str, int]]]:
+        n, m = col.non_null, int(spec.params["rows"])
+        now = {v.value: v.count for v in col.top if v.value is not None}
+        bins = drift.bins_of(spec.params["counts"], now, n)
+        distance, index = drift.js_distance(bins), drift.psi(bins)
+        critical = drift.psi_critical(len(bins), n, m)
+        changed = drift.total_variation(bins)
+        spec.params["measured"] = {
+            "distance": round(distance, 4),
+            "threshold": drift.MIN_EFFECT,
+            "psi": round(index, 4),
+            "psi_critical": round(critical, 4),
+            "changed": round(changed, 4),
+        }
+        if distance < drift.MIN_EFFECT or index < critical:
+            return n, 0, []
+        ranked = sorted(bins, key=lambda b: -abs(b[1] / m - b[2] / n))
+        examples = [(f"{value}: {pct(ref, m)} → {pct(cur, n)}", cur) for value, ref, cur in ranked[:5]]
+        return n, min(n, max(1, round(changed * n))), examples
+
+    def summary(self, spec: CheckSpec, n: int, k: int) -> str:
+        measured = spec.params.get("measured")
+        if not measured:
+            return (
+                f"{where(spec)} could not be compared with its baseline: it holds no finite numbers "
+                f"or no plain values to compare now."
+            )
+        distance, threshold = measured["distance"], measured["threshold"]
+        if spec.params["form"] == "values":
+            if not k:
+                return (
+                    f"The mix of values in {where(spec)} matches its baseline: Jensen–Shannon "
+                    f"distance {distance:.2f} (reported from {threshold:.2f}), PSI {measured['psi']:.3f} "
+                    f"(critical value {measured['psi_critical']:.3f})."
+                )
+            return (
+                f"The mix of values in {where(spec)} changed against its baseline: Jensen–Shannon "
+                f"distance {distance:.2f} (reported from {threshold:.2f}), PSI {measured['psi']:.3f} "
+                f"(critical value {measured['psi_critical']:.3f}); at least {pct(k, n)} of the rows "
+                f"have another value than before."
+            )
+        if not k:
+            return (
+                f"The values in {where(spec)} match their baseline: Kolmogorov–Smirnov distance "
+                f"{distance:.2f} (reported from {threshold:.2f})."
+            )
+        before, after = measured["median"]
+        moved = measured["moved_iqr"]
+        size = "" if moved is None else f", on average by {moved:.2f} interquartile ranges (Wasserstein)"
+        return (
+            f"The values in {where(spec)} moved against their baseline: Kolmogorov–Smirnov distance "
+            f"{distance:.2f} (reported from {threshold:.2f}){size}; the median went from {before:,.6g} "
+            f"to {after:,.6g}."
+        )
+
+
 FRESH_NAMES = ("_at", "_time", "_date", "_ts", "timestamp", "loaded", "updated", "created")
 
 
@@ -716,6 +857,7 @@ CATALOGUE: tuple[Check, ...] = (
     Unique(),
     DuplicateRows(),
     Freshness(),
+    DistributionShift(),
 )
 BY_TYPE: dict[str, Check] = {c.type: c for c in CATALOGUE}
 LEADING_ZERO = LEADING_ZERO_NUMBER

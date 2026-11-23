@@ -35,6 +35,8 @@ from .synth import MIN_DRIFT_ROWS, Fault, shop_tables
 log = logging.getLogger(__name__)
 
 R1_CHECKS = tuple(c.type for c in CATALOGUE if c.release == "R1")
+# What the benchmark measures: every check of the catalogue that exists.
+CHECKS = tuple(c.type for c in CATALOGUE)
 OTHER_SEED = 10_000
 
 Key = tuple[str, str, str | None]
@@ -122,7 +124,7 @@ def run_benchmark(
     validate(seeds, rows, sample_rows)
     say = progress or (lambda _m: None)
     now = datetime.now(UTC).replace(microsecond=0)
-    acc = {t: CheckAccuracy(t, BY_TYPE[t].kind) for t in R1_CHECKS}
+    acc = {t: CheckAccuracy(t, BY_TYPE[t].kind) for t in CHECKS}
     report = AccuracyReport(seeds, rows, sample_rows, now.isoformat())
     full = ScanOptions(sample_rows=0)
     with tempfile.TemporaryDirectory(prefix="sahifa-accuracy-") as tmp:
@@ -153,7 +155,7 @@ def run_benchmark(
             _baseline_alarms(acc, d)
             _sampled(acc, faulty.faults, _results(a, "rule"), e)
             say(f"seed {seed}/{seeds}")
-    report.checks = [acc[t] for t in R1_CHECKS]
+    report.checks = [acc[t] for t in CHECKS]
     return report
 
 

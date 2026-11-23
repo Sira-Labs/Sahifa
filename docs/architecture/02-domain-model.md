@@ -65,7 +65,7 @@ replaces timeliness because that is ISO's word for "is it recent enough".
 |---|---|---|---|
 | **Completeness** | Completeness | Are the values that should be there present? | `sah.not_null`, `sah.not_blank`, `sah.row_count` |
 | **Validity** | Accuracy (syntactic), Compliance | Do values have the right type, format and domain? | `sah.type_conformance`, `sah.pattern`, `sah.semantic_format`, `sah.accepted_values`, `sah.length` |
-| **Accuracy** | Accuracy (semantic) | Are values plausible for what they describe? | `sah.range`, `sah.outliers`, `sah.future_dates`, `sah.implausible_dates` |
+| **Accuracy** | Accuracy (semantic) | Are values plausible for what they describe? | `sah.range`, `sah.outliers`, `sah.future_dates`, `sah.implausible_dates`, `sah.distribution_shift` |
 | **Consistency** | Consistency | Do values agree with each other and across tables? | `sah.foreign_key`, `sah.column_order`, `sah.casing_variants`, `sah.mixed_types` |
 | **Uniqueness** | Consistency (no duplicate records) | Is every entity recorded once? | `sah.unique`, `sah.duplicate_rows` |
 | **Currentness** | Currentness | Is the data recent enough? | `sah.freshness` |
