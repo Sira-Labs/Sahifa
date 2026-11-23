@@ -47,7 +47,7 @@ timestamp type), **measure** (other numbers), **description** (text with mean le
 | 29 | `sah.volume_trend` | currentness | asset | baseline | high | history | R2 |
 | 30 | `sah.custom_sql` | any | asset | manual | as set | sql | R2 |
 
-R1 ships 20 checks (1–10, 12–15, 18–20, 25, 26, 28).
+R1 ships 20 checks (1–10, 12–15, 18–20, 25, 26, 28). Of R2, check 16 exists (spec 026).
 
 ## Completeness
 
