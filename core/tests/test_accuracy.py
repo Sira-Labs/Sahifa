@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from sahifa_core import accuracy
-from sahifa_core.accuracy import R1_CHECKS, AccuracyReport, render_markdown, run_benchmark
+from sahifa_core.accuracy import CHECKS, R1_CHECKS, AccuracyReport, render_markdown, run_benchmark
 from sahifa_core.checks import BY_TYPE
 from sahifa_core.cli import main
 from sahifa_core.synth import MIN_DRIFT_ROWS, shop_tables
@@ -91,6 +91,8 @@ def recount_drift(t: Rows, clean: Rows, check: str, asset: str, column: str | No
         newest = max(stamp(r["occurred_at"]) for r in t[asset])
         return int(newest < max(stamp(r["occurred_at"]) for r in clean[asset]))
     vals, before = [r[column or ""] for r in t[asset]], [r[column or ""] for r in clean[asset]]
+    if check == "sah.distribution_shift":
+        return sum(1 for v, b in zip(vals, before, strict=True) if v != b)
     if check == "sah.accepted_values":
         seen = set(before)
         return sum(1 for v in vals if v not in seen)
@@ -122,10 +124,11 @@ def test_fault_list_counts_match_the_files(tmp_path: Path) -> None:
         assert recount_drift(files["drift"], files["clean"], f.check, f.asset, f.column) == f.rows, f
 
 
-def test_every_r1_check_has_a_fault() -> None:
-    rules = {t for t in R1_CHECKS if BY_TYPE[t].kind == "rule"}
-    baselines = {t for t in R1_CHECKS if BY_TYPE[t].kind == "baseline"}
-    assert len(rules) == 15 and len(baselines) == 5
+def test_every_check_has_a_fault() -> None:
+    rules = {t for t in CHECKS if BY_TYPE[t].kind == "rule"}
+    baselines = {t for t in CHECKS if BY_TYPE[t].kind == "baseline"}
+    assert len(rules) == 15 and len(baselines) == 6
+    assert len(R1_CHECKS) == 20 and set(CHECKS) - set(R1_CHECKS) == {"sah.distribution_shift"}
     assert {f.check for f in shop_tables(rows=MIN_DRIFT_ROWS, now=NOW).faults} == rules
     assert {f.check for f in shop_tables(drift=True, rows=MIN_DRIFT_ROWS, now=NOW).faults} == baselines
 
@@ -133,7 +136,7 @@ def test_every_r1_check_has_a_fault() -> None:
 def test_benchmark_small_run() -> None:
     report = run_benchmark(seeds=2, rows=MIN_DRIFT_ROWS, sample_rows=300)
     by_check = report.by_check()
-    assert set(by_check) == set(R1_CHECKS)
+    assert set(by_check) == set(CHECKS)
     for m in report.checks:
         assert m.groups >= 2, m
         assert m.detected == m.groups, f"{m.check} missed {m.groups - m.detected} of {m.groups} fault groups"
@@ -144,8 +147,8 @@ def test_benchmark_small_run() -> None:
         else:
             assert m.baseline_checks > 0, m
     table = render_markdown(report).splitlines()
-    assert len(table) == 2 + len(R1_CHECKS)
-    assert all(f"`{t}`" in "\n".join(table) for t in R1_CHECKS)
+    assert len(table) == 2 + len(CHECKS)
+    assert all(f"`{t}`" in "\n".join(table) for t in CHECKS)
 
 
 def test_bench_accuracy_cli_passes_options_and_prints_json(
