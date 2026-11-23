@@ -214,6 +214,52 @@ async def test_locked_check_keeps_its_parameters(
     assert events[0]["params_after"]["max"] == 9 and events[1]["actor"] == "dev"
 
 
+def cancel_orders(path: Path, rows: int) -> None:
+    """Set the status of the first `rows` orders that are not cancelled to cancelled."""
+    with path.open(newline="", encoding="utf-8") as f:
+        data = list(csv.reader(f))
+    status = data[0].index("status")
+    for row in [r for r in data[1:] if r[status] != "cancelled"][:rows]:
+        row[status] = "cancelled"
+    with path.open("w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(data)
+
+
+@needs_db
+async def test_locked_distribution_baseline_reports_a_shift(
+    client: AsyncClient, owner: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Spec 026 through the API: proposed by the scan, locked by a person, a finding with its
+    effect size once the mix of values has moved; the stored baseline stays as approved."""
+    write_shop(tmp_path / "shop", rows=1000, clean=True)
+    cid = await connect(client, monkeypatch, tmp_path / "shop")
+    await scan(client, cid)
+    orders = await asset_id(client, cid, "orders")
+    key = "sah.distribution_shift:orders:status"
+
+    proposed = await check_by_key(client, orders, key)
+    assert proposed["status"] == "proposed" and proposed["title"] == "Distribution changed"
+    assert proposed["params"]["form"] == "values" and proposed["params"]["rows"] == 1000
+    locked = await act(client, await act(client, proposed, "approve"), "lock")
+
+    again = await scan(client, cid)
+    assert key not in {f["check_id"] for f in again["findings"]}
+
+    cancel_orders(tmp_path / "shop" / "orders.csv", 300)
+    report = await scan(client, cid)
+
+    finding = next(f for f in report["findings"] if f["check_id"] == key)
+    assert finding["failed"] == 300 and finding["evaluated"] == 1000 and finding["severity"] == "medium"
+    assert "Shannon distance" in finding["summary"] and "critical value" in finding["summary"]
+    assert finding["examples"][0]["value"].startswith("cancelled: ")
+    after = await check_by_key(client, orders, key)
+    assert after["status"] == "locked" and after["params"] == locked["params"]
+    assert "measured" not in after["params"] and after["version"] == locked["version"]
+    # The other distribution baselines of the table are still proposals and follow the data.
+    amount = await check_by_key(client, orders, "sah.distribution_shift:orders:amount")
+    assert amount["status"] == "proposed" and amount["params"]["form"] == "numeric"
+
+
 @needs_db
 async def test_retired_check_is_not_evaluated_or_recreated(
     client: AsyncClient, owner: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

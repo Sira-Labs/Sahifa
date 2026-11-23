@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - **A check for changed distributions** (`sah.distribution_shift`, spec 026). Each scan
   proposes a distribution baseline for number columns and for columns with few values. Once
-  you approve one, later scans report when the distribution moved: for numbers with the
+  you lock one, later scans report when the distribution moved: for numbers with the
   Kolmogorov–Smirnov distance and how far the values moved in interquartile ranges, for a
   mix of values with the Jensen–Shannon distance and PSI against its critical value. A report
   needs a tenth of the rows to have moved and more than a sample's noise, so neither a large
