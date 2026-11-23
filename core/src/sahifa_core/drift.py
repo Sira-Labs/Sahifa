@@ -41,16 +41,30 @@ def points_of(minimum: float, quantiles: Mapping[str, float], maximum: float) ->
     return points
 
 
-def cdf(points: Points, x: float) -> float:
-    """The share of values at or below `x`, linear between the known points."""
+def cdf_bounds(points: Points, x: float) -> tuple[float, float]:
+    """The lowest and the highest share of values at or below `x` the points allow.
+
+    Between two points the function is taken as linear, and both bounds are that value. Not so
+    after a value that several points share: so many rows hold exactly that value that it
+    spans more than one level, and its true share is only known to lie between the highest of
+    those levels and the next point's. Reading it as the highest level would move a column
+    with 26 % zeros and one with 24 % a quarter apart."""
     if x < points[0][0]:
-        return 0.0
+        return 0.0, 0.0
     last = max(i for i, (v, _u) in enumerate(points) if v <= x)
     v0, u0 = points[last]
     if last == len(points) - 1:
-        return 1.0
+        return 1.0, 1.0
     v1, u1 = points[last + 1]
-    return u0 + (u1 - u0) * (x - v0) / (v1 - v0)
+    low = u0 + (u1 - u0) * (x - v0) / (v1 - v0)
+    shared = last > 0 and points[last - 1][0] == v0
+    return low, u1 if shared else low
+
+
+def cdf(points: Points, x: float) -> float:
+    """The share of values at or below `x`, linear between the known points (the lower bound
+    where a shared value leaves it open)."""
+    return cdf_bounds(points, x)[0]
 
 
 def cdf_inverse(points: Points, level: float) -> float:
@@ -59,9 +73,13 @@ def cdf_inverse(points: Points, level: float) -> float:
 
 
 def ks_distance(reference: Points, current: Points) -> float:
-    """The largest difference between the two distribution functions at any known point."""
-    xs = {v for v, _u in reference} | {v for v, _u in current}
-    return max(abs(cdf(reference, x) - cdf(current, x)) for x in xs)
+    """The largest difference between the two distribution functions at any known point that
+    the points prove: where a share is only known within bounds, the bounds' gap counts."""
+    distance = 0.0
+    for x in {v for v, _u in reference} | {v for v, _u in current}:
+        (ref_low, ref_high), (cur_low, cur_high) = cdf_bounds(reference, x), cdf_bounds(current, x)
+        distance = max(distance, ref_low - cur_high, cur_low - ref_high)
+    return distance
 
 
 def ks_critical(n: int, m: int) -> float:

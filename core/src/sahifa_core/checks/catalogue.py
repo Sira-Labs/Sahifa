@@ -699,7 +699,8 @@ class DistributionShift(Check):
     def evaluate_profile(self, spec: CheckSpec, ctx: Context) -> tuple[int, int, list[tuple[str, int]]]:
         col = ctx.asset.column(spec.column or "")
         spec.params.pop("measured", None)
-        if col is None or col.non_null < 1:
+        # A column since recognised as personal data shows masked values: nothing to compare.
+        if col is None or col.non_null < 1 or col.semantic_type in semantics.PERSONAL:
             return 0, 0, []
         if spec.params["form"] == "values":
             return self._evaluate_values(spec, col)
@@ -710,7 +711,7 @@ class DistributionShift(Check):
     ) -> tuple[int, int, list[tuple[str, int]]]:
         current = self._points(col)
         if current is None:
-            return 0, 0, []  # no longer a number column: type conformance reports that
+            return 0, 0, []  # no number column any more, or one with infinite values
         saved = dict(spec.params["quantiles"])
         reference = drift.points_of(saved.pop("min"), saved, saved.pop("max"))
         n = col.non_null
@@ -750,7 +751,8 @@ class DistributionShift(Check):
         measured = spec.params.get("measured")
         if not measured:
             return (
-                f"{where(spec)} could not be compared with its baseline: it has no values of that kind now."
+                f"{where(spec)} could not be compared with its baseline: it holds no finite numbers "
+                f"or no plain values to compare now."
             )
         distance, threshold = measured["distance"], measured["threshold"]
         if spec.params["form"] == "values":

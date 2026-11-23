@@ -319,6 +319,10 @@ databases and files, and get in by invitation link; staging serves demos.
         the drift twin has two shifted columns in `events`.
       - No timestamps (they move with every load) and no personal data (the baseline keeps
         values).
+      - CodeRabbit did not review the PR (its check ended neutral), so an independent review
+        was run before the merge. It found that a value held by a quarter of the rows (zeros,
+        say) was read at the highest quantile level it spans, which reported unchanged
+        columns; such a share is now read within its bounds.
 - [ ] **Checks 24 `sah.schema_drift` and 29 `sah.volume_trend`** (listed with S5-3 in the
       plan): both need what earlier scans saw, which a scan does not hand to the core yet
       (the API has it: `columns` per scan, `column_measures`). Next after S5-4.

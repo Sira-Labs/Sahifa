@@ -65,6 +65,25 @@ def test_ks_distance_sees_a_change_of_spread() -> None:
     assert drift.ks_distance(narrow, wide) > drift.MIN_EFFECT
 
 
+def zero_inflated(rng: random.Random, zeros: float, n: int) -> list[tuple[float, float]]:
+    return points([0.0 if rng.random() < zeros else rng.uniform(1, 100) for _ in range(n)])
+
+
+def test_shared_value_is_read_within_its_bounds() -> None:
+    """A value that many rows hold spans several quantile levels; its share is not the highest
+    of them. 26 % and 24 % zeros are not a quarter apart, and neither are two samples of 25 %."""
+    rng = random.Random(5)
+    assert drift.ks_distance(zero_inflated(rng, 0.26, 20_000), zero_inflated(rng, 0.24, 20_000)) < 0.05
+    pairs = [(zero_inflated(rng, 0.25, 5000), zero_inflated(rng, 0.25, 5000)) for _ in range(40)]
+    assert all(drift.ks_distance(a, b) < drift.MIN_EFFECT for a, b in pairs)
+    flag = [points([float(rng.random() < share) for _ in range(20_000)]) for share in (0.49, 0.51)]
+    assert drift.ks_distance(*flag) < 0.05
+    assert drift.cdf_bounds(zero_inflated(rng, 0.3, 20_000), 0.0) == (0.25, 0.5)
+    # A real change of such a column is still seen, as a lower bound: 30 % zeros against 60 %.
+    changed = drift.ks_distance(zero_inflated(rng, 0.3, 20_000), zero_inflated(rng, 0.6, 20_000))
+    assert 0.15 <= changed <= 0.3
+
+
 def test_ks_critical_value_shrinks_with_the_samples() -> None:
     assert drift.ks_critical(2, 2) == pytest.approx(1.95, abs=0.005)
     assert drift.ks_critical(100, 100) == pytest.approx(0.276, abs=0.001)

@@ -28,8 +28,8 @@ before the conversion report goes out.
 | Function | Meaning |
 |---|---|
 | `points_of(min, quantiles, max)` | the distribution function at seven points, from a profile |
-| `cdf(points, x)` | the share of values at or below `x`, linear between the points |
-| `ks_distance(reference, current)` | the largest difference of the two functions at any known point |
+| `cdf_bounds(points, x)` | the lowest and highest share of values at or below `x` the points allow: linear between the points, open after a value that several points share |
+| `ks_distance(reference, current)` | the largest difference of the two functions at any known point that the bounds prove |
 | `ks_critical(n, m)` | the distance two samples of one distribution exceed once in a thousand times |
 | `wasserstein_in_iqr(reference, current)` | the mean distance between equal quantiles (1st to 99th percentile), in interquartile ranges of the reference |
 | `bins_of(reference, current, rows)` | counts per baseline value, plus one bin for values the baseline did not have |
@@ -89,9 +89,15 @@ findings like every baseline check.
    the median went from 2,581 to 3,393.5". A finding on few values lists the values whose
    share moved most as examples ("checkout: 32.7 % → 49.8 %", with the rows now). A passing
    check says the distance it measured.
+   A value that so many rows hold that it spans several of the seven points (a quarter of
+   the rows are 0, say) has no known share: it lies between the highest of those levels and
+   the next point's. The distance then counts only the gap between the two columns' bounds,
+   so 26 % zeros against 24 % is not read as a quarter of the rows moving. (An independent
+   review of this change found that; the first version took the highest level.)
 6. **Not comparable.** A locked numeric baseline on a column that holds no numbers any more is
    evaluated on 0 rows and passes with "could not be compared"; type conformance reports the
-   cause. A column that is gone is listed as unevaluated, as for every saved check.
+   cause. The same holds for a column with infinite values, and for one since recognised as
+   personal data, whose values are masked. A column that is gone is listed as unevaluated, as for every saved check.
 7. **Other baselines keep their findings.** A handful of rows with a value never seen
    (`sah.accepted_values`) or below the smallest value seen (`sah.range`) do not move the
    distribution by a tenth and are not reported here.
