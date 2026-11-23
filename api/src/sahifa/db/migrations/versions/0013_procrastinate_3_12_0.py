@@ -93,6 +93,10 @@ def build_lock_index() -> None:
     """Script 3, so that it can run again: drops what an interrupted build left, keeps a valid
     index, and otherwise runs the released statement."""
     with op.get_context().autocommit_block():
+        if op.get_context().as_sql:
+            # Offline (`--sql`) there is no catalogue to ask: emit the released statement.
+            op.execute(sa.text(statement(CONCURRENT_INDEX_SQL)))
+            return
         valid = op.get_bind().execute(sa.text(INDEX_VALID_SQL), {"name": INDEX_NAME}).scalar()
         if valid is False:
             op.execute(sa.text(f"DROP INDEX CONCURRENTLY {INDEX_NAME}"))

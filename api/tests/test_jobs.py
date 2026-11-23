@@ -561,6 +561,15 @@ def test_migration_0013_completes_after_an_interrupted_run(owner: Engine) -> Non
     upgrade(DB_URL)
 
 
+def test_migration_0013_renders_offline(capsys: pytest.CaptureFixture[str]) -> None:
+    """`alembic upgrade 0012:0013 --sql` has no connection: the index statement is emitted as
+    released, without asking the catalogue."""
+    command.upgrade(build_config("postgresql+psycopg://offline/none"), "0012:0013", sql=True)
+    out = capsys.readouterr().out
+    assert "CREATE INDEX CONCURRENTLY procrastinate_jobs_todo_doing_lock_idx_v1" in out
+    assert out.index("CREATE INDEX CONCURRENTLY") < out.index("CREATE TYPE procrastinate_lock_mode")
+
+
 @needs_db
 def test_migration_0004_round_trip(owner: Engine) -> None:
     assert DB_URL
