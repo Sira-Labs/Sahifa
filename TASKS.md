@@ -370,6 +370,10 @@ databases and files, and get in by invitation link; staging serves demos.
         and two "post" that drop what 3.11.0 still calls. Migration 0013 applies the three
         "pre" scripts, vendored as released; the index is built `CONCURRENTLY` in an Alembic
         autocommit block, as its script demands.
+      - The index is built first and the other two scripts follow in one transaction with
+        the revision (the review's finding: built last, a failed build left the committed
+        scripts behind and a second run failed on `CREATE TYPE`). A second run drops an
+        invalid index and keeps a valid one, so migrating again always completes.
       - The "post" scripts are left for a migration one release later: the api migrates on
         start while the worker of the previous release may still defer with
         `procrastinate_defer_jobs_v1`, so dropping it in the same deploy would fail those

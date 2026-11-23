@@ -101,8 +101,7 @@ All notable changes to this project are documented here. The format follows
 - Procrastinate 3.12.0, with schema migration 0013 (its three "pre" scripts): a retry that
   meets a queueing lock now fails the job instead of leaving it running for ever, and the
   worker finds the jobs sharing a lock through an index. The migration builds that index
-  without blocking writes; should it be interrupted, see the note in
-  `0013_procrastinate_3_12_0.py`. Also the weekly minor updates (FastAPI 0.165, DuckDB 2.0.1,
+  without blocking writes; should it be interrupted, start the API again and it completes. Also the weekly minor updates (FastAPI 0.165, DuckDB 2.0.1,
   sqlglot 30.33, TanStack Query 5.108, ESLint 10.15).
 - Procrastinate 3.11.0, with schema migration 0011: the worker picks its next job without
   scanning every queued job. The API migrates on start, as for every release.

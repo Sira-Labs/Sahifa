@@ -1,6 +1,8 @@
 -- Procrastinate 3.12.0 migration script
 -- (procrastinate/sql/migrations/03.12.00_03_pre_add_todo_doing_lock_index.sql), applied by
 -- migration 0013. Kept as it was released (tests/test_jobs.py checks it).
+-- Migration 0013 runs it first and recovers from an interrupted build by itself (it drops an
+-- invalid index before building); the manual step the script describes below is not needed.
 --
 -- MIT License, see 0004_procrastinate_3_10_0.sql for the copyright notice and the text.
 

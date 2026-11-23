@@ -9,8 +9,12 @@ of the running code during a deploy:
    and `procrastinate_defer_periodic_job_v3`; `procrastinate_fetch_job_v2` honours the mode.
 2. `procrastinate_retry_job_v2` fails a running job whose retry meets a queueing lock.
 3. The index `procrastinate_jobs_todo_doing_lock_idx_v1`, built concurrently, hence outside
-   the migration's transaction. Should the build fail, drop the invalid index
-   (`DROP INDEX CONCURRENTLY procrastinate_jobs_todo_doing_lock_idx_v1`) and migrate again.
+   a transaction.
+
+The index is built first, on its own: it needs nothing of the other two scripts, and a build
+that fails then leaves nothing else behind. Scripts 1 and 2 follow in one transaction with the
+revision. Migrating again after a failure of either part completes the migration: an invalid
+index left by an interrupted build is dropped and built again, a valid one is kept.
 
 The two "post" scripts drop what 3.11.0 still calls (`procrastinate_defer_jobs_v1`, its type,
 the index on (id, lock)). They belong in a later migration, released after this one, so that
@@ -78,11 +82,28 @@ def function_of(script: Path, name: str) -> str:
     return f"CREATE OR REPLACE {body}"
 
 
+INDEX_NAME = "procrastinate_jobs_todo_doing_lock_idx_v1"
+INDEX_VALID_SQL = """
+SELECT x.indisvalid FROM pg_index x JOIN pg_class c ON c.oid = x.indexrelid
+WHERE c.relname = :name AND pg_table_is_visible(c.oid)
+"""
+
+
+def build_lock_index() -> None:
+    """Script 3, so that it can run again: drops what an interrupted build left, keeps a valid
+    index, and otherwise runs the released statement."""
+    with op.get_context().autocommit_block():
+        valid = op.get_bind().execute(sa.text(INDEX_VALID_SQL), {"name": INDEX_NAME}).scalar()
+        if valid is False:
+            op.execute(sa.text(f"DROP INDEX CONCURRENTLY {INDEX_NAME}"))
+        if not valid:
+            op.execute(sa.text(statement(CONCURRENT_INDEX_SQL)))
+
+
 def upgrade() -> None:
+    build_lock_index()
     for script in TRANSACTIONAL_SQL:
         op.execute(sa.text(script.read_text(encoding="utf-8")))
-    with op.get_context().autocommit_block():
-        op.execute(sa.text(statement(CONCURRENT_INDEX_SQL)))
 
 
 def downgrade() -> None:

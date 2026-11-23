@@ -530,6 +530,38 @@ def test_migration_0013_round_trip(owner: Engine) -> None:
 
 
 @needs_db
+def test_migration_0013_completes_after_an_interrupted_run(owner: Engine) -> None:
+    """The index is built outside the migration's transaction, so a first attempt may have
+    left it behind (valid, or invalid when the build itself was interrupted) with the revision
+    still at 0012. Migrating again completes the migration in both cases."""
+    assert DB_URL
+    index = "procrastinate_jobs_todo_doing_lock_idx_v1"
+    # Marking an index invalid, as an interrupted concurrent build leaves it, needs a superuser.
+    superuser = sql(owner, "SHOW is_superuser") == [("on",)]
+    for invalid in (False, True) if superuser else (False,):
+        downgrade(DB_URL, "0012")
+        try:
+            with owner.begin() as conn:
+                conn.execute(text(f"CREATE INDEX {index} ON procrastinate_jobs (lock)"))
+                if invalid:
+                    conn.execute(
+                        text(
+                            "UPDATE pg_index SET indisvalid = false WHERE indexrelid = CAST(:i AS regclass)"
+                        ),
+                        {"i": index},
+                    )
+        finally:
+            upgrade(DB_URL)
+        assert sql(owner, LOCK_SCHEMA_3_12) == [(2, 2, 1, 1)]
+        definition = sql(owner, "SELECT indexdef FROM pg_indexes WHERE indexname = :i", i=index)[0][0]
+        # A rebuilt index is the released one; a valid one that was found is kept as it is.
+        assert ("WHERE" in definition) == invalid
+    # Leave the released index behind, whatever this test put in its place.
+    downgrade(DB_URL, "0012")
+    upgrade(DB_URL)
+
+
+@needs_db
 def test_migration_0004_round_trip(owner: Engine) -> None:
     assert DB_URL
 
