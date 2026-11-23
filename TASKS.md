@@ -363,6 +363,21 @@ databases and files, and get in by invitation link; staging serves demos.
       - Checked before the push with a binary-only install of the locked runtime set on 3.15
         and an import of the app; the CI job `quickstart` builds the image and scans with it.
       - CI's test jobs stay on 3.12 and `requires-python` on 3.11: the image is what changes.
+- [x] **Procrastinate 3.12.0, first half** (23 Nov, replaces Dependabot PR #69; #68 and #70
+      merged as they were)
+      - 3.12.0 ships five scripts: three "pre" (lock modes with a new defer function and type,
+        a retry that fails a running job instead of raising on a queueing lock, a lock index)
+        and two "post" that drop what 3.11.0 still calls. Migration 0013 applies the three
+        "pre" scripts, vendored as released; the index is built `CONCURRENTLY` in an Alembic
+        autocommit block, as its script demands.
+      - The "post" scripts are left for a migration one release later: the api migrates on
+        start while the worker of the previous release may still defer with
+        `procrastinate_defer_jobs_v1`, so dropping it in the same deploy would fail those
+        scans. Until then the schema is 3.12.0's plus the old defer function, type and index.
+      - The downgrade reads the 3.11.0 functions out of the files of 0004 and 0011.
+- [ ] **Procrastinate 3.12.0, second half**: migration 0014 with the two "post" scripts
+      (`03.12.00_50`, `03.12.00_51`; the index drop is `CONCURRENTLY` too), once staging runs
+      the first half; `POST_SCRIPTS_3_12` in `api/tests/test_jobs.py` lists them.
 - [ ] **Trim `column_measures`** (from spec 024): one row per column and scan, kept for ever.
       Spec 025 reads the last 120 scans of a column; the clean-up job can delete what is older.
 
