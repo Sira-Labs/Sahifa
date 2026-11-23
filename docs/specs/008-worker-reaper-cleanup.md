@@ -154,7 +154,8 @@ deleted.
   notice) instead of reading the installed package, so 0004 never changes; Procrastinate is
   pinned to `==3.10.0` and a test fails on a bump, which needs a new migration.
   (17 Nov 2026: 3.11.0 arrived that way, with migration 0011 and its released script; the
-  pin is `==3.11.0`.)
+  pin is `==3.11.0`. 23 Nov 2026: 3.12.0, whose "pre" scripts are migration 0013; its "post"
+  scripts follow one release later, because they drop what 3.11.0 still calls.)
 - The reaper also re-queues a `queued` scan whose job ended without running it (not only
   `job_id` null); the queueing lock is `scan:<id>`.
 - The worker prunes workers silent for `SAHIFA_REAPER_STALE_MINUTES` at start (Procrastinate's

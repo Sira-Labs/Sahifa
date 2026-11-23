@@ -440,26 +440,46 @@ def released_fetch_job_body() -> str:
     return schema[start : schema.index("$$", start)]
 
 
+PRE_SCRIPTS_3_12 = [
+    "03.12.00_01_pre_add_lock_mode.sql",
+    "03.12.00_02_pre_retry_job_fail_on_queueing_lock_conflict.sql",
+    "03.12.00_03_pre_add_todo_doing_lock_index.sql",
+]
+# Not applied yet: they drop what 3.11.0 still calls, so they follow one release later.
+POST_SCRIPTS_3_12 = [
+    "03.12.00_50_post_add_lock_mode.sql",
+    "03.12.00_51_post_drop_id_lock_index.sql",
+]
+
+
 def test_procrastinate_schema_is_pinned() -> None:
-    """Migration 0004 carries Procrastinate 3.10.0's schema and 0011 the migration script of
-    3.11.0. A newer Procrastinate needs a new migration with its migration scripts (never an
-    edit of 0004 or 0011); then update this test."""
-    assert importlib.metadata.version("procrastinate") == "3.11.0"
+    """Migration 0004 carries Procrastinate 3.10.0's schema, 0011 the migration script of
+    3.11.0 and 0013 the "pre" scripts of 3.12.0. A newer Procrastinate needs a new migration
+    with its migration scripts (never an edit of 0004, 0011 or 0013); then update this test."""
+    assert importlib.metadata.version("procrastinate") == "3.12.0"
     versions = MIGRATIONS_DIR / "versions"
-    released = sorted(
-        script.name
-        for script in (Path(procrastinate.__file__).parent / "sql" / "migrations").glob("*.sql")
-        if script.name > "03.10"
-    )
-    assert released == ["03.11.00_01_pre_fetch_job_skip_null_lock.sql"]
-    script = Path(procrastinate.__file__).parent / "sql" / "migrations" / released[0]
-    vendored = (versions / "0011_procrastinate_3_11_0.sql").read_text(encoding="utf-8")
-    assert vendored.endswith(script.read_text(encoding="utf-8"))
+    scripts = Path(procrastinate.__file__).parent / "sql" / "migrations"
+    released = sorted(script.name for script in scripts.glob("*.sql") if script.name > "03.10")
+    assert released == [
+        "03.11.00_01_pre_fetch_job_skip_null_lock.sql",
+        *PRE_SCRIPTS_3_12,
+        *POST_SCRIPTS_3_12,
+    ]
+    vendored = {
+        "0011_procrastinate_3_11_0.sql": released[0],
+        **{
+            f"0013_procrastinate_3_12_0_pre_0{number}.sql": name
+            for number, name in enumerate(PRE_SCRIPTS_3_12, start=1)
+        },
+    }
+    for ours, theirs in vendored.items():
+        text_ = (versions / ours).read_text(encoding="utf-8")
+        assert text_.endswith((scripts / theirs).read_text(encoding="utf-8")), ours
 
 
 @needs_db
 def test_migrated_schema_is_the_released_one(owner: Engine) -> None:
-    """0004 and 0011 together give the function the installed Procrastinate ships."""
+    """0004, 0011 and 0013 together give the function the installed Procrastinate ships."""
     assert sql(owner, FETCH_JOB_SOURCE) == [(released_fetch_job_body(),)]
 
 
@@ -474,6 +494,80 @@ def test_migration_0011_round_trip(owner: Engine) -> None:
         upgrade(DB_URL)
     assert SKIPS_NULL_LOCKS in sql(owner, FETCH_JOB_SOURCE)[0][0]
     command.check(build_config(DB_URL))
+
+
+LOCK_SCHEMA_3_12 = """
+SELECT
+  (SELECT count(*) FROM pg_type WHERE typname IN
+     ('procrastinate_lock_mode', 'procrastinate_job_to_defer_v2')),
+  (SELECT count(*) FROM pg_proc WHERE proname IN
+     ('procrastinate_defer_jobs_v2', 'procrastinate_defer_periodic_job_v3')),
+  (SELECT count(*) FROM information_schema.columns
+     WHERE table_name = 'procrastinate_jobs' AND column_name = 'lock_mode'),
+  (SELECT count(*) FROM pg_indexes i JOIN pg_class c ON c.relname = i.indexname
+     JOIN pg_index x ON x.indexrelid = c.oid
+     WHERE i.indexname = 'procrastinate_jobs_todo_doing_lock_idx_v1' AND x.indisvalid)
+"""
+RETRY_JOB_SOURCE = "SELECT prosrc FROM pg_proc WHERE proname = 'procrastinate_retry_job_v2'"
+
+
+@needs_db
+def test_migration_0013_round_trip(owner: Engine) -> None:
+    """Down gives the schema of 3.11.0 again, up the "pre" half of 3.12.0, index included."""
+    assert DB_URL
+    downgrade(DB_URL, "0012")
+    try:
+        assert sql(owner, LOCK_SCHEMA_3_12) == [(0, 0, 0, 0)]
+        assert "lock_mode" not in sql(owner, FETCH_JOB_SOURCE)[0][0]
+        assert "unique_violation" not in sql(owner, RETRY_JOB_SOURCE)[0][0]
+    finally:
+        upgrade(DB_URL)
+    assert sql(owner, LOCK_SCHEMA_3_12) == [(2, 2, 1, 1)]
+    assert "unique_violation" in sql(owner, RETRY_JOB_SOURCE)[0][0]
+    # What 3.11.0 calls is still there: the "post" scripts come with a later migration.
+    assert sql(owner, "SELECT count(*) FROM pg_proc WHERE proname = 'procrastinate_defer_jobs_v1'") == [(1,)]
+    command.check(build_config(DB_URL))
+
+
+@needs_db
+def test_migration_0013_completes_after_an_interrupted_run(owner: Engine) -> None:
+    """The index is built outside the migration's transaction, so a first attempt may have
+    left it behind (valid, or invalid when the build itself was interrupted) with the revision
+    still at 0012. Migrating again completes the migration in both cases."""
+    assert DB_URL
+    index = "procrastinate_jobs_todo_doing_lock_idx_v1"
+    # Marking an index invalid, as an interrupted concurrent build leaves it, needs a superuser.
+    superuser = sql(owner, "SHOW is_superuser") == [("on",)]
+    for invalid in (False, True) if superuser else (False,):
+        downgrade(DB_URL, "0012")
+        try:
+            with owner.begin() as conn:
+                conn.execute(text(f"CREATE INDEX {index} ON procrastinate_jobs (lock)"))
+                if invalid:
+                    conn.execute(
+                        text(
+                            "UPDATE pg_index SET indisvalid = false WHERE indexrelid = CAST(:i AS regclass)"
+                        ),
+                        {"i": index},
+                    )
+        finally:
+            upgrade(DB_URL)
+        assert sql(owner, LOCK_SCHEMA_3_12) == [(2, 2, 1, 1)]
+        definition = sql(owner, "SELECT indexdef FROM pg_indexes WHERE indexname = :i", i=index)[0][0]
+        # A rebuilt index is the released one; a valid one that was found is kept as it is.
+        assert ("WHERE" in definition) == invalid
+    # Leave the released index behind, whatever this test put in its place.
+    downgrade(DB_URL, "0012")
+    upgrade(DB_URL)
+
+
+def test_migration_0013_renders_offline(capsys: pytest.CaptureFixture[str]) -> None:
+    """`alembic upgrade 0012:0013 --sql` has no connection: the index statement is emitted as
+    released, without asking the catalogue."""
+    command.upgrade(build_config("postgresql+psycopg://offline/none"), "0012:0013", sql=True)
+    out = capsys.readouterr().out
+    assert "CREATE INDEX CONCURRENTLY procrastinate_jobs_todo_doing_lock_idx_v1" in out
+    assert out.index("CREATE INDEX CONCURRENTLY") < out.index("CREATE TYPE procrastinate_lock_mode")
 
 
 @needs_db
